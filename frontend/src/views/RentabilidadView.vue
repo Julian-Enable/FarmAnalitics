@@ -51,7 +51,7 @@
             <tr v-for="row in data.bajo_margen" :key="row.Referencia">
               <td>{{ row.nombre }}</td>
               <td>{{ row.cant_vend }}</td>
-              <td>{{ store.fmt(row.PrecioVenta) }}</td>
+              <td>{{ store.fmt(row.precio_venta) }}</td>
               <td><span class="badge badge-red">{{ row.margen_pct }}%</span></td>
             </tr>
           </tbody>
@@ -62,7 +62,7 @@
     
     <div v-if="data && data.por_laboratorio.length" class="card" style="margin-top: 16px;">
       <SectionTitle icon="🏢" title="Rentabilidad por Laboratorio" />
-      <BarChart :horizontal="false" formatTooltip="currency" :categories="topLabCat" :series="[{name: 'Utilidad', data: topLabData}]" />
+      <BarChart :horizontal="true" formatTooltip="currency" :categories="topLabCat" :series="[{name: 'Utilidad', data: topLabData}]" />
     </div>
   </div>
 </template>

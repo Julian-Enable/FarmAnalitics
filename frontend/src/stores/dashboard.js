@@ -113,11 +113,11 @@ export const useDashboardStore = defineStore('dashboard', () => {
     finally { loading.inventario = false }
   }
 
-  async function fetchCompras() {
+  async function fetchCompras(params = {}) {
     if (!status.ventas || !status.compras) return
     loading.compras = true
     try {
-      const { data: d } = await axios.get('/api/compras')
+      const { data: d } = await axios.get('/api/compras', { params })
       data.compras = d
     } catch (e) { console.error(e) }
     finally { loading.compras = false }

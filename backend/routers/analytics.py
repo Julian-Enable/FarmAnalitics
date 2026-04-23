@@ -144,6 +144,7 @@ def resumen():
 
 @router.get("/ventas")
 def ventas(sede: str = "Todas", nivel: str = "Todos",
+           laboratorio: str = "Todos",
            fecha_ini: str = None, fecha_fin: str = None):
     df = get_df("ventas")
     if df is None:
@@ -153,10 +154,18 @@ def ventas(sede: str = "Todas", nivel: str = "Todos",
         df = df[df["Punto Venta"] == sede]
     if nivel != "Todos" and "Nivel" in df.columns:
         df = df[df["Nivel"] == nivel]
+    if laboratorio != "Todos" and "Laboratorio" in df.columns:
+        df = df[df["Laboratorio"] == laboratorio]
     if fecha_ini:
         df = df[df["Fecha"] >= pd.Timestamp(fecha_ini)]
     if fecha_fin:
         df = df[df["Fecha"] <= pd.Timestamp(fecha_fin)]
+
+    ing_total = float(df["Ingreso"].sum())
+    dias_periodo = 1
+    if df["Fecha"].notna().any():
+        dias_periodo = max((df["Fecha"].max() - df["Fecha"].min()).days, 1)
+    promedio_diario = round(ing_total / dias_periodo, 0)
 
     top_prod = (df.groupby(["Referencia","Descripcion"], as_index=False)["Cant"]
                 .sum().nlargest(15,"Cant").sort_values("Cant", ascending=True)
@@ -177,21 +186,41 @@ def ventas(sede: str = "Todas", nivel: str = "Todos",
     vendedores = []
     if "Creada" in df.columns:
         vendedores = (df.groupby("Creada", as_index=False)
-                      .agg(unidades=("Cant","sum"), ingresos=("Ingreso","sum"))
-                      .nlargest(10,"ingresos")
+                      .agg(unidades=("Cant","sum"), ingresos=("Ingreso","sum"),
+                           facturas=("Referencia","count"))
+                      .sort_values("ingresos", ascending=False)
                       .rename(columns={"Creada":"vendedor"}))
         vendedores = json.loads(vendedores.to_json(orient="records"))
 
+    # Tendencia mensual
+    tend_mensual = []
+    if df["Fecha"].notna().any():
+        s = df.set_index("Fecha").resample("M")["Ingreso"].sum().reset_index()
+        tend_mensual = [{"mes": r["Fecha"].strftime("%b %Y"), "ingreso": round(r["Ingreso"], 0)}
+                        for _, r in s.iterrows()]
+
+    # Tabla detalle de productos
+    detalle = (df.groupby(["Referencia","Descripcion","Laboratorio"], as_index=False)
+               .agg(unidades=("Cant","sum"), ingreso=("Ingreso","sum"))
+               .sort_values("ingreso", ascending=False))
+    detalle = json.loads(detalle.to_json(orient="records"))
+
     sedes_opts  = sorted(get_df("ventas")["Punto Venta"].dropna().unique().tolist())
     niveles_opts = sorted(df["Nivel"].dropna().unique().tolist()) if "Nivel" in df.columns else []
+    labs_opts = sorted(get_df("ventas")["Laboratorio"].dropna().unique().tolist()) if "Laboratorio" in get_df("ventas").columns else []
 
     return {
         "registros": len(df),
+        "ingreso_total": round(ing_total, 0),
+        "promedio_diario": promedio_diario,
+        "dias_periodo": dias_periodo,
         "top_productos": top_prod,
         "top_labs": top_labs,
         "por_categoria": por_cat,
         "vendedores": vendedores,
-        "filtros": {"sedes": sedes_opts, "niveles": niveles_opts},
+        "tendencia_mensual": tend_mensual,
+        "detalle_productos": detalle,
+        "filtros": {"sedes": sedes_opts, "niveles": niveles_opts, "laboratorios": labs_opts},
     }
 
 
@@ -222,8 +251,9 @@ def rentabilidad():
     top_r = (r.nlargest(15,"utilidad_total").sort_values("utilidad_total",ascending=True)
               .assign(nombre=lambda x: x["descripcion"].str[:30]))
     top_r = json.loads(top_r.to_json(orient="records"))
-    bajo_m = (r[r["cant_vend"]>=5].nsmallest(15,"margen_pct")
-               .assign(nombre=lambda x: x["descripcion"].str[:30]))
+    bajo_m = r[r["cant_vend"]>=5].nsmallest(15,"margen_pct").copy()
+    bajo_m["nombre"] = bajo_m["descripcion"].str[:30]
+    bajo_m["precio_venta"] = bajo_m["Precio Venta"]
     bajo_m = json.loads(bajo_m.to_json(orient="records"))
 
     por_cat = []
@@ -352,7 +382,7 @@ def inventario():
 # ── Compras vs Ventas ─────────────────────────────────────────────────────────
 
 @router.get("/compras")
-def compras():
+def compras(proveedor: str = "Todos", estado: str = "Todos", buscar: str = ""):
     df_c = get_df("compras")
     df_v = get_df("ventas")
     df_i = get_df("inventario")
@@ -376,33 +406,45 @@ def compras():
     comp["uds_vendidas"] = comp["uds_vendidas"].fillna(0)
     
     # 4. INGENIERÍA INVERSA: Inventario Inicial
-    # Inv_Final = Inv_Inicial + Compras - Ventas
-    # Inv_Inicial = Inv_Final - Compras + Ventas
     comp["inv_inicial"] = comp["inv_actual"] - comp["uds_compradas"] + comp["uds_vendidas"]
     
-    # 5. Días del Periodo (Velocidad de venta)
-    dias_periodo = 30 # Default
+    # 5. Días del Periodo
+    dias_periodo = 30
     if "Fecha" in df_v.columns and df_v["Fecha"].notna().any():
         dias_periodo = (df_v["Fecha"].max() - df_v["Fecha"].min()).days or 30
         
     comp["venta_diaria"] = comp["uds_vendidas"] / dias_periodo
-    
-    # Cobertura en días (Para cuántos días alcanza el stock actual)
     comp["cobertura_dias"] = comp.apply(lambda x: (x["inv_actual"] / x["venta_diaria"]) if x["venta_diaria"] > 0 else 9999, axis=1)
 
-    # 6. Rotación = Ventas / Promedio Inventario
-    comp["inv_promedio"] = (comp["inv_inicial"] + comp["inv_actual"]) / 2
-    comp["rotacion"] = comp.apply(lambda x: (x["uds_vendidas"] / x["inv_promedio"]) if x["inv_promedio"] > 0 else 0, axis=1)
-
-    # Formatear datos para la UI
+    # 6. Estado
     comp["diferencia"] = comp["uds_compradas"] - comp["uds_vendidas"]
     comp["estado"] = comp["diferencia"].apply(lambda d: "sobre_compra" if d > 0 else ("desabastecimiento" if d < 0 else "equilibrio"))
+
+    # Aplicar filtros
+    filtered = comp.copy()
+    if estado != "Todos":
+        filtered = filtered[filtered["estado"] == estado]
+    if buscar:
+        mask = (filtered["Referencia"].astype(str).str.contains(buscar, case=False, na=False) |
+                filtered["Descripcion"].astype(str).str.contains(buscar, case=False, na=False))
+        filtered = filtered[mask]
+
+    # Proveedores
+    # Cruzar proveedor desde compras
+    prov_ref = df_c.groupby("REFERENCIA", as_index=False)["PROVEEDOR"].first().rename(columns={"REFERENCIA": "Referencia", "PROVEEDOR": "proveedor"})
+    filtered = filtered.merge(prov_ref, on="Referencia", how="left")
+    filtered["proveedor"] = filtered["proveedor"].fillna("Sin proveedor")
+
+    if proveedor != "Todos":
+        filtered = filtered[filtered["proveedor"] == proveedor]
 
     top_prov = (df_c.groupby("PROVEEDOR",as_index=False)
                 .agg(unidades=("CANT","sum"), costo_total=("Costo Total","sum"))
                 .nlargest(10,"unidades")
                 .rename(columns={"PROVEEDOR":"proveedor"}))
     top_prov = json.loads(top_prov.to_json(orient="records"))
+
+    proveedores_opts = sorted(df_c["PROVEEDOR"].dropna().unique().tolist())
 
     return {
         "kpis": {
@@ -412,8 +454,9 @@ def compras():
             "n_desabastecimiento": int(len(comp[comp["estado"]=="desabastecimiento"])),
             "dias_periodo": int(dias_periodo)
         },
-        "comparativo": json.loads(comp.sort_values("uds_compradas", ascending=False).head(50).to_json(orient="records")),
+        "comparativo": json.loads(filtered.sort_values("uds_compradas", ascending=False).to_json(orient="records")),
         "top_proveedores": top_prov,
+        "filtros": {"proveedores": proveedores_opts, "estados": ["sobre_compra", "desabastecimiento", "equilibrio"]},
     }
 
 

@@ -9,9 +9,9 @@
     <ModuleInfo>
       <p><strong>Objetivo:</strong> Reconstruir el historial exacto de tu inventario y predecir cuándo te quedarás sin stock.</p>
       <ul style="margin-left: 20px; margin-top: 8px;">
-        <li><strong>Ingeniería Inversa (Inv. Inicial):</strong> El sistema sabe cuánto tienes *ahora* (Inventario Actual). Sabe cuánto compraste y cuánto vendiste. Con esos 3 datos, viaja al pasado y calcula tu `Inventario Inicial = Actual + Vendido - Comprado`. Esto asegura un cuadre perfecto de tus productos.</li>
-        <li><strong>Días del Periodo:</strong> Es la cantidad de días que hay entre la primera y última venta de tu archivo. Permite calcular a qué velocidad diaria se vende cada producto.</li>
-        <li><strong>Cobertura (Días):</strong> Te dice para cuántos días te alcanza el inventario actual si se sigue vendiendo a ese mismo ritmo. <br><span style="color:var(--red);">Rojo: te queda para menos de 15 días.</span> <span style="color:var(--amber);">Amarillo: tienes exceso (>90 días).</span></li>
+        <li><strong>Ingeniería Inversa (Inv. Inicial):</strong> <code>Inventario Inicial = Actual + Vendido - Comprado</code></li>
+        <li><strong>Cobertura (Días):</strong> Para cuántos días alcanza el inventario actual al ritmo actual de venta.</li>
+        <li><strong>Filtros:</strong> Filtra por proveedor, estado (sobrecompra/desabastecimiento) o busca por nombre/referencia.</li>
       </ul>
     </ModuleInfo>
 
@@ -30,27 +30,53 @@
       <p>Sube archivos de **Inventario, Compras y Ventas** para ejecutar la conciliación matemática.</p>
     </div>
 
+    <!-- Filtros -->
+    <div v-if="data" class="filters-bar">
+      <div class="filter-group">
+        <label>Proveedor</label>
+        <select v-model="filters.proveedor" @change="applyFilters">
+          <option value="Todos">Todos</option>
+          <option v-for="p in data.filtros?.proveedores" :key="p" :value="p">{{ p.substring(0, 40) }}</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Estado</label>
+        <select v-model="filters.estado" @change="applyFilters">
+          <option value="Todos">Todos</option>
+          <option value="sobre_compra">🟡 Sobrecompra</option>
+          <option value="desabastecimiento">🔴 Desabastecimiento</option>
+          <option value="equilibrio">🟢 Equilibrio</option>
+        </select>
+      </div>
+      <div class="filter-group" style="flex: 2;">
+        <label>Buscar</label>
+        <input type="text" v-model="filters.buscar" @input="debouncedSearch" placeholder="🔍 Referencia o nombre..." 
+               style="padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; width: 100%;" />
+      </div>
+    </div>
+
     <div v-if="data" class="grid-2">
       <!-- Conciliación Matemática -->
       <div class="card" style="grid-column: span 2;">
-        <SectionTitle icon="🧮" title="Flujo Exacto de Inventario (Conciliación)" />
-        <div style="max-height: 400px; overflow-y: auto;">
+        <SectionTitle icon="🧮" :title="'Flujo de Inventario (' + (data.comparativo?.length || 0) + ' productos)'" />
+        <div style="max-height: 500px; overflow-y: auto;">
           <table class="data-table">
             <thead>
               <tr>
                 <th>Referencia</th>
                 <th>Descripción</th>
-                <th style="background: var(--bg); border-left: 1px solid var(--border);">Inv. Inicial (Calculado)</th>
+                <th style="background: var(--bg); border-left: 1px solid var(--border);">Inv. Inicial</th>
                 <th style="color: var(--green);">+ Comprado</th>
                 <th style="color: var(--red);">- Vendido</th>
                 <th style="background: var(--bg); border-right: 1px solid var(--border); font-weight: 700;">= Inv. Actual</th>
-                <th>Cobertura (Días)</th>
+                <th>Cobertura</th>
+                <th>Estado</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="row in data.comparativo" :key="row.Referencia">
                 <td>{{ row.Referencia }}</td>
-                <td>{{ row.Descripcion?.substring(0, 35) || 'N/A' }}</td>
+                <td>{{ row.Descripcion?.substring(0, 30) || 'N/A' }}</td>
                 <td style="background: var(--bg); border-left: 1px solid var(--border);">{{ store.fmtN(row.inv_inicial) }}</td>
                 <td style="color: var(--green);">{{ store.fmtN(row.uds_compradas) }}</td>
                 <td style="color: var(--red);">{{ store.fmtN(row.uds_vendidas) }}</td>
@@ -59,6 +85,11 @@
                   <span class="badge" 
                         :class="row.cobertura_dias < 15 ? 'badge-red' : (row.cobertura_dias > 90 ? 'badge-amber' : 'badge-green')">
                     {{ row.cobertura_dias >= 9999 ? '+999 d' : Math.round(row.cobertura_dias) + ' d' }}
+                  </span>
+                </td>
+                <td>
+                  <span class="badge" :class="{'badge-amber': row.estado === 'sobre_compra', 'badge-red': row.estado === 'desabastecimiento', 'badge-green': row.estado === 'equilibrio'}">
+                    {{ row.estado === 'sobre_compra' ? '🟡 Sobre' : (row.estado === 'desabastecimiento' ? '🔴 Falta' : '🟢 OK') }}
                   </span>
                 </td>
               </tr>
@@ -77,7 +108,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
 import KpiCard from '../components/ui/KpiCard.vue'
 import SectionTitle from '../components/ui/SectionTitle.vue'
@@ -87,6 +118,22 @@ import ModuleInfo from '../components/ui/ModuleInfo.vue'
 const store = useDashboardStore()
 const data = computed(() => store.data.compras)
 const loading = computed(() => store.loading.compras)
+
+const filters = ref({
+  proveedor: 'Todos',
+  estado: 'Todos',
+  buscar: ''
+})
+
+let debounceTimer = null
+function debouncedSearch() {
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => applyFilters(), 400)
+}
+
+function applyFilters() {
+  store.fetchCompras(filters.value)
+}
 
 onMounted(() => {
   if (store.status.ventas && store.status.compras && store.status.inventario && !data.value) {
