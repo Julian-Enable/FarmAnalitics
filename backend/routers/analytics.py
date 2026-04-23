@@ -2,7 +2,7 @@
 # backend/routers/analytics.py  — Todos los endpoints de análisis
 # =============================================================================
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from typing import Optional
+from typing import Optional, Union
 import pandas as pd
 import json
 
@@ -35,12 +35,18 @@ def _df_to_records(df: pd.DataFrame, max_rows: int = 200) -> list[dict]:
 
 @router.post("/upload")
 async def upload_files(
-    ventas:     Optional[list[UploadFile]] = File(default=None),
-    compras:    Optional[list[UploadFile]] = File(default=None),
-    inventario: Optional[UploadFile]       = File(default=None),
+    ventas:     Optional[Union[list[UploadFile], UploadFile]] = File(default=None),
+    compras:    Optional[Union[list[UploadFile], UploadFile]] = File(default=None),
+    inventario: Optional[UploadFile]                          = File(default=None),
 ):
     """Recibe archivos, los procesa y los almacena en memoria."""
     resultados = {}
+
+    # Normalizar: si llega un solo archivo, convertirlo a lista
+    if ventas and not isinstance(ventas, list):
+        ventas = [ventas]
+    if compras and not isinstance(compras, list):
+        compras = [compras]
 
     # Ventas (puede ser múltiples archivos)
     if ventas:
