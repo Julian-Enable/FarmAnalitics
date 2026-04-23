@@ -1,6 +1,6 @@
 <template>
   <h3 class="dash-section-title">
-    <component v-if="typeof icon === 'object'" :is="icon" class="section-icon" />
+    <component v-if="typeof icon !== 'string'" :is="icon" class="section-icon" />
     <span v-else class="section-icon-text">{{ icon }}</span>
     <span class="section-text">{{ title }}</span>
   </h3>
@@ -8,7 +8,7 @@
 
 <script setup>
 defineProps({
-  icon: [String, Object],
+  icon: [String, Object, Function],
   title: String
 })
 </script>

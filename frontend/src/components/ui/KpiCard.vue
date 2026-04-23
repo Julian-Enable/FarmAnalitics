@@ -1,7 +1,7 @@
 <template>
   <div class="kpi-card">
     <div class="kpi-icon-wrapper">
-      <component v-if="typeof icon === 'object'" :is="icon" class="kpi-icon-lucide" />
+      <component v-if="typeof icon !== 'string'" :is="icon" class="kpi-icon-lucide" />
       <span v-else class="kpi-icon">{{ icon }}</span>
     </div>
     <div class="kpi-value">{{ value }}</div>
@@ -11,7 +11,7 @@
 
 <script setup>
 defineProps({
-  icon: [String, Object],
+  icon: [String, Object, Function],
   value: [String, Number],
   label: String
 })
