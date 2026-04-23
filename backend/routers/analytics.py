@@ -434,6 +434,9 @@ def compras(proveedor: str = "Todos", estado: str = "Todos", buscar: str = ""):
     # 4. INGENIERÍA INVERSA: Inventario Inicial
     comp["inv_inicial"] = comp["inv_actual"] - comp["uds_compradas"] + comp["uds_vendidas"]
     
+    # Filtrar productos inactivos (todo en 0)
+    comp = comp[(comp["inv_actual"] > 0) | (comp["uds_compradas"] > 0) | (comp["uds_vendidas"] > 0)]
+    
     # 5. Días del Periodo
     dias_periodo = 30
     if "Fecha" in df_v.columns and df_v["Fecha"].notna().any():

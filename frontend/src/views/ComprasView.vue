@@ -83,8 +83,8 @@
                 <td style="background: var(--bg); border-right: 1px solid var(--border); font-weight: 700;">{{ store.fmtN(row.inv_actual) }}</td>
                 <td>
                   <span class="badge" 
-                        :class="row.cobertura_dias < 15 ? 'badge-red' : (row.cobertura_dias > 90 ? 'badge-amber' : 'badge-green')">
-                    {{ row.cobertura_dias >= 9999 ? '+999 d' : Math.round(row.cobertura_dias) + ' d' }}
+                        :class="row.cobertura_dias < 15 ? 'badge-red' : (row.cobertura_dias >= 180 ? 'badge-red' : (row.cobertura_dias > 90 ? 'badge-amber' : 'badge-green'))">
+                    {{ row.cobertura_dias >= 9999 ? '+999 d (Riesgo Vencimiento)' : (row.cobertura_dias >= 180 ? Math.round(row.cobertura_dias) + ' d (Riesgo Vencimiento)' : Math.round(row.cobertura_dias) + ' d') }}
                   </span>
                 </td>
                 <td>
