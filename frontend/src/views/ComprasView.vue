@@ -151,7 +151,14 @@ onMounted(() => {
 
 function isPerecedero(row) {
   const textToCheck = ((row.Nivel || '') + ' ' + (row.Descripcion || '')).toLowerCase()
-  const noPerecederos = ['silla', 'equipo', 'mueble', 'material', 'insumo', 'dispositivo', 'dotacion', 'accesorio', 'ortopedico', 'camilla', 'caneca', 'papeleria', 'aseo']
+  const noPerecederos = [
+    'silla', 'equipo', 'mueble', 'material', 'insumo', 'dispositivo', 'dotacion', 
+    'accesorio', 'ortopedico', 'camilla', 'caneca', 'papeleria', 'aseo', 'ferula', 
+    'inmovilizador', 'termometro', 'tensiometro', 'fonendoscopio', 'muleta', 
+    'baston', 'caminador', 'cabestrillo', 'faja', 'rodillera', 'tobillera', 
+    'muñequera', 'collarin', 'nebulizador', 'glucometro', 'lanceta', 'tira reactiva',
+    'algodon', 'jeringa', 'aguja', 'guante', 'tapaboca', 'mascarilla', 'bata', 'gorro', 'polaina'
+  ]
   return !noPerecederos.some(kw => textToCheck.includes(kw))
 }
 
