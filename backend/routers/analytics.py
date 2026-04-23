@@ -288,23 +288,50 @@ def rentabilidad():
 # ── Inventario ────────────────────────────────────────────────────────────────
 
 @router.get("/inventario")
-def inventario():
+def inventario(sede: str = "Todas"):
     df_i = get_df("inventario")
     df_v = get_df("ventas")
     if df_i is None:
         raise HTTPException(404, "No hay datos de inventario")
 
-    df_a = df_i.copy()
+    if sede != "Todas" and sede in df_i.columns:
+        df_a = df_i.copy()
+        df_a["Total"] = df_a[sede]
+    else:
+        df_a = df_i.copy()
+
     if df_v is not None and "Fecha" in df_v.columns:
-        v_agr = df_v.groupby("Referencia",as_index=False).agg(
+        if sede != "Todas":
+            df_v_filtered = df_v[df_v["Punto Venta"] == sede]
+        else:
+            df_v_filtered = df_v
+
+        v_agr = df_v_filtered.groupby("Referencia",as_index=False).agg(
             uds_vendidas=("Cant","sum"),
+            ingreso_generado=("Ingreso", "sum"),
             ultima_venta=("Fecha","max")
         )
+        
+        # ABC Classification
+        v_agr = v_agr.sort_values("ingreso_generado", ascending=False)
+        v_agr["acumulado"] = v_agr["ingreso_generado"].cumsum()
+        total_ingreso = v_agr["ingreso_generado"].sum()
+        
+        def clasificar_abc(acum):
+            if total_ingreso == 0: return "C"
+            pct = acum / total_ingreso
+            if pct <= 0.80: return "A"
+            elif pct <= 0.95: return "B"
+            else: return "C"
+            
+        v_agr["clasificacion_abc"] = v_agr["acumulado"].apply(clasificar_abc)
+
         df_a  = df_a.merge(v_agr, on="Referencia", how="left")
         df_a["uds_vendidas"] = df_a["uds_vendidas"].fillna(0)
+        df_a["clasificacion_abc"] = df_a["clasificacion_abc"].fillna("C") # Si no se vendió, es C
         
-        max_fecha = df_v["Fecha"].max()
-        min_fecha = df_v["Fecha"].min()
+        max_fecha = df_v_filtered["Fecha"].max()
+        min_fecha = df_v_filtered["Fecha"].min()
         if pd.notna(max_fecha) and pd.notna(min_fecha):
             df_a["dias_sin_venta"] = (max_fecha - df_a["ultima_venta"]).dt.days
             
@@ -313,31 +340,33 @@ def inventario():
             df_a["rotacion_diaria"] = df_a["uds_vendidas"] / dias_periodo
             
             import numpy as np
-            df_a["cobertura_dias"] = np.where(df_a["rotacion_diaria"] > 0, df_a["Total"] / df_a["rotacion_diaria"], 999)
+            df_a["cobertura_dias"] = np.where(df_a["rotacion_diaria"] > 0, df_a["Total"] / df_a["rotacion_diaria"], 9999)
             df_a["cobertura_dias"] = df_a["cobertura_dias"].round(1)
         else:
-            df_a["dias_sin_venta"] = 999
-            df_a["cobertura_dias"] = 999
+            df_a["dias_sin_venta"] = 9999
+            df_a["cobertura_dias"] = 9999
+            df_a["rotacion_diaria"] = 0
     else:
         df_a["uds_vendidas"] = 0
-        df_a["dias_sin_venta"] = 999
-        df_a["cobertura_dias"] = 999
+        df_a["dias_sin_venta"] = 9999
+        df_a["cobertura_dias"] = 9999
+        df_a["rotacion_diaria"] = 0
+        df_a["clasificacion_abc"] = "C"
 
-    df_a["dias_sin_venta"] = df_a["dias_sin_venta"].fillna(999)
-    df_a["cobertura_dias"] = df_a["cobertura_dias"].fillna(999)
+    df_a["dias_sin_venta"] = df_a["dias_sin_venta"].fillna(9999)
+    df_a["cobertura_dias"] = df_a["cobertura_dias"].fillna(9999)
 
-    # 1. Bajo Stock (Reabastecer): Cobertura crítica (<= 15 días) y con demanda reciente (<= 60 días)
-    # Ya no dependemos ciegamente del "Stock Minimo" estático.
-    bajo = df_a[(df_a["cobertura_dias"] <= 15) & (df_a["dias_sin_venta"] <= 60)].copy()
+    # 1. Bajo Stock (Reabastecer): Cobertura crítica (<= 15 días) y con rotación
+    bajo = df_a[(df_a["cobertura_dias"] <= 15) & (df_a["rotacion_diaria"] > 0)].copy()
     
     # Calcular déficit real en unidades (cuánto falta para llegar a 15 días de cobertura)
     bajo["stock_ideal"] = bajo["rotacion_diaria"] * 15
     bajo["deficit"] = bajo["stock_ideal"] - bajo["Total"]
-    bajo["deficit"] = bajo["deficit"].apply(lambda x: max(1, round(x))) # Al menos pedir 1 unidad si está bajo
+    bajo["deficit"] = bajo["deficit"].apply(lambda x: max(1, round(x)))
 
-    sin_stock = df_a[(df_a["Total"]==0) & (df_a["dias_sin_venta"] <= 60)]
+    sin_stock = df_a[(df_a["Total"]==0) & (df_a["rotacion_diaria"] > 0)]
 
-    # 2. Inventario Quieto: Tiene stock PERO no se vende hace más de 60 días
+    # 2. Inventario Quieto: Tiene stock PERO no se vende hace más de 60 días (y tiene fecha de venta antigua o nunca)
     quieto = df_a[(df_a["Total"] > 0) & (df_a["dias_sin_venta"] > 60)].copy()
     if "Precio Compra" in quieto.columns:
         quieto["capital_inmovilizado"] = quieto["Total"] * quieto["Precio Compra"]
@@ -359,23 +388,20 @@ def inventario():
         if s in df_i.columns:
             stock_sede[s] = int(df_i[s].sum())
 
-    total_con_min = len(df_a[(df_a["cobertura_dias"] <= 15) & (df_a["dias_sin_venta"] <= 60)])
-    pct = round(len(bajo)/total_con_min*100,1) if total_con_min else 0
-
     return {
         "kpis": {
             "bajo_stock":   len(bajo),
-            "pct_alerta":   pct,
             "sin_stock":    len(sin_stock),
-            "stock_total":  int(df_i["Total"].sum()),
+            "stock_total":  int(df_a["Total"].sum()),
             "inventario_quieto": len(quieto),
             "capital_quieto": float(quieto["capital_inmovilizado"].sum()) if len(quieto) > 0 else 0
         },
-        "bajo_stock_tabla": _df_to_records(bajo.sort_values("deficit",ascending=False)),
+        "bajo_stock_tabla": _df_to_records(bajo.sort_values(["clasificacion_abc", "cobertura_dias"], ascending=[True, True])),
         "inventario_quieto_tabla": _df_to_records(quieto.sort_values("capital_inmovilizado", ascending=False)),
         "top_deficit":       top_deficit,
         "top_quieto":        top_quieto,
         "stock_por_sede":    stock_sede,
+        "sedes_disponibles": SEDES
     }
 
 

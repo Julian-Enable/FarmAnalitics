@@ -103,11 +103,11 @@ export const useDashboardStore = defineStore('dashboard', () => {
     finally { loading.rentabilidad = false }
   }
 
-  async function fetchInventario() {
+  async function fetchInventario(sede = 'Todas') {
     if (!status.inventario) return
     loading.inventario = true
     try {
-      const { data: d } = await axios.get('/api/inventario')
+      const { data: d } = await axios.get('/api/inventario', { params: { sede } })
       data.inventario = d
     } catch (e) { console.error(e) }
     finally { loading.inventario = false }
