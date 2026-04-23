@@ -50,17 +50,31 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th>Clase</th>
-                <th>Referencia</th>
-                <th>Descripción</th>
-                <th>Rotación (diaria)</th>
-                <th>Stock Actual</th>
-                <th>Cobertura</th>
-                <th>Déficit Sugerido</th>
+                <th @click="sortByBajo('clasificacion_abc')" style="cursor: pointer;">
+                  Clase <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'clasificacion_abc' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortByBajo('Referencia')" style="cursor: pointer;">
+                  Referencia <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'Referencia' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortByBajo('Descripcion')" style="cursor: pointer;">
+                  Descripción <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'Descripcion' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortByBajo('rotacion_diaria')" style="cursor: pointer;">
+                  Rotación (diaria) <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'rotacion_diaria' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortByBajo('Total')" style="cursor: pointer;">
+                  Stock Actual <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'Total' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortByBajo('cobertura_dias')" style="cursor: pointer;">
+                  Cobertura <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'cobertura_dias' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortByBajo('deficit')" style="cursor: pointer;">
+                  Déficit Sugerido <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'deficit' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in data.bajo_stock_tabla" :key="row.Referencia">
+              <tr v-for="row in sortedBajo" :key="row.Referencia">
                 <td style="text-align: center;">
                   <span class="badge" 
                         :class="{'badge-green': row.clasificacion_abc === 'A', 'badge-amber': row.clasificacion_abc === 'B', 'badge-red': row.clasificacion_abc === 'C'}">
@@ -109,15 +123,25 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th>Referencia</th>
-                <th>Descripción</th>
-                <th>Días Sin Venta</th>
-                <th>Stock</th>
-                <th>Capital Atrapado</th>
+                <th @click="sortByQuieto('Referencia')" style="cursor: pointer;">
+                  Referencia <span style="opacity: 0.5; font-size: 10px;">{{ sortQuietoCol === 'Referencia' ? (sortQuietoDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortByQuieto('Descripcion')" style="cursor: pointer;">
+                  Descripción <span style="opacity: 0.5; font-size: 10px;">{{ sortQuietoCol === 'Descripcion' ? (sortQuietoDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortByQuieto('dias_sin_venta')" style="cursor: pointer;">
+                  Días Sin Venta <span style="opacity: 0.5; font-size: 10px;">{{ sortQuietoCol === 'dias_sin_venta' ? (sortQuietoDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortByQuieto('Total')" style="cursor: pointer;">
+                  Stock <span style="opacity: 0.5; font-size: 10px;">{{ sortQuietoCol === 'Total' ? (sortQuietoDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortByQuieto('capital_inmovilizado')" style="cursor: pointer;">
+                  Capital Atrapado <span style="opacity: 0.5; font-size: 10px;">{{ sortQuietoCol === 'capital_inmovilizado' ? (sortQuietoDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in data.inventario_quieto_tabla" :key="row.Referencia">
+              <tr v-for="row in sortedQuieto" :key="row.Referencia">
                 <td>{{ row.Referencia }}</td>
                 <td>{{ row.Descripcion?.substring(0, 45) }}</td>
                 <td><span class="badge badge-red">{{ row.dias_sin_venta >= 9999 ? 'NUNCA' : row.dias_sin_venta + ' d' }}</span></td>
@@ -158,6 +182,52 @@ onMounted(() => {
   if (store.status.inventario && !data.value) {
     store.fetchInventario()
   }
+})
+
+const sortBajoCol = ref('clasificacion_abc')
+const sortBajoDesc = ref(false)
+function sortByBajo(col) {
+  if (sortBajoCol.value === col) sortBajoDesc.value = !sortBajoDesc.value
+  else { sortBajoCol.value = col; sortBajoDesc.value = false }
+}
+
+const sortedBajo = computed(() => {
+  const list = data.value?.bajo_stock_tabla ? [...data.value.bajo_stock_tabla] : []
+  if (sortBajoCol.value) {
+    list.sort((a, b) => {
+      let valA = a[sortBajoCol.value]
+      let valB = b[sortBajoCol.value]
+      if (typeof valA === 'string') valA = valA.toLowerCase()
+      if (typeof valB === 'string') valB = valB.toLowerCase()
+      if (valA < valB) return sortBajoDesc.value ? 1 : -1
+      if (valA > valB) return sortBajoDesc.value ? -1 : 1
+      return 0
+    })
+  }
+  return list
+})
+
+const sortQuietoCol = ref('capital_inmovilizado')
+const sortQuietoDesc = ref(true)
+function sortByQuieto(col) {
+  if (sortQuietoCol.value === col) sortQuietoDesc.value = !sortQuietoDesc.value
+  else { sortQuietoCol.value = col; sortQuietoDesc.value = true }
+}
+
+const sortedQuieto = computed(() => {
+  const list = data.value?.inventario_quieto_tabla ? [...data.value.inventario_quieto_tabla] : []
+  if (sortQuietoCol.value) {
+    list.sort((a, b) => {
+      let valA = a[sortQuietoCol.value]
+      let valB = b[sortQuietoCol.value]
+      if (typeof valA === 'string') valA = valA.toLowerCase()
+      if (typeof valB === 'string') valB = valB.toLowerCase()
+      if (valA < valB) return sortQuietoDesc.value ? 1 : -1
+      if (valA > valB) return sortQuietoDesc.value ? -1 : 1
+      return 0
+    })
+  }
+  return list
 })
 
 const topDefCat = computed(() => data.value?.top_deficit?.map(d => d.nombre) || [])

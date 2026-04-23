@@ -23,7 +23,18 @@ const chartOptions = computed(() => ({
   stroke: { curve: 'smooth', width: 3 },
   xaxis: {
     categories: props.categories,
-    labels: { style: { colors: '#6B7280', fontSize: '12px' } },
+    tickAmount: 10,
+    labels: { 
+      style: { colors: '#6B7280', fontSize: '11px' },
+      rotate: -45,
+      rotateAlways: false,
+      hideOverlappingLabels: true,
+      formatter: function(val) {
+        // Truncate long labels slightly if they are not dates
+        if (typeof val === 'string' && val.length > 15) return val.substring(0, 15) + '...'
+        return val
+      }
+    },
     axisBorder: { show: false },
     axisTicks: { show: false }
   },

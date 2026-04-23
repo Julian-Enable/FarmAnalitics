@@ -63,18 +63,34 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th>Referencia</th>
-                <th>Descripción</th>
-                <th style="background: var(--bg); border-left: 1px solid var(--border);">Inv. Inicial</th>
-                <th style="color: var(--green);">+ Comprado</th>
-                <th style="color: var(--red);">- Vendido</th>
-                <th style="background: var(--bg); border-right: 1px solid var(--border); font-weight: 700;">= Inv. Actual</th>
-                <th>Cobertura</th>
-                <th>Estado</th>
+                <th @click="sortByComp('Referencia')" style="cursor: pointer;">
+                  Referencia <span style="opacity: 0.5; font-size: 10px;">{{ sortCompCol === 'Referencia' ? (sortCompDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortByComp('Descripcion')" style="cursor: pointer;">
+                  Descripción <span style="opacity: 0.5; font-size: 10px;">{{ sortCompCol === 'Descripcion' ? (sortCompDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortByComp('inv_inicial')" style="cursor: pointer; background: var(--bg); border-left: 1px solid var(--border);">
+                  Inv. Inicial <span style="opacity: 0.5; font-size: 10px;">{{ sortCompCol === 'inv_inicial' ? (sortCompDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortByComp('uds_compradas')" style="cursor: pointer; color: var(--green);">
+                  + Comprado <span style="opacity: 0.5; font-size: 10px;">{{ sortCompCol === 'uds_compradas' ? (sortCompDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortByComp('uds_vendidas')" style="cursor: pointer; color: var(--red);">
+                  - Vendido <span style="opacity: 0.5; font-size: 10px;">{{ sortCompCol === 'uds_vendidas' ? (sortCompDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortByComp('inv_actual')" style="cursor: pointer; background: var(--bg); border-right: 1px solid var(--border); font-weight: 700;">
+                  = Inv. Actual <span style="opacity: 0.5; font-size: 10px;">{{ sortCompCol === 'inv_actual' ? (sortCompDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortByComp('cobertura_dias')" style="cursor: pointer;">
+                  Cobertura <span style="opacity: 0.5; font-size: 10px;">{{ sortCompCol === 'cobertura_dias' ? (sortCompDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortByComp('estado')" style="cursor: pointer;">
+                  Estado <span style="opacity: 0.5; font-size: 10px;">{{ sortCompCol === 'estado' ? (sortCompDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in data.comparativo" :key="row.Referencia">
+              <tr v-for="row in sortedComparativo" :key="row.Referencia">
                 <td>{{ row.Referencia }}</td>
                 <td>{{ row.Descripcion?.substring(0, 30) || 'N/A' }}</td>
                 <td style="background: var(--bg); border-left: 1px solid var(--border);">{{ store.fmtN(row.inv_inicial) }}</td>
@@ -142,6 +158,29 @@ function debouncedSearch() {
 function applyFilters() {
   store.fetchCompras(filters.value)
 }
+
+const sortCompCol = ref('inv_actual')
+const sortCompDesc = ref(true)
+function sortByComp(col) {
+  if (sortCompCol.value === col) sortCompDesc.value = !sortCompDesc.value
+  else { sortCompCol.value = col; sortCompDesc.value = true }
+}
+
+const sortedComparativo = computed(() => {
+  const list = data.value?.comparativo ? [...data.value.comparativo] : []
+  if (sortCompCol.value) {
+    list.sort((a, b) => {
+      let valA = a[sortCompCol.value]
+      let valB = b[sortCompCol.value]
+      if (typeof valA === 'string') valA = valA.toLowerCase()
+      if (typeof valB === 'string') valB = valB.toLowerCase()
+      if (valA < valB) return sortCompDesc.value ? 1 : -1
+      if (valA > valB) return sortCompDesc.value ? -1 : 1
+      return 0
+    })
+  }
+  return list
+})
 
 onMounted(() => {
   if (store.status.ventas && store.status.compras && store.status.inventario && !data.value) {

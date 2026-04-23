@@ -88,14 +88,22 @@
         <table class="data-table">
           <thead>
             <tr>
-              <th>Vendedor</th>
-              <th>Unidades</th>
-              <th>Ingresos</th>
-              <th>Transacciones</th>
+              <th @click="sortByVend('vendedor')" style="cursor: pointer;">
+                Vendedor <span style="opacity: 0.5; font-size: 10px;">{{ sortVendCol === 'vendedor' ? (sortVendDesc ? '▼' : '▲') : '↕' }}</span>
+              </th>
+              <th @click="sortByVend('unidades')" style="cursor: pointer;">
+                Unidades <span style="opacity: 0.5; font-size: 10px;">{{ sortVendCol === 'unidades' ? (sortVendDesc ? '▼' : '▲') : '↕' }}</span>
+              </th>
+              <th @click="sortByVend('ingresos')" style="cursor: pointer;">
+                Ingresos <span style="opacity: 0.5; font-size: 10px;">{{ sortVendCol === 'ingresos' ? (sortVendDesc ? '▼' : '▲') : '↕' }}</span>
+              </th>
+              <th @click="sortByVend('facturas')" style="cursor: pointer;">
+                Transacciones <span style="opacity: 0.5; font-size: 10px;">{{ sortVendCol === 'facturas' ? (sortVendDesc ? '▼' : '▲') : '↕' }}</span>
+              </th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="v in data.vendedores" :key="v.vendedor">
+            <tr v-for="v in sortedVendedores" :key="v.vendedor">
               <td style="font-weight: 600;">{{ v.vendedor }}</td>
               <td>{{ store.fmtN(v.unidades) }}</td>
               <td>{{ store.fmt(v.ingresos) }}</td>
@@ -120,11 +128,21 @@
         <table class="data-table">
           <thead>
             <tr>
-              <th>Referencia</th>
-              <th>Descripción</th>
-              <th>Laboratorio</th>
-              <th>Unidades</th>
-              <th>Ingreso</th>
+              <th @click="sortByDetalle('Referencia')" style="cursor: pointer;">
+                Referencia <span style="opacity: 0.5; font-size: 10px;">{{ sortDetalleCol === 'Referencia' ? (sortDetalleDesc ? '▼' : '▲') : '↕' }}</span>
+              </th>
+              <th @click="sortByDetalle('Descripcion')" style="cursor: pointer;">
+                Descripción <span style="opacity: 0.5; font-size: 10px;">{{ sortDetalleCol === 'Descripcion' ? (sortDetalleDesc ? '▼' : '▲') : '↕' }}</span>
+              </th>
+              <th @click="sortByDetalle('Laboratorio')" style="cursor: pointer;">
+                Laboratorio <span style="opacity: 0.5; font-size: 10px;">{{ sortDetalleCol === 'Laboratorio' ? (sortDetalleDesc ? '▼' : '▲') : '↕' }}</span>
+              </th>
+              <th @click="sortByDetalle('unidades')" style="cursor: pointer;">
+                Unidades <span style="opacity: 0.5; font-size: 10px;">{{ sortDetalleCol === 'unidades' ? (sortDetalleDesc ? '▼' : '▲') : '↕' }}</span>
+              </th>
+              <th @click="sortByDetalle('ingreso')" style="cursor: pointer;">
+                Ingreso <span style="opacity: 0.5; font-size: 10px;">{{ sortDetalleCol === 'ingreso' ? (sortDetalleDesc ? '▼' : '▲') : '↕' }}</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -188,14 +206,59 @@ const catSeries = computed(() => data.value?.por_categoria?.map(d => d.Ingreso) 
 const tendMesCat = computed(() => data.value?.tendencia_mensual?.map(d => d.mes) || [])
 const tendMesData = computed(() => data.value?.tendencia_mensual?.map(d => d.ingreso) || [])
 
+const sortDetalleCol = ref('ingreso')
+const sortDetalleDesc = ref(true)
+function sortByDetalle(col) {
+  if (sortDetalleCol.value === col) sortDetalleDesc.value = !sortDetalleDesc.value
+  else { sortDetalleCol.value = col; sortDetalleDesc.value = col === 'unidades' || col === 'ingreso' }
+}
+
+const sortVendCol = ref('ingresos')
+const sortVendDesc = ref(true)
+function sortByVend(col) {
+  if (sortVendCol.value === col) sortVendDesc.value = !sortVendDesc.value
+  else { sortVendCol.value = col; sortVendDesc.value = true }
+}
+
 const filteredDetalle = computed(() => {
-  const list = data.value?.detalle_productos || []
-  if (!searchDetalle.value) return list
-  const q = searchDetalle.value.toLowerCase()
-  return list.filter(r =>
-    (r.Referencia || '').toString().toLowerCase().includes(q) ||
-    (r.Descripcion || '').toLowerCase().includes(q) ||
-    (r.Laboratorio || '').toLowerCase().includes(q)
-  )
+  const list = data.value?.detalle_productos ? [...data.value.detalle_productos] : []
+  let result = list
+  if (searchDetalle.value) {
+    const q = searchDetalle.value.toLowerCase()
+    result = list.filter(r =>
+      (r.Referencia || '').toString().toLowerCase().includes(q) ||
+      (r.Descripcion || '').toLowerCase().includes(q) ||
+      (r.Laboratorio || '').toLowerCase().includes(q)
+    )
+  }
+  
+  if (sortDetalleCol.value) {
+    result.sort((a, b) => {
+      let valA = a[sortDetalleCol.value]
+      let valB = b[sortDetalleCol.value]
+      if (typeof valA === 'string') valA = valA.toLowerCase()
+      if (typeof valB === 'string') valB = valB.toLowerCase()
+      if (valA < valB) return sortDetalleDesc.value ? 1 : -1
+      if (valA > valB) return sortDetalleDesc.value ? -1 : 1
+      return 0
+    })
+  }
+  return result
+})
+
+const sortedVendedores = computed(() => {
+  const list = data.value?.vendedores ? [...data.value.vendedores] : []
+  if (sortVendCol.value) {
+    list.sort((a, b) => {
+      let valA = a[sortVendCol.value]
+      let valB = b[sortVendCol.value]
+      if (typeof valA === 'string') valA = valA.toLowerCase()
+      if (typeof valB === 'string') valB = valB.toLowerCase()
+      if (valA < valB) return sortVendDesc.value ? 1 : -1
+      if (valA > valB) return sortVendDesc.value ? -1 : 1
+      return 0
+    })
+  }
+  return list
 })
 </script>

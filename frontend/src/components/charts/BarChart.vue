@@ -30,10 +30,28 @@ const chartOptions = computed(() => ({
   stroke: { show: true, width: 2, colors: ['transparent'] },
   xaxis: {
     categories: props.categories,
-    labels: { style: { colors: '#6B7280', fontSize: '12px' } }
+    labels: { 
+      style: { colors: '#6B7280', fontSize: '11px' },
+      formatter: function(val) {
+        if (typeof val === 'number') {
+          if (val >= 1000000) return (val / 1000000).toFixed(1) + 'M'
+          if (val >= 1000) return (val / 1000).toFixed(1) + 'K'
+        }
+        return val
+      }
+    }
   },
   yaxis: {
-    labels: { style: { colors: '#6B7280', fontSize: '12px' } }
+    labels: { 
+      style: { colors: '#6B7280', fontSize: '11px' },
+      formatter: function(val) {
+        if (typeof val === 'number') {
+          if (val >= 1000000) return (val / 1000000).toFixed(1) + 'M'
+          if (val >= 1000) return (val / 1000).toFixed(1) + 'K'
+        }
+        return val
+      }
+    }
   },
   grid: {
     borderColor: '#E5E7EB',

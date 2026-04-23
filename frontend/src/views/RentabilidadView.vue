@@ -41,14 +41,22 @@
         <table class="data-table" v-if="data.bajo_margen.length">
           <thead>
             <tr>
-              <th>Producto</th>
-              <th>Cant</th>
-              <th>Venta</th>
-              <th>Margen</th>
+              <th @click="sortByMargen('nombre')" style="cursor: pointer;">
+                Producto <span style="opacity: 0.5; font-size: 10px;">{{ sortMargenCol === 'nombre' ? (sortMargenDesc ? '▼' : '▲') : '↕' }}</span>
+              </th>
+              <th @click="sortByMargen('cant_vend')" style="cursor: pointer;">
+                Cant <span style="opacity: 0.5; font-size: 10px;">{{ sortMargenCol === 'cant_vend' ? (sortMargenDesc ? '▼' : '▲') : '↕' }}</span>
+              </th>
+              <th @click="sortByMargen('precio_venta')" style="cursor: pointer;">
+                Venta <span style="opacity: 0.5; font-size: 10px;">{{ sortMargenCol === 'precio_venta' ? (sortMargenDesc ? '▼' : '▲') : '↕' }}</span>
+              </th>
+              <th @click="sortByMargen('margen_pct')" style="cursor: pointer;">
+                Margen <span style="opacity: 0.5; font-size: 10px;">{{ sortMargenCol === 'margen_pct' ? (sortMargenDesc ? '▼' : '▲') : '↕' }}</span>
+              </th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in data.bajo_margen" :key="row.Referencia">
+            <tr v-for="row in sortedBajoMargen" :key="row.Referencia">
               <td>{{ row.nombre }}</td>
               <td>{{ row.cant_vend }}</td>
               <td>{{ store.fmt(row.precio_venta) }}</td>
@@ -68,7 +76,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
 import KpiCard from '../components/ui/KpiCard.vue'
 import SectionTitle from '../components/ui/SectionTitle.vue'
@@ -83,6 +91,29 @@ onMounted(() => {
   if (store.status.ventas && store.status.inventario && !data.value) {
     store.fetchRentabilidad()
   }
+})
+
+const sortMargenCol = ref('margen_pct')
+const sortMargenDesc = ref(false)
+function sortByMargen(col) {
+  if (sortMargenCol.value === col) sortMargenDesc.value = !sortMargenDesc.value
+  else { sortMargenCol.value = col; sortMargenDesc.value = false }
+}
+
+const sortedBajoMargen = computed(() => {
+  const list = data.value?.bajo_margen ? [...data.value.bajo_margen] : []
+  if (sortMargenCol.value) {
+    list.sort((a, b) => {
+      let valA = a[sortMargenCol.value]
+      let valB = b[sortMargenCol.value]
+      if (typeof valA === 'string') valA = valA.toLowerCase()
+      if (typeof valB === 'string') valB = valB.toLowerCase()
+      if (valA < valB) return sortMargenDesc.value ? 1 : -1
+      if (valA > valB) return sortMargenDesc.value ? -1 : 1
+      return 0
+    })
+  }
+  return list
 })
 
 const topRentCat = computed(() => data.value?.top_rentables?.map(d => d.nombre) || [])
