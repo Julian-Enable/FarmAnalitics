@@ -424,6 +424,19 @@ def compras(proveedor: str = "Todos", estado: str = "Todos", buscar: str = ""):
     # 3. Cruzar con Inventario Actual
     comp = df_i[["Referencia", "Descripcion", "Total"]].copy()
     comp = comp.rename(columns={"Total": "inv_actual"})
+    
+    # Intentar obtener Categoría/Nivel para diferenciar perecederos
+    if "Nivel" in df_i.columns:
+        nivel_df = df_i[["Referencia", "Nivel"]].drop_duplicates("Referencia")
+        comp = comp.merge(nivel_df, on="Referencia", how="left")
+    elif "Nivel" in df_v.columns:
+        nivel_df = df_v.groupby("Referencia", as_index=False)["Nivel"].first()
+        comp = comp.merge(nivel_df, on="Referencia", how="left")
+    else:
+        comp["Nivel"] = "Desconocida"
+        
+    comp["Nivel"] = comp["Nivel"].fillna("Desconocida")
+
     comp = comp.merge(c_agr, on="Referencia", how="left")
     comp = comp.merge(v_agr, on="Referencia", how="left")
     

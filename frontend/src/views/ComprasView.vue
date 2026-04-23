@@ -83,8 +83,16 @@
                 <td style="background: var(--bg); border-right: 1px solid var(--border); font-weight: 700;">{{ store.fmtN(row.inv_actual) }}</td>
                 <td>
                   <span class="badge" 
-                        :class="row.cobertura_dias < 15 ? 'badge-red' : (row.cobertura_dias >= 180 ? 'badge-red' : (row.cobertura_dias > 90 ? 'badge-amber' : 'badge-green'))">
-                    {{ row.cobertura_dias >= 9999 ? '+999 d (Riesgo Vencimiento)' : (row.cobertura_dias >= 180 ? Math.round(row.cobertura_dias) + ' d (Riesgo Vencimiento)' : Math.round(row.cobertura_dias) + ' d') }}
+                        :class="row.cobertura_dias < 15 ? 'badge-red' : ((row.cobertura_dias >= 180 && isPerecedero(row)) ? 'badge-red' : (row.cobertura_dias > 90 ? 'badge-amber' : 'badge-green'))">
+                    <template v-if="row.cobertura_dias >= 9999">
+                      {{ isPerecedero(row) ? '+999 d (Riesgo Vencimiento)' : '+999 d (No perecedero)' }}
+                    </template>
+                    <template v-else>
+                      {{ Math.round(row.cobertura_dias) }} d
+                      <span v-if="row.cobertura_dias >= 180">
+                        {{ isPerecedero(row) ? ' (Riesgo Vencimiento)' : ' (No perecedero)' }}
+                      </span>
+                    </template>
                   </span>
                 </td>
                 <td>
@@ -140,6 +148,12 @@ onMounted(() => {
     store.fetchCompras()
   }
 })
+
+function isPerecedero(row) {
+  const textToCheck = ((row.Nivel || '') + ' ' + (row.Descripcion || '')).toLowerCase()
+  const noPerecederos = ['silla', 'equipo', 'mueble', 'material', 'insumo', 'dispositivo', 'dotacion', 'accesorio', 'ortopedico', 'camilla', 'caneca', 'papeleria', 'aseo']
+  return !noPerecederos.some(kw => textToCheck.includes(kw))
+}
 
 const topProvCat = computed(() => data.value?.top_proveedores?.map(d => d.proveedor) || [])
 const topProvData = computed(() => data.value?.top_proveedores?.map(d => d.unidades) || [])
