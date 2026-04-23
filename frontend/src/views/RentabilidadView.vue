@@ -1,8 +1,11 @@
 <template>
   <div>
     <div class="page-header">
-      <h2>💰 Rentabilidad y Márgenes</h2>
-      <p>Cruce de Ventas con Costos de Inventario</p>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <DollarSign size="32" color="var(--accent)" />
+        <h2 style="margin: 0;">Rentabilidad y Márgenes</h2>
+      </div>
+      <p style="margin-top: 8px;">Cruce de Ventas con Costos de Inventario</p>
       <div class="accent-bar"></div>
     </div>
 
@@ -19,25 +22,25 @@
       <div v-for="i in 4" :key="i" class="card skeleton" style="height: 100px;"></div>
     </div>
     <div v-else-if="data" class="kpi-grid kpi-grid-4">
-      <KpiCard icon="💎" label="Utilidad Total" :value="store.fmt(data.kpis.utilidad_total)" />
-      <KpiCard icon="📈" label="Ingreso Cruzado" :value="store.fmt(data.kpis.ingreso_total)" />
-      <KpiCard icon="🏷️" label="Margen Global" :value="data.kpis.margen_global + '%'" />
-      <KpiCard icon="📦" label="Productos Analizados" :value="store.fmtN(data.kpis.productos)" />
+      <KpiCard :icon="Gem" label="Utilidad Total" :value="store.fmt(data.kpis.utilidad_total)" />
+      <KpiCard :icon="TrendingUp" label="Ingreso Cruzado" :value="store.fmt(data.kpis.ingreso_total)" />
+      <KpiCard :icon="Percent" label="Margen Global" :value="data.kpis.margen_global + '%'" />
+      <KpiCard :icon="Package" label="Productos Analizados" :value="store.fmtN(data.kpis.productos)" />
     </div>
     <div v-else class="empty-state">
-      <div class="empty-icon">📊</div>
+      <div class="empty-icon"><BarChart2 size="48" color="var(--border)" /></div>
       <h3>Faltan datos</h3>
       <p>Necesitas subir **Ventas** e **Inventario** (con columna 'Precio Compra') para ver este análisis.</p>
     </div>
 
     <div v-if="data" class="grid-2">
       <div class="card">
-        <SectionTitle icon="🏆" title="Top 15 Más Rentables (Utilidad)" />
+        <SectionTitle :icon="Trophy" title="Top 15 Más Rentables (Utilidad)" />
         <BarChart v-if="topRentCat.length" :horizontal="true" formatTooltip="currency" :categories="topRentCat" :series="[{name: 'Utilidad', data: topRentData}]" />
       </div>
 
       <div class="card">
-        <SectionTitle icon="⚠️" title="Alerta: Bajo Margen (<5% y alta rotación)" />
+        <SectionTitle :icon="AlertTriangle" title="Alerta: Bajo Margen (<5% y alta rotación)" />
         <table class="data-table" v-if="data.bajo_margen.length">
           <thead>
             <tr>
@@ -69,7 +72,7 @@
     </div>
     
     <div v-if="data && data.por_laboratorio.length" class="card" style="margin-top: 16px;">
-      <SectionTitle icon="🏢" title="Rentabilidad por Laboratorio" />
+      <SectionTitle :icon="Building2" title="Rentabilidad por Laboratorio" />
       <BarChart :horizontal="true" formatTooltip="currency" :categories="topLabCat" :series="[{name: 'Utilidad', data: topLabData}]" />
     </div>
   </div>
@@ -82,6 +85,7 @@ import KpiCard from '../components/ui/KpiCard.vue'
 import SectionTitle from '../components/ui/SectionTitle.vue'
 import BarChart from '../components/charts/BarChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
+import { DollarSign, Gem, TrendingUp, Percent, Package, BarChart2, Trophy, AlertTriangle, Building2 } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.rentabilidad)

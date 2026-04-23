@@ -1,8 +1,11 @@
 <template>
   <div>
     <div class="page-header">
-      <h2>🏠 Resumen General</h2>
-      <p>Visión global del rendimiento y salud del negocio</p>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <LayoutDashboard size="32" color="var(--accent)" />
+        <h2 style="margin: 0;">Resumen General</h2>
+      </div>
+      <p style="margin-top: 8px;">Visión global del rendimiento y salud del negocio</p>
       <div class="accent-bar"></div>
     </div>
 
@@ -20,15 +23,15 @@
       <div v-for="i in 4" :key="i" class="card skeleton" style="height: 100px;"></div>
     </div>
     <div v-else-if="data" class="kpi-grid kpi-grid-4">
-      <KpiCard icon="💵" label="Ingresos Totales" :value="store.fmt(data.kpis.ingresos)" />
-      <KpiCard icon="📈" label="Utilidad Bruta" :value="store.fmt(data.kpis.utilidad)" />
-      <KpiCard icon="🏷️" label="Margen Promedio" :value="data.kpis.margen_pct != null ? data.kpis.margen_pct + '%' : '—'" />
-      <KpiCard icon="📦" label="Unidades Vendidas" :value="store.fmtN(data.kpis.unidades)" />
-      <KpiCard icon="🧾" label="Total Facturas" :value="store.fmtN(data.kpis.facturas)" />
-      <KpiCard icon="💳" label="Ticket Promedio" :value="store.fmt(data.kpis.ticket)" />
+      <KpiCard :icon="DollarSign" label="Ingresos Totales" :value="store.fmt(data.kpis.ingresos)" />
+      <KpiCard :icon="TrendingUp" label="Utilidad Bruta" :value="store.fmt(data.kpis.utilidad)" />
+      <KpiCard :icon="Percent" label="Margen Promedio" :value="data.kpis.margen_pct != null ? data.kpis.margen_pct + '%' : '—'" />
+      <KpiCard :icon="Package" label="Unidades Vendidas" :value="store.fmtN(data.kpis.unidades)" />
+      <KpiCard :icon="Receipt" label="Total Facturas" :value="store.fmtN(data.kpis.facturas)" />
+      <KpiCard :icon="CreditCard" label="Ticket Promedio" :value="store.fmt(data.kpis.ticket)" />
     </div>
     <div v-else class="empty-state">
-      <div class="empty-icon">📈</div>
+      <div class="empty-icon"><Activity size="48" color="var(--border)" /></div>
       <h3>No hay datos para el resumen</h3>
       <p>Sube tus archivos de ventas e inventario para generar los indicadores.</p>
     </div>
@@ -36,14 +39,14 @@
     <div v-if="data" class="grid-2">
       <!-- Tendencia -->
       <div class="card">
-        <SectionTitle icon="📊" title="Tendencia de Ingresos" />
+        <SectionTitle :icon="LineChartIcon" title="Tendencia de Ingresos" />
         <LineChart v-if="tendenciaCat.length" :categories="tendenciaCat" :series="[{name: 'Ingresos', data: tendenciaData}]" />
         <p v-else class="empty-state" style="padding: 20px;">Datos insuficientes para tendencia</p>
       </div>
 
       <!-- Sedes -->
       <div class="card">
-        <SectionTitle icon="🏪" title="Ingresos por Sede" />
+        <SectionTitle :icon="Store" title="Ingresos por Sede" />
         <BarChart v-if="sedesCat.length" :horizontal="true" formatTooltip="currency" :categories="sedesCat" :series="[{name: 'Ingresos', data: sedesData}]" />
         <p v-else class="empty-state" style="padding: 20px;">Datos insuficientes para sedes</p>
       </div>
@@ -59,6 +62,7 @@ import SectionTitle from '../components/ui/SectionTitle.vue'
 import LineChart from '../components/charts/LineChart.vue'
 import BarChart from '../components/charts/BarChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
+import { LayoutDashboard, DollarSign, TrendingUp, Percent, Package, Receipt, CreditCard, Activity, LineChart as LineChartIcon, Store } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.resumen)

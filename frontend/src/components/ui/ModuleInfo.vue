@@ -1,7 +1,7 @@
 <template>
   <div class="module-info">
     <div class="info-header" @click="isOpen = !isOpen">
-      <span class="info-icon">💡</span>
+      <Lightbulb class="info-icon" />
       <span class="info-title">¿Qué hace este módulo y cómo se calcula?</span>
       <span class="info-toggle">{{ isOpen ? '▲ Ocultar' : '▼ Leer más' }}</span>
     </div>
@@ -15,6 +15,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import { Lightbulb } from 'lucide-vue-next'
 
 const isOpen = ref(false)
 </script>
@@ -42,8 +43,10 @@ const isOpen = ref(false)
 }
 
 .info-icon {
-  font-size: 1.2rem;
+  width: 20px;
+  height: 20px;
   margin-right: 12px;
+  color: var(--accent);
 }
 
 .info-title {

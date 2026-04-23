@@ -1,8 +1,11 @@
 <template>
   <div>
     <div class="page-header">
-      <h2>🧠 Inventario Inteligente</h2>
-      <p>Control de reabastecimiento por clasificación ABC y análisis de cobertura</p>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <BrainCircuit size="32" color="var(--accent)" />
+        <h2 style="margin: 0;">Inventario Inteligente</h2>
+      </div>
+      <p style="margin-top: 8px;">Control de reabastecimiento por clasificación ABC y análisis de cobertura</p>
       <div class="accent-bar"></div>
     </div>
 
@@ -31,13 +34,13 @@
       <div v-for="i in 4" :key="i" class="card skeleton" style="height: 100px;"></div>
     </div>
     <div v-else-if="data" class="kpi-grid kpi-grid-4">
-      <KpiCard icon="⚠️" label="Reabastecer (Con Demanda)" :value="store.fmtN(data.kpis.bajo_stock)" />
-      <KpiCard icon="🛑" label="Agotado (0 Stock, rotando)" :value="store.fmtN(data.kpis.sin_stock)" />
-      <KpiCard icon="🐢" label="Prods. Sin Rotación (>60d)" :value="store.fmtN(data.kpis.inventario_quieto)" />
-      <KpiCard icon="💸" label="Capital Inmovilizado" :value="store.fmt(data.kpis.capital_quieto)" />
+      <KpiCard :icon="AlertTriangle" label="Reabastecer (Con Demanda)" :value="store.fmtN(data.kpis.bajo_stock)" />
+      <KpiCard :icon="OctagonX" label="Agotado (0 Stock, rotando)" :value="store.fmtN(data.kpis.sin_stock)" />
+      <KpiCard :icon="Snail" label="Prods. Sin Rotación (>60d)" :value="store.fmtN(data.kpis.inventario_quieto)" />
+      <KpiCard :icon="Banknote" label="Capital Inmovilizado" :value="store.fmt(data.kpis.capital_quieto)" />
     </div>
     <div v-else class="empty-state">
-      <div class="empty-icon">📦</div>
+      <div class="empty-icon"><PackageOpen size="48" color="var(--border)" /></div>
       <h3>Faltan datos</h3>
       <p>Sube el archivo de **Inventario** y **Ventas** para calcular la rotación cruzada.</p>
     </div>
@@ -45,7 +48,7 @@
     <div v-if="data" class="grid-2">
       <!-- Tabla de Bajo Stock -->
       <div class="card" style="grid-column: span 2;">
-        <SectionTitle icon="📋" title="Reabastecer (Bajo Mínimo y Con Demanda)" />
+        <SectionTitle :icon="ClipboardList" title="Reabastecer (Bajo Mínimo y Con Demanda)" />
         <div style="max-height: 400px; overflow-y: auto;">
           <table class="data-table">
             <thead>
@@ -102,14 +105,14 @@
 
       <!-- Top Déficit -->
       <div class="card">
-        <SectionTitle icon="📉" title="Top 15 Mayor Déficit (Unidades)" />
+        <SectionTitle :icon="TrendingDown" title="Top 15 Mayor Déficit (Unidades)" />
         <BarChart v-if="topDefCat.length" :horizontal="true" :categories="topDefCat" :series="[{name: 'Déficit', data: topDefData}]" />
         <p v-else style="padding: 10px; color: var(--fg-muted);">No hay productos con déficit urgente.</p>
       </div>
       
       <!-- Top Capital Inmovilizado -->
       <div class="card">
-        <SectionTitle icon="💸" title="Top 15 Mayor Capital Inmovilizado" />
+        <SectionTitle :icon="Landmark" title="Top 15 Mayor Capital Inmovilizado" />
         <BarChart v-if="topQuietoCat.length" :horizontal="true" formatTooltip="currency" :categories="topQuietoCat" :series="[{name: 'Capital Inmovilizado', data: topQuietoData}]" />
         <p v-else style="padding: 10px; color: var(--fg-muted);">No hay capital inmovilizado destacable.</p>
       </div>
@@ -118,7 +121,7 @@
     <div v-if="data" class="grid-2" style="margin-top: 16px;">
       <!-- Tabla de Inventario Quieto -->
       <div class="card" style="grid-column: span 2;">
-        <SectionTitle icon="🐢" title="Inventario Quieto (Sin Ventas > 60 Días)" />
+        <SectionTitle :icon="Snail" title="Inventario Quieto (Sin Ventas > 60 Días)" />
         <div style="max-height: 400px; overflow-y: auto;">
           <table class="data-table">
             <thead>
@@ -167,6 +170,7 @@ import KpiCard from '../components/ui/KpiCard.vue'
 import SectionTitle from '../components/ui/SectionTitle.vue'
 import BarChart from '../components/charts/BarChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
+import { BrainCircuit, AlertTriangle, OctagonX, Snail, Banknote, PackageOpen, ClipboardList, TrendingDown, Landmark } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.inventario)

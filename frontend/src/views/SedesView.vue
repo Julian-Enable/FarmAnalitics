@@ -1,8 +1,11 @@
 <template>
   <div>
     <div class="page-header">
-      <h2>🏪 Rendimiento por Sedes</h2>
-      <p>Comparativo de métricas clave entre puntos de venta</p>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <Store size="32" color="var(--accent)" />
+        <h2 style="margin: 0;">Rendimiento por Sedes</h2>
+      </div>
+      <p style="margin-top: 8px;">Comparativo de métricas clave entre puntos de venta</p>
       <div class="accent-bar"></div>
     </div>
 
@@ -30,12 +33,12 @@
       <div v-for="i in 3" :key="i" class="card skeleton" style="height: 100px;"></div>
     </div>
     <div v-else-if="data" class="kpi-grid kpi-grid-3">
-      <KpiCard icon="🏪" label="Total Sedes" :value="data.comparativo.length" />
-      <KpiCard icon="💵" label="Sede Mayor Ingreso" :value="data.comparativo[0]?.sede || '—'" />
-      <KpiCard icon="📈" label="Ingreso Promedio por Sede" :value="store.fmt(promedioIngresos)" />
+      <KpiCard :icon="Store" label="Total Sedes" :value="data.comparativo.length" />
+      <KpiCard :icon="DollarSign" label="Sede Mayor Ingreso" :value="data.comparativo[0]?.sede || '—'" />
+      <KpiCard :icon="TrendingUp" label="Ingreso Promedio por Sede" :value="store.fmt(promedioIngresos)" />
     </div>
     <div v-else class="empty-state">
-      <div class="empty-icon">🏪</div>
+      <div class="empty-icon"><Store size="48" color="var(--border)" /></div>
       <h3>Faltan datos</h3>
       <p>Sube archivos de **Ventas** para comparar el rendimiento de las sedes.</p>
     </div>
@@ -43,13 +46,13 @@
     <div v-if="data" class="grid-2">
       <!-- Ingresos -->
       <div class="card">
-        <SectionTitle icon="💰" title="Ingresos por Sede" />
+        <SectionTitle :icon="DollarSign" title="Ingresos por Sede" />
         <BarChart v-if="sedesCat.length" :horizontal="true" formatTooltip="currency" :categories="sedesCat" :series="[{name: 'Ingresos', data: sedesIngresos}]" />
       </div>
 
       <!-- Tabla Comparativa -->
       <div class="card">
-        <SectionTitle icon="📊" title="Métricas por Sede" />
+        <SectionTitle :icon="BarChart2" title="Métricas por Sede" />
         <div style="max-height: 400px; overflow-y: auto;">
           <table class="data-table">
             <thead>
@@ -76,14 +79,14 @@
     <div v-if="data && filters.sede_detalle" class="grid-2" style="margin-top: 16px;">
       <!-- Top 5 Sede Seleccionada -->
       <div class="card">
-        <SectionTitle icon="🏆" :title="`Top 5 Productos en: ${filters.sede_detalle}`" />
+        <SectionTitle :icon="Trophy" :title="`Top 5 Productos en: ${filters.sede_detalle}`" />
         <BarChart v-if="top5Cat.length" :horizontal="true" :categories="top5Cat" :series="[{name: 'Unidades', data: top5Data}]" />
         <p v-else style="padding: 10px; color: var(--fg-muted);">No hay ventas para esta sede.</p>
       </div>
 
       <!-- Info Adicional Sede -->
       <div class="card" v-if="detalleInfo">
-        <SectionTitle icon="📌" :title="`Resumen: ${filters.sede_detalle}`" />
+        <SectionTitle :icon="Pin" :title="`Resumen: ${filters.sede_detalle}`" />
         <div style="margin-top: 20px;">
           <div style="margin-bottom: 12px;">
             <div style="color: var(--fg-muted); font-size: 0.8rem; font-weight: 500;">Ingresos Totales</div>
@@ -110,6 +113,7 @@ import KpiCard from '../components/ui/KpiCard.vue'
 import SectionTitle from '../components/ui/SectionTitle.vue'
 import BarChart from '../components/charts/BarChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
+import { Store, DollarSign, TrendingUp, BarChart2, Trophy, Pin } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.sedes)

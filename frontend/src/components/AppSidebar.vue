@@ -2,8 +2,11 @@
   <aside class="sidebar">
     <!-- Logo -->
     <div class="sidebar-logo">
-      <h1>💊 Dashboard Farma</h1>
-      <p>Análisis de POS Farmacéutico</p>
+      <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 4px;">
+        <Activity color="var(--accent)" size="28" />
+        <h1 style="margin: 0; font-size: 1.5rem; letter-spacing: -0.5px;">Farma Analytics</h1>
+      </div>
+      <p style="margin: 0; font-size: 0.85rem; color: var(--text);">Análisis de POS Farmacéutico</p>
     </div>
 
     <!-- Navegación -->
@@ -14,7 +17,7 @@
         :to="item.to" custom v-slot="{ isActive, navigate }"
       >
         <button class="nav-link" :class="{ active: isActive }" @click="navigate">
-          <span class="nav-icon">{{ item.icon }}</span>
+          <component :is="item.icon" class="nav-icon-lucide" />
           {{ item.label }}
         </button>
       </router-link>
@@ -22,13 +25,17 @@
 
     <!-- Upload de archivos -->
     <div class="sidebar-upload">
-      <div class="upload-title">📁 Cargar archivos</div>
+      <div class="upload-title">
+        <FileUp size="18" style="margin-right: 6px;" /> 
+        Cargar archivos
+      </div>
 
       <label class="upload-zone" :class="{ uploaded: ventasFiles.length }">
         <input type="file" multiple accept=".csv,.xlsx,.xls" @change="onVentas" />
         <div style="display:flex;align-items:center;gap:6px;">
           <span v-if="ventasFiles.length" class="check">✓</span>
-          <strong>📈 Ventas</strong>
+          <TrendingUp size="16" />
+          <strong>Ventas</strong>
         </div>
         <span>{{ ventasFiles.length ? `${ventasFiles.length} archivo(s) listos` : 'CSV / Excel — múltiples OK' }}</span>
       </label>
@@ -37,7 +44,8 @@
         <input type="file" multiple accept=".csv,.xlsx,.xls" @change="onCompras" />
         <div style="display:flex;align-items:center;gap:6px;">
           <span v-if="comprasFiles.length" class="check">✓</span>
-          <strong>🛒 Compras</strong>
+          <Store size="16" />
+          <strong>Compras</strong>
         </div>
         <span>{{ comprasFiles.length ? `${comprasFiles.length} archivo(s) listos` : 'CSV / Excel — múltiples OK' }}</span>
       </label>
@@ -46,7 +54,8 @@
         <input type="file" accept=".csv,.xlsx,.xls" @change="onInventario" />
         <div style="display:flex;align-items:center;gap:6px;">
           <span v-if="inventarioFile" class="check">✓</span>
-          <strong>📦 Inventario</strong>
+          <Database size="16" />
+          <strong>Inventario</strong>
         </div>
         <span>{{ inventarioFile ? inventarioFile.name : 'Archivo maestro' }}</span>
       </label>
@@ -56,7 +65,10 @@
         :disabled="store.uploading || !hasFiles"
         @click="handleUpload"
       >
-        {{ store.uploading ? '⏳ Procesando...' : '🚀 Analizar datos' }}
+        <span v-if="store.uploading">Procesando...</span>
+        <span v-else style="display:flex; align-items:center; justify-content:center; gap: 6px;">
+          <Activity size="16" /> Analizar datos
+        </span>
       </button>
 
       <!-- Estado -->
@@ -69,18 +81,20 @@
       </div>
 
       <div v-if="store.uploadError"
-           style="margin-top:8px;padding:8px 10px;background:#FEE2E2;
-                  border-radius:8px;font-size:0.74rem;color:#991B1B;">
-        ⚠️ {{ store.uploadError }}
+           style="margin-top:8px;padding:8px 10px;background:var(--red-bg);
+                  border-radius:8px;font-size:0.74rem;color:var(--red); display:flex; gap: 6px; align-items: flex-start;">
+        <AlertCircle size="14" style="flex-shrink:0; margin-top:2px;" />
+        <span>{{ store.uploadError }}</span>
       </div>
     </div>
   </aside>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDashboardStore } from '../stores/dashboard'
+import { LayoutDashboard, TrendingUp, DollarSign, AlertCircle, Scale, Store, FileUp, Database, FileSpreadsheet, Activity } from 'lucide-vue-next'
 
 const store  = useDashboardStore()
 const router = useRouter()
@@ -94,12 +108,12 @@ const hasFiles = computed(() =>
 )
 
 const navItems = [
-  { to: '/',             icon: '🏠', label: 'Resumen General'    },
-  { to: '/ventas',       icon: '📈', label: 'Análisis de Ventas' },
-  { to: '/rentabilidad', icon: '💰', label: 'Rentabilidad'        },
-  { to: '/inventario',   icon: '🚨', label: 'Alertas Inventario'  },
-  { to: '/compras',      icon: '⚖️', label: 'Compras vs Ventas'   },
-  { to: '/sedes',        icon: '🏪', label: 'Rendimiento Sedes'   },
+  { to: '/',             icon: shallowRef(LayoutDashboard), label: 'Resumen General'    },
+  { to: '/ventas',       icon: shallowRef(TrendingUp),      label: 'Análisis de Ventas' },
+  { to: '/rentabilidad', icon: shallowRef(DollarSign),      label: 'Rentabilidad'        },
+  { to: '/inventario',   icon: shallowRef(AlertCircle),     label: 'Alertas Inventario'  },
+  { to: '/compras',      icon: shallowRef(Scale),           label: 'Compras vs Ventas'   },
+  { to: '/sedes',        icon: shallowRef(Store),           label: 'Rendimiento Sedes'   },
 ]
 
 const dataLabels = {

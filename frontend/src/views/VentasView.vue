@@ -1,8 +1,11 @@
 <template>
   <div>
     <div class="page-header">
-      <h2>📈 Análisis de Ventas</h2>
-      <p>Desglose por productos, categorías y vendedores</p>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <TrendingUp size="32" color="var(--accent)" />
+        <h2 style="margin: 0;">Análisis de Ventas</h2>
+      </div>
+      <p style="margin-top: 8px;">Desglose por productos, categorías y vendedores</p>
       <div class="accent-bar"></div>
     </div>
 
@@ -53,37 +56,37 @@
       <div v-for="i in 4" :key="i" class="card skeleton" style="height: 100px;"></div>
     </div>
     <div v-else-if="data" class="kpi-grid kpi-grid-4">
-      <KpiCard icon="📄" label="Registros Filtrados" :value="store.fmtN(data.registros)" />
-      <KpiCard icon="💰" label="Ingreso Total" :value="store.fmt(data.ingreso_total)" />
-      <KpiCard icon="📊" label="Promedio Diario" :value="store.fmt(data.promedio_diario)" />
-      <KpiCard icon="📅" label="Días del Periodo" :value="data.dias_periodo + ' días'" />
+      <KpiCard :icon="FileText" label="Registros Filtrados" :value="store.fmtN(data.registros)" />
+      <KpiCard :icon="DollarSign" label="Ingreso Total" :value="store.fmt(data.ingreso_total)" />
+      <KpiCard :icon="BarChart2" label="Promedio Diario" :value="store.fmt(data.promedio_diario)" />
+      <KpiCard :icon="Calendar" label="Días del Periodo" :value="data.dias_periodo + ' días'" />
     </div>
     <div v-else class="empty-state">
-      <div class="empty-icon">📁</div>
+      <div class="empty-icon"><FolderOpen size="48" color="var(--border)" /></div>
       <h3>No hay datos de ventas</h3>
       <p>Sube al menos un archivo de ventas para ver este análisis.</p>
     </div>
 
     <div v-if="data" class="grid-2">
       <div class="card">
-        <SectionTitle icon="🏆" title="Top 15 Productos (Unidades)" />
+        <SectionTitle :icon="Trophy" title="Top 15 Productos (Unidades)" />
         <BarChart v-if="topProdCat.length" :horizontal="true" :categories="topProdCat" :series="[{name: 'Unidades', data: topProdData}]" />
       </div>
       <div class="card">
-        <SectionTitle icon="🏢" title="Top 10 Laboratorios (Ingresos)" />
+        <SectionTitle :icon="Building2" title="Top 10 Laboratorios (Ingresos)" />
         <BarChart v-if="topLabCat.length" :horizontal="true" formatTooltip="currency" :categories="topLabCat" :series="[{name: 'Ingresos', data: topLabData}]" />
       </div>
     </div>
 
     <!-- Tendencia Mensual -->
     <div v-if="data && data.tendencia_mensual?.length" class="card" style="margin-top: 16px;">
-      <SectionTitle icon="📈" title="Tendencia Mensual de Ingresos" />
+      <SectionTitle :icon="LineChartIcon" title="Tendencia Mensual de Ingresos" />
       <LineChart :categories="tendMesCat" :series="[{name: 'Ingresos', data: tendMesData}]" />
     </div>
 
     <!-- Vendedores -->
     <div v-if="data && data.vendedores?.length" class="card" style="margin-top: 16px;">
-      <SectionTitle icon="👨‍💼" title="Rendimiento por Vendedor" />
+      <SectionTitle :icon="Users" title="Rendimiento por Vendedor" />
       <div style="max-height: 350px; overflow-y: auto;">
         <table class="data-table">
           <thead>
@@ -115,15 +118,18 @@
     </div>
 
     <div v-if="data && data.por_categoria.length" class="card" style="margin-top: 16px;">
-      <SectionTitle icon="📑" title="Ventas por Categoría" />
+      <SectionTitle :icon="Tags" title="Ventas por Categoría" />
       <DonutChart :labels="catLabels" :series="catSeries" />
     </div>
 
     <!-- Tabla Detalle Productos -->
     <div v-if="data && data.detalle_productos?.length" class="card" style="margin-top: 16px;">
-      <SectionTitle icon="📋" title="Detalle de Productos Vendidos" />
-      <input type="text" v-model="searchDetalle" placeholder="🔍 Buscar por referencia, nombre o laboratorio..."
-             style="width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; font-size: 14px;" />
+      <SectionTitle :icon="ClipboardList" title="Detalle de Productos Vendidos" />
+      <div style="position: relative;">
+        <Search style="position: absolute; left: 12px; top: 11px; color: var(--text); opacity: 0.5;" size="16" />
+        <input type="text" v-model="searchDetalle" placeholder="Buscar por referencia, nombre o laboratorio..."
+               style="width: 100%; padding: 10px 14px 10px 36px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; font-size: 14px; box-sizing: border-box;" />
+      </div>
       <div style="max-height: 400px; overflow-y: auto;">
         <table class="data-table">
           <thead>
@@ -172,6 +178,7 @@ import BarChart from '../components/charts/BarChart.vue'
 import LineChart from '../components/charts/LineChart.vue'
 import DonutChart from '../components/charts/DonutChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
+import { TrendingUp, FileText, DollarSign, BarChart2, Calendar, FolderOpen, Trophy, Building2, LineChart as LineChartIcon, Users, Tags, ClipboardList, Search } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.ventas)

@@ -1,8 +1,11 @@
 <template>
   <div>
     <div class="page-header">
-      <h2>⚖️ Conciliación y Cobertura (Compras vs Ventas)</h2>
-      <p>Cálculo de Inventario Inicial por ingeniería inversa y días de cobertura de stock</p>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <Scale size="32" color="var(--accent)" />
+        <h2 style="margin: 0;">Conciliación y Cobertura (Compras vs Ventas)</h2>
+      </div>
+      <p style="margin-top: 8px;">Cálculo de Inventario Inicial por ingeniería inversa y días de cobertura de stock</p>
       <div class="accent-bar"></div>
     </div>
 
@@ -19,13 +22,13 @@
       <div v-for="i in 4" :key="i" class="card skeleton" style="height: 100px;"></div>
     </div>
     <div v-else-if="data" class="kpi-grid kpi-grid-4">
-      <KpiCard icon="🛒" label="Total Comprado (Uds)" :value="store.fmtN(data.kpis.total_comprado)" />
-      <KpiCard icon="📦" label="Total Vendido (Uds)" :value="store.fmtN(data.kpis.total_vendido)" />
-      <KpiCard icon="⚠️" label="Items Sobrecomprados" :value="store.fmtN(data.kpis.n_sobre_compra)" />
-      <KpiCard icon="⏱️" label="Días del Periodo" :value="data.kpis.dias_periodo + ' días'" />
+      <KpiCard :icon="ShoppingCart" label="Total Comprado (Uds)" :value="store.fmtN(data.kpis.total_comprado)" />
+      <KpiCard :icon="Package" label="Total Vendido (Uds)" :value="store.fmtN(data.kpis.total_vendido)" />
+      <KpiCard :icon="AlertTriangle" label="Items Sobrecomprados" :value="store.fmtN(data.kpis.n_sobre_compra)" />
+      <KpiCard :icon="Timer" label="Días del Periodo" :value="data.kpis.dias_periodo + ' días'" />
     </div>
     <div v-else class="empty-state">
-      <div class="empty-icon">⚖️</div>
+      <div class="empty-icon"><Scale size="48" color="var(--border)" /></div>
       <h3>Faltan datos</h3>
       <p>Sube archivos de **Inventario, Compras y Ventas** para ejecutar la conciliación matemática.</p>
     </div>
@@ -58,7 +61,7 @@
     <div v-if="data" class="grid-2">
       <!-- Conciliación Matemática -->
       <div class="card" style="grid-column: span 2;">
-        <SectionTitle icon="🧮" :title="'Flujo de Inventario (' + (data.comparativo?.length || 0) + ' productos)'" />
+        <SectionTitle :icon="Calculator" :title="'Flujo de Inventario (' + (data.comparativo?.length || 0) + ' productos)'" />
         <div style="max-height: 500px; overflow-y: auto;">
           <table class="data-table">
             <thead>
@@ -124,7 +127,7 @@
 
       <!-- Top Proveedores -->
       <div class="card" style="grid-column: span 2;">
-        <SectionTitle icon="🚚" title="Top 10 Proveedores (Unidades Compradas)" />
+        <SectionTitle :icon="Truck" title="Top 10 Proveedores (Unidades Compradas)" />
         <BarChart v-if="topProvCat.length" :horizontal="true" :categories="topProvCat" :series="[{name: 'Unidades', data: topProvData}]" />
       </div>
     </div>
@@ -138,6 +141,7 @@ import KpiCard from '../components/ui/KpiCard.vue'
 import SectionTitle from '../components/ui/SectionTitle.vue'
 import BarChart from '../components/charts/BarChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
+import { Scale, ShoppingCart, Package, AlertTriangle, Timer, Calculator, Truck } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.compras)
