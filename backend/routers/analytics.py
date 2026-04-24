@@ -1,7 +1,7 @@
 # =============================================================================
 # backend/routers/analytics.py  — Todos los endpoints de análisis
 # =============================================================================
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Header
 from typing import Optional, Union
 import pandas as pd
 import json
@@ -38,6 +38,7 @@ async def upload_files(
     ventas:     Optional[Union[list[UploadFile], UploadFile]] = File(default=None),
     compras:    Optional[Union[list[UploadFile], UploadFile]] = File(default=None),
     inventario: Optional[UploadFile]                          = File(default=None),
+    x_session_id: str = Header(default="default-session")
 ):
     """Recibe archivos, los procesa y los almacena en memoria."""
     resultados = {}
@@ -55,7 +56,7 @@ async def upload_files(
             content = await f.read()
             dfs.append(leer_bytes(content, f.filename))
         df_v = procesar_ventas(pd.concat(dfs, ignore_index=True))
-        set_df("ventas", df_v)
+        set_df(x_session_id, "ventas", df_v)
         resultados["ventas"] = len(df_v)
 
     # Compras
@@ -65,36 +66,36 @@ async def upload_files(
             content = await f.read()
             dfs.append(leer_bytes(content, f.filename))
         df_c = procesar_compras(pd.concat(dfs, ignore_index=True))
-        set_df("compras", df_c)
+        set_df(x_session_id, "compras", df_c)
         resultados["compras"] = len(df_c)
 
     # Inventario
     if inventario:
         content = await inventario.read()
         df_i = procesar_inventario(leer_bytes(content, inventario.filename))
-        set_df("inventario", df_i)
+        set_df(x_session_id, "inventario", df_i)
         resultados["inventario"] = len(df_i)
 
     return {"ok": True, "filas": resultados}
 
 
 @router.get("/status")
-def status():
-    return get_status()
+def status(x_session_id: str = Header(default="default-session")):
+    return get_status(x_session_id)
 
 
 @router.delete("/reset")
-def reset():
-    clear_all()
+def reset(x_session_id: str = Header(default="default-session")):
+    clear_all(x_session_id)
     return {"ok": True}
 
 
 # ── Resumen General ───────────────────────────────────────────────────────────
 
 @router.get("/resumen")
-def resumen():
-    df_v = get_df("ventas")
-    df_i = get_df("inventario")
+def resumen(x_session_id: str = Header(default="default-session")):
+    df_v = get_df(x_session_id, "ventas")
+    df_i = get_df(x_session_id, "inventario")
     if df_v is None:
         raise HTTPException(404, "No hay datos de ventas cargados")
 
@@ -145,8 +146,9 @@ def resumen():
 @router.get("/ventas")
 def ventas(sede: str = "Todas", nivel: str = "Todos",
            laboratorio: str = "Todos",
-           fecha_ini: str = None, fecha_fin: str = None):
-    df = get_df("ventas")
+           fecha_ini: str = None, fecha_fin: str = None,
+           x_session_id: str = Header(default="default-session")):
+    df = get_df(x_session_id, "ventas")
     if df is None:
         raise HTTPException(404, "No hay datos de ventas")
 
@@ -205,9 +207,9 @@ def ventas(sede: str = "Todas", nivel: str = "Todos",
                .sort_values("ingreso", ascending=False))
     detalle = json.loads(detalle.to_json(orient="records"))
 
-    sedes_opts  = sorted(get_df("ventas")["Punto Venta"].dropna().unique().tolist())
+    sedes_opts  = sorted(get_df(x_session_id, "ventas")["Punto Venta"].dropna().unique().tolist())
     niveles_opts = sorted(df["Nivel"].dropna().unique().tolist()) if "Nivel" in df.columns else []
-    labs_opts = sorted(get_df("ventas")["Laboratorio"].dropna().unique().tolist()) if "Laboratorio" in get_df("ventas").columns else []
+    labs_opts = sorted(get_df(x_session_id, "ventas")["Laboratorio"].dropna().unique().tolist()) if "Laboratorio" in get_df(x_session_id, "ventas").columns else []
 
     return {
         "registros": len(df),
@@ -227,9 +229,9 @@ def ventas(sede: str = "Todas", nivel: str = "Todos",
 # ── Rentabilidad ──────────────────────────────────────────────────────────────
 
 @router.get("/rentabilidad")
-def rentabilidad():
-    df_v = get_df("ventas")
-    df_i = get_df("inventario")
+def rentabilidad(x_session_id: str = Header(default="default-session")):
+    df_v = get_df(x_session_id, "ventas")
+    df_i = get_df(x_session_id, "inventario")
     if df_v is None or df_i is None:
         raise HTTPException(404, "Necesitas ventas e inventario")
     if "Precio Compra" not in df_i.columns:
@@ -288,9 +290,9 @@ def rentabilidad():
 # ── Inventario ────────────────────────────────────────────────────────────────
 
 @router.get("/inventario")
-def inventario(sede: str = "Todas"):
-    df_i = get_df("inventario")
-    df_v = get_df("ventas")
+def inventario(sede: str = "Todas", x_session_id: str = Header(default="default-session")):
+    df_i = get_df(x_session_id, "inventario")
+    df_v = get_df(x_session_id, "ventas")
     if df_i is None:
         raise HTTPException(404, "No hay datos de inventario")
 
@@ -408,10 +410,10 @@ def inventario(sede: str = "Todas"):
 # ── Compras vs Ventas ─────────────────────────────────────────────────────────
 
 @router.get("/compras")
-def compras(proveedor: str = "Todos", estado: str = "Todos", buscar: str = ""):
-    df_c = get_df("compras")
-    df_v = get_df("ventas")
-    df_i = get_df("inventario")
+def compras(proveedor: str = "Todos", estado: str = "Todos", buscar: str = "", x_session_id: str = Header(default="default-session")):
+    df_c = get_df(x_session_id, "compras")
+    df_v = get_df(x_session_id, "ventas")
+    df_i = get_df(x_session_id, "inventario")
     if df_c is None or df_v is None or df_i is None:
         raise HTTPException(404, "Se requieren Compras, Ventas e Inventario para la conciliación.")
 
@@ -505,9 +507,9 @@ def compras(proveedor: str = "Todos", estado: str = "Todos", buscar: str = ""):
 # ── Sedes ─────────────────────────────────────────────────────────────────────
 
 @router.get("/sedes")
-def sedes(sede_detalle: str = None):
-    df_v = get_df("ventas")
-    df_i = get_df("inventario")
+def sedes(sede_detalle: str = None, x_session_id: str = Header(default="default-session")):
+    df_v = get_df(x_session_id, "ventas")
+    df_i = get_df(x_session_id, "inventario")
     if df_v is None:
         raise HTTPException(404, "No hay datos de ventas")
 

@@ -2,9 +2,16 @@ import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
 import axios from 'axios'
 
-// Para producción, VITE_API_URL debe ser la URL de Render (ej. https://tu-api.onrender.com)
-// En desarrollo local (vite dev), esto queda vacío y se usa el proxy de vite.config.js
+// Generar o recuperar ID de sesión único
+const sessionId = localStorage.getItem('farm_session_id') || crypto.randomUUID()
+localStorage.setItem('farm_session_id', sessionId)
+
+// Configuración de Axios
 axios.defaults.baseURL = import.meta.env.VITE_API_URL || ''
+axios.interceptors.request.use(config => {
+  config.headers['x-session-id'] = sessionId
+  return config
+})
 export const useDashboardStore = defineStore('dashboard', () => {
   // Estado de archivos cargados
   const status = reactive({ ventas: false, compras: false, inventario: false })
