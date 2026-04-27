@@ -291,17 +291,18 @@ select:focus, input:focus {
   padding: 6px 12px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--accent);
-  background: var(--accent-bg);
-  border: 1px solid var(--accent-border);
+  color: var(--green);
+  background: var(--green-bg);
+  border: 1px solid transparent;
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .export-btn:hover {
-  background: var(--accent);
+  background: var(--green);
   color: white;
+  box-shadow: var(--shadow);
 }
 
 .section-header-row {
