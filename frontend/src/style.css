@@ -287,22 +287,29 @@ select:focus, input:focus {
 .export-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 8px;
+  padding: 8px 16px;
   font-size: 13px;
+  font-family: var(--sans);
   font-weight: 600;
-  color: var(--green);
-  background: var(--green-bg);
-  border: 1px solid transparent;
-  border-radius: 6px;
+  color: var(--text-h);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
   cursor: pointer;
+  box-shadow: var(--shadow);
   transition: all 0.2s ease;
 }
 
 .export-btn:hover {
-  background: var(--green);
-  color: white;
-  box-shadow: var(--shadow);
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: var(--shadow-lg);
+}
+
+.export-btn:active {
+  transform: translateY(0);
 }
 
 .section-header-row {
