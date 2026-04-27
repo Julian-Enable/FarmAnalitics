@@ -40,7 +40,12 @@
       </div>
 
       <div class="card">
-        <SectionTitle :icon="AlertTriangle" title="Alerta: Bajo Margen (<5% y alta rotación)" />
+        <div class="section-header-row">
+          <SectionTitle :icon="AlertTriangle" title="Alerta: Bajo Margen (<5% y alta rotación)" />
+          <button class="export-btn" @click="exportBajoMargen" v-if="data.bajo_margen.length">
+            <Download size="16" /> Exportar CSV
+          </button>
+        </div>
         <table class="data-table" v-if="data.bajo_margen.length">
           <thead>
             <tr>
@@ -59,7 +64,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in sortedBajoMargen" :key="row.Referencia">
+            <tr v-for="row in paginatedBajoMargen" :key="row.Referencia">
               <td>{{ row.nombre }}</td>
               <td>{{ row.cant_vend }}</td>
               <td>{{ store.fmt(row.precio_venta) }}</td>
@@ -67,6 +72,12 @@
             </tr>
           </tbody>
         </table>
+        <Paginator 
+          v-if="data.bajo_margen.length"
+          v-model="pageBajoMargen" 
+          :totalItems="sortedBajoMargen.length" 
+          :itemsPerPage="itemsPerPage" 
+        />
         <p v-else style="padding: 10px; color: var(--fg-muted)">No hay productos en alerta.</p>
       </div>
     </div>
@@ -85,7 +96,9 @@ import KpiCard from '../components/ui/KpiCard.vue'
 import SectionTitle from '../components/ui/SectionTitle.vue'
 import BarChart from '../components/charts/BarChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
-import { DollarSign, Gem, TrendingUp, Percent, Package, BarChart2, Trophy, AlertTriangle, Building2 } from 'lucide-vue-next'
+import Paginator from '../components/ui/Paginator.vue'
+import { exportToCSV } from '../utils/export'
+import { DollarSign, Gem, TrendingUp, Percent, Package, BarChart2, Trophy, AlertTriangle, Building2, Download } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.rentabilidad)
@@ -125,4 +138,26 @@ const topRentData = computed(() => data.value?.top_rentables?.map(d => d.utilida
 
 const topLabCat = computed(() => data.value?.por_laboratorio?.map(d => d.lab) || [])
 const topLabData = computed(() => data.value?.por_laboratorio?.map(d => d.utilidad_total) || [])
+
+// Paginación
+const itemsPerPage = 10
+const pageBajoMargen = ref(1)
+
+const paginatedBajoMargen = computed(() => {
+  const start = (pageBajoMargen.value - 1) * itemsPerPage
+  return sortedBajoMargen.value.slice(start, start + itemsPerPage)
+})
+
+// Exportación
+function exportBajoMargen() {
+  const cols = [
+    { key: 'nombre', label: 'Producto' },
+    { key: 'cant_vend', label: 'Cantidad Vendida' },
+    { key: 'precio_venta', label: 'Precio Promedio Venta' },
+    { key: 'precio_compra', label: 'Precio Compra' },
+    { key: 'utilidad', label: 'Utilidad Unitaria' },
+    { key: 'margen_pct', label: 'Margen (%)' }
+  ]
+  exportToCSV(sortedBajoMargen.value, cols, 'Alerta_Bajo_Margen')
+}
 </script>

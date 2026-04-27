@@ -283,6 +283,33 @@ select:focus, input:focus {
   box-shadow: 0 0 0 2px var(--accent-bg);
 }
 
+/* Export Button */
+.export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.export-btn:hover {
+  background: var(--accent);
+  color: white;
+}
+
+.section-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 /* Utils */
 .lucide {
   stroke-width: 2px;

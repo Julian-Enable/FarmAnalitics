@@ -48,8 +48,13 @@
     <div v-if="data" class="grid-2">
       <!-- Tabla de Bajo Stock -->
       <div class="card" style="grid-column: span 2;">
-        <SectionTitle :icon="ClipboardList" title="Reabastecer (Bajo Mínimo y Con Demanda)" />
-        <div style="max-height: 400px; overflow-y: auto;">
+        <div class="section-header-row">
+          <SectionTitle :icon="ClipboardList" title="Reabastecer (Bajo Mínimo y Con Demanda)" />
+          <button class="export-btn" @click="exportBajoStock">
+            <Download size="16" /> Exportar CSV
+          </button>
+        </div>
+        <div>
           <table class="data-table">
             <thead>
               <tr>
@@ -77,7 +82,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in sortedBajo" :key="row.Referencia">
+              <tr v-for="row in paginatedBajo" :key="row.Referencia">
                 <td style="text-align: center;">
                   <span class="badge" 
                         :class="{'badge-green': row.clasificacion_abc === 'A', 'badge-amber': row.clasificacion_abc === 'B', 'badge-red': row.clasificacion_abc === 'C'}">
@@ -101,6 +106,11 @@
             </tbody>
           </table>
         </div>
+        <Paginator 
+          v-model="pageBajo" 
+          :totalItems="sortedBajo.length" 
+          :itemsPerPage="itemsPerPage" 
+        />
       </div>
 
       <!-- Top Déficit -->
@@ -121,8 +131,13 @@
     <div v-if="data" class="grid-2" style="margin-top: 16px;">
       <!-- Tabla de Inventario Quieto -->
       <div class="card" style="grid-column: span 2;">
-        <SectionTitle :icon="Snail" title="Inventario Quieto (Sin Ventas > 60 Días)" />
-        <div style="max-height: 400px; overflow-y: auto;">
+        <div class="section-header-row">
+          <SectionTitle :icon="Snail" title="Inventario Quieto (Sin Ventas > 60 Días)" />
+          <button class="export-btn" @click="exportQuieto">
+            <Download size="16" /> Exportar CSV
+          </button>
+        </div>
+        <div>
           <table class="data-table">
             <thead>
               <tr>
@@ -144,7 +159,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in sortedQuieto" :key="row.Referencia">
+              <tr v-for="row in paginatedQuieto" :key="row.Referencia">
                 <td>{{ row.Referencia }}</td>
                 <td>{{ row.Descripcion?.substring(0, 45) }}</td>
                 <td><span class="badge badge-red">{{ row.dias_sin_venta >= 9999 ? 'NUNCA' : row.dias_sin_venta + ' d' }}</span></td>
@@ -157,6 +172,11 @@
             </tbody>
           </table>
         </div>
+        <Paginator 
+          v-model="pageQuieto" 
+          :totalItems="sortedQuieto.length" 
+          :itemsPerPage="itemsPerPage" 
+        />
       </div>
     </div>
 
@@ -170,7 +190,9 @@ import KpiCard from '../components/ui/KpiCard.vue'
 import SectionTitle from '../components/ui/SectionTitle.vue'
 import BarChart from '../components/charts/BarChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
-import { BrainCircuit, AlertTriangle, OctagonX, Snail, Banknote, PackageOpen, ClipboardList, TrendingDown, Landmark } from 'lucide-vue-next'
+import Paginator from '../components/ui/Paginator.vue'
+import { exportToCSV } from '../utils/export'
+import { BrainCircuit, AlertTriangle, OctagonX, Snail, Banknote, PackageOpen, ClipboardList, TrendingDown, Landmark, Download } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.inventario)
@@ -239,4 +261,44 @@ const topDefData = computed(() => data.value?.top_deficit?.map(d => d.deficit) |
 
 const topQuietoCat = computed(() => data.value?.top_quieto?.map(d => d.nombre) || [])
 const topQuietoData = computed(() => data.value?.top_quieto?.map(d => d.capital_inmovilizado) || [])
+
+// Paginación
+const itemsPerPage = 10
+const pageBajo = ref(1)
+const pageQuieto = ref(1)
+
+const paginatedBajo = computed(() => {
+  const start = (pageBajo.value - 1) * itemsPerPage
+  return sortedBajo.value.slice(start, start + itemsPerPage)
+})
+
+const paginatedQuieto = computed(() => {
+  const start = (pageQuieto.value - 1) * itemsPerPage
+  return sortedQuieto.value.slice(start, start + itemsPerPage)
+})
+
+// Exportación
+function exportBajoStock() {
+  const cols = [
+    { key: 'clasificacion_abc', label: 'Clase ABC' },
+    { key: 'Referencia', label: 'Referencia' },
+    { key: 'Descripcion', label: 'Descripción' },
+    { key: 'rotacion_diaria', label: 'Rotación Diaria' },
+    { key: 'Total', label: 'Stock Actual' },
+    { key: 'cobertura_dias', label: 'Días Cobertura' },
+    { key: 'deficit', label: 'Déficit Sugerido' }
+  ]
+  exportToCSV(sortedBajo.value, cols, 'Alerta_Bajo_Stock')
+}
+
+function exportQuieto() {
+  const cols = [
+    { key: 'Referencia', label: 'Referencia' },
+    { key: 'Descripcion', label: 'Descripción' },
+    { key: 'dias_sin_venta', label: 'Días Sin Venta' },
+    { key: 'Total', label: 'Stock Actual' },
+    { key: 'capital_inmovilizado', label: 'Capital Inmovilizado' }
+  ]
+  exportToCSV(sortedQuieto.value, cols, 'Inventario_Quieto')
+}
 </script>

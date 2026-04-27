@@ -52,8 +52,13 @@
 
       <!-- Tabla Comparativa -->
       <div class="card">
-        <SectionTitle :icon="BarChart2" title="Métricas por Sede" />
-        <div style="max-height: 400px; overflow-y: auto;">
+        <div class="section-header-row">
+          <SectionTitle :icon="BarChart2" title="Métricas por Sede" />
+          <button class="export-btn" @click="exportSedes" v-if="data.comparativo.length">
+            <Download size="16" /> Exportar CSV
+          </button>
+        </div>
+        <div>
           <table class="data-table">
             <thead>
               <tr>
@@ -113,7 +118,8 @@ import KpiCard from '../components/ui/KpiCard.vue'
 import SectionTitle from '../components/ui/SectionTitle.vue'
 import BarChart from '../components/charts/BarChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
-import { Store, DollarSign, TrendingUp, BarChart2, Trophy, Pin } from 'lucide-vue-next'
+import { exportToCSV } from '../utils/export'
+import { Store, DollarSign, TrendingUp, BarChart2, Trophy, Pin, Download } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.sedes)
@@ -151,4 +157,15 @@ const detalleInfo = computed(() => {
   if (!data.value || !filters.value.sede_detalle) return null
   return data.value.comparativo.find(d => d.sede === filters.value.sede_detalle)
 })
+
+// Exportación
+function exportSedes() {
+  const cols = [
+    { key: 'sede', label: 'Sede' },
+    { key: 'ingresos', label: 'Ingresos Totales' },
+    { key: 'unidades', label: 'Unidades Vendidas' },
+    { key: 'ticket', label: 'Ticket Promedio' }
+  ]
+  exportToCSV(data.value.comparativo, cols, 'Metricas_Sedes')
+}
 </script>

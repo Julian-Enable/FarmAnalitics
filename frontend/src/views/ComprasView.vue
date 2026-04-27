@@ -61,8 +61,13 @@
     <div v-if="data" class="grid-2">
       <!-- Conciliación Matemática -->
       <div class="card" style="grid-column: span 2;">
-        <SectionTitle :icon="Calculator" :title="'Flujo de Inventario (' + (data.comparativo?.length || 0) + ' productos)'" />
-        <div style="max-height: 500px; overflow-y: auto;">
+        <div class="section-header-row">
+          <SectionTitle :icon="Calculator" :title="'Flujo de Inventario (' + (data.comparativo?.length || 0) + ' productos)'" />
+          <button class="export-btn" @click="exportComparativo">
+            <Download size="16" /> Exportar CSV
+          </button>
+        </div>
+        <div>
           <table class="data-table">
             <thead>
               <tr>
@@ -93,7 +98,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in sortedComparativo" :key="row.Referencia">
+              <tr v-for="row in paginatedComparativo" :key="row.Referencia">
                 <td>{{ row.Referencia }}</td>
                 <td>{{ row.Descripcion?.substring(0, 30) || 'N/A' }}</td>
                 <td style="background: var(--bg); border-left: 1px solid var(--border);">{{ store.fmtN(row.inv_inicial) }}</td>
@@ -123,6 +128,11 @@
             </tbody>
           </table>
         </div>
+        <Paginator 
+          v-model="pageComparativo" 
+          :totalItems="sortedComparativo.length" 
+          :itemsPerPage="itemsPerPage" 
+        />
       </div>
 
       <!-- Top Proveedores -->
@@ -141,7 +151,9 @@ import KpiCard from '../components/ui/KpiCard.vue'
 import SectionTitle from '../components/ui/SectionTitle.vue'
 import BarChart from '../components/charts/BarChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
-import { Scale, ShoppingCart, Package, AlertTriangle, Timer, Calculator, Truck } from 'lucide-vue-next'
+import Paginator from '../components/ui/Paginator.vue'
+import { exportToCSV } from '../utils/export'
+import { Scale, ShoppingCart, Package, AlertTriangle, Timer, Calculator, Truck, Download } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.compras)
@@ -207,4 +219,28 @@ function isPerecedero(row) {
 
 const topProvCat = computed(() => data.value?.top_proveedores?.map(d => d.proveedor) || [])
 const topProvData = computed(() => data.value?.top_proveedores?.map(d => d.unidades) || [])
+
+// Paginación
+const itemsPerPage = 10
+const pageComparativo = ref(1)
+
+const paginatedComparativo = computed(() => {
+  const start = (pageComparativo.value - 1) * itemsPerPage
+  return sortedComparativo.value.slice(start, start + itemsPerPage)
+})
+
+// Exportación
+function exportComparativo() {
+  const cols = [
+    { key: 'Referencia', label: 'Referencia' },
+    { key: 'Descripcion', label: 'Descripción' },
+    { key: 'inv_inicial', label: 'Inv. Inicial' },
+    { key: 'uds_compradas', label: '+ Comprado' },
+    { key: 'uds_vendidas', label: '- Vendido' },
+    { key: 'inv_actual', label: '= Inv. Actual' },
+    { key: 'cobertura_dias', label: 'Días Cobertura' },
+    { key: 'estado', label: 'Estado' }
+  ]
+  exportToCSV(sortedComparativo.value, cols, 'Conciliacion_Inventario')
+}
 </script>

@@ -86,8 +86,13 @@
 
     <!-- Vendedores -->
     <div v-if="data && data.vendedores?.length" class="card" style="margin-top: 16px;">
-      <SectionTitle :icon="Users" title="Rendimiento por Vendedor" />
-      <div style="max-height: 350px; overflow-y: auto;">
+      <div class="section-header-row">
+        <SectionTitle :icon="Users" title="Rendimiento por Vendedor" />
+        <button class="export-btn" @click="exportVendedores">
+          <Download size="16" /> Exportar CSV
+        </button>
+      </div>
+      <div>
         <table class="data-table">
           <thead>
             <tr>
@@ -106,7 +111,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="v in sortedVendedores" :key="v.vendedor">
+            <tr v-for="v in paginatedVendedores" :key="v.vendedor">
               <td style="font-weight: 600;">{{ v.vendedor }}</td>
               <td>{{ store.fmtN(v.unidades) }}</td>
               <td>{{ store.fmt(v.ingresos) }}</td>
@@ -115,6 +120,11 @@
           </tbody>
         </table>
       </div>
+      <Paginator 
+        v-model="pageVendedores" 
+        :totalItems="sortedVendedores.length" 
+        :itemsPerPage="itemsPerPage" 
+      />
     </div>
 
     <div v-if="data && data.por_categoria.length" class="card" style="margin-top: 16px;">
@@ -124,13 +134,18 @@
 
     <!-- Tabla Detalle Productos -->
     <div v-if="data && data.detalle_productos?.length" class="card" style="margin-top: 16px;">
-      <SectionTitle :icon="ClipboardList" title="Detalle de Productos Vendidos" />
+      <div class="section-header-row">
+        <SectionTitle :icon="ClipboardList" title="Detalle de Productos Vendidos" />
+        <button class="export-btn" @click="exportDetalle">
+          <Download size="16" /> Exportar CSV
+        </button>
+      </div>
       <div style="position: relative;">
         <Search style="position: absolute; left: 12px; top: 11px; color: var(--text); opacity: 0.5;" size="16" />
         <input type="text" v-model="searchDetalle" placeholder="Buscar por referencia, nombre o laboratorio..."
                style="width: 100%; padding: 10px 14px 10px 36px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; font-size: 14px; box-sizing: border-box;" />
       </div>
-      <div style="max-height: 400px; overflow-y: auto;">
+      <div>
         <table class="data-table">
           <thead>
             <tr>
@@ -152,7 +167,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in filteredDetalle" :key="row.Referencia">
+            <tr v-for="row in paginatedDetalle" :key="row.Referencia">
               <td>{{ row.Referencia }}</td>
               <td>{{ row.Descripcion?.substring(0, 35) }}</td>
               <td>{{ row.Laboratorio?.substring(0, 25) }}</td>
@@ -162,9 +177,11 @@
           </tbody>
         </table>
       </div>
-      <p style="color: var(--fg-muted); margin-top: 8px; font-size: 12px;">
-        Mostrando {{ filteredDetalle.length }} de {{ data.detalle_productos.length }} productos
-      </p>
+      <Paginator 
+        v-model="pageDetalle" 
+        :totalItems="filteredDetalle.length" 
+        :itemsPerPage="itemsPerPage" 
+      />
     </div>
   </div>
 </template>
@@ -178,7 +195,9 @@ import BarChart from '../components/charts/BarChart.vue'
 import LineChart from '../components/charts/LineChart.vue'
 import DonutChart from '../components/charts/DonutChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
-import { TrendingUp, FileText, DollarSign, BarChart2, Calendar, FolderOpen, Trophy, Building2, LineChart as LineChartIcon, Users, Tags, ClipboardList, Search } from 'lucide-vue-next'
+import Paginator from '../components/ui/Paginator.vue'
+import { exportToCSV } from '../utils/export'
+import { TrendingUp, FileText, DollarSign, BarChart2, Calendar, FolderOpen, Trophy, Building2, LineChart as LineChartIcon, Users, Tags, ClipboardList, Search, Download } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.ventas)
@@ -268,4 +287,41 @@ const sortedVendedores = computed(() => {
   }
   return list
 })
+
+// Paginación
+const itemsPerPage = 10
+const pageVendedores = ref(1)
+const pageDetalle = ref(1)
+
+const paginatedVendedores = computed(() => {
+  const start = (pageVendedores.value - 1) * itemsPerPage
+  return sortedVendedores.value.slice(start, start + itemsPerPage)
+})
+
+const paginatedDetalle = computed(() => {
+  const start = (pageDetalle.value - 1) * itemsPerPage
+  return filteredDetalle.value.slice(start, start + itemsPerPage)
+})
+
+// Exportación
+function exportVendedores() {
+  const cols = [
+    { key: 'vendedor', label: 'Vendedor' },
+    { key: 'unidades', label: 'Unidades Vendidas' },
+    { key: 'ingresos', label: 'Ingresos Totales' },
+    { key: 'facturas', label: 'Transacciones' },
+  ]
+  exportToCSV(sortedVendedores.value, cols, 'Rendimiento_Vendedores')
+}
+
+function exportDetalle() {
+  const cols = [
+    { key: 'Referencia', label: 'Referencia' },
+    { key: 'Descripcion', label: 'Descripción' },
+    { key: 'Laboratorio', label: 'Laboratorio' },
+    { key: 'unidades', label: 'Unidades' },
+    { key: 'ingreso', label: 'Ingreso Total' },
+  ]
+  exportToCSV(filteredDetalle.value, cols, 'Detalle_Ventas')
+}
 </script>
