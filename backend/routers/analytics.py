@@ -250,6 +250,38 @@ def rentabilidad(x_session_id: str = Header(default="default-session")):
     r["utilidad_total"] = r["margen_unit"] * r["cant_vend"]
     r["ingreso_total"]  = r["Precio Venta"] * r["cant_vend"]
 
+    # --- ABC CRUZADO ---
+    # ABC Ventas (Ingreso)
+    r = r.sort_values("ingreso_total", ascending=False)
+    total_ingreso = r["ingreso_total"].sum()
+    r["acum_ingreso"] = r["ingreso_total"].cumsum()
+    def abc_ingreso(acum):
+        if total_ingreso == 0: return "C"
+        pct = acum / total_ingreso
+        if pct <= 0.80: return "A"
+        elif pct <= 0.95: return "B"
+        else: return "C"
+    r["abc_ventas"] = r["acum_ingreso"].apply(abc_ingreso)
+
+    # ABC Margen (Utilidad)
+    r = r.sort_values("utilidad_total", ascending=False)
+    total_utilidad = r[r["utilidad_total"] > 0]["utilidad_total"].sum()
+    r["acum_utilidad"] = r["utilidad_total"].clip(lower=0).cumsum()
+    def abc_utilidad(acum):
+        if total_utilidad == 0: return "C"
+        pct = acum / total_utilidad
+        if pct <= 0.80: return "A"
+        elif pct <= 0.95: return "B"
+        else: return "C"
+    r["abc_margen"] = r["acum_utilidad"].apply(abc_utilidad)
+
+    r["matriz_abc"] = r["abc_ventas"] + "-" + r["abc_margen"]
+
+    matriz = r[["Referencia", "descripcion", "laboratorio", "cant_vend", "ingreso_total", "utilidad_total", "margen_pct", "abc_ventas", "abc_margen", "matriz_abc"]].copy()
+    matriz["nombre"] = matriz["descripcion"].str[:40]
+    matriz = json.loads(matriz.to_json(orient="records"))
+    # -------------------
+
     top_r = (r.nlargest(15,"utilidad_total").sort_values("utilidad_total",ascending=True)
               .assign(nombre=lambda x: x["descripcion"].str[:30]))
     top_r = json.loads(top_r.to_json(orient="records"))
@@ -284,6 +316,7 @@ def rentabilidad(x_session_id: str = Header(default="default-session")):
         "bajo_margen":   bajo_m,
         "por_categoria": por_cat,
         "por_laboratorio": por_lab,
+        "matriz_abc": matriz
     }
 
 
@@ -314,6 +347,32 @@ def inventario(sede: str = "Todas", x_session_id: str = Header(default="default-
             ultima_venta=("Fecha","max")
         )
         
+        max_fecha = df_v_filtered["Fecha"].max()
+        min_fecha = df_v_filtered["Fecha"].min()
+
+        # Forecasting (Tendencia 15 días)
+        from datetime import timedelta
+        import numpy as np
+        if pd.notna(max_fecha):
+            fecha_15_dias = max_fecha - timedelta(days=15)
+            fecha_30_dias = max_fecha - timedelta(days=30)
+            v_15d = df_v_filtered[df_v_filtered["Fecha"] > fecha_15_dias].groupby("Referencia", as_index=False)["Cant"].sum()
+            v_15d.rename(columns={"Cant": "cant_15d_reciente"}, inplace=True)
+            v_30d = df_v_filtered[(df_v_filtered["Fecha"] > fecha_30_dias) & (df_v_filtered["Fecha"] <= fecha_15_dias)].groupby("Referencia", as_index=False)["Cant"].sum()
+            v_30d.rename(columns={"Cant": "cant_15d_anterior"}, inplace=True)
+            
+            v_agr = v_agr.merge(v_15d, on="Referencia", how="left").merge(v_30d, on="Referencia", how="left")
+            v_agr["cant_15d_reciente"] = v_agr["cant_15d_reciente"].fillna(0)
+            v_agr["cant_15d_anterior"] = v_agr["cant_15d_anterior"].fillna(0)
+            
+            v_agr["factor_tendencia"] = np.where(
+                v_agr["cant_15d_anterior"] > 0,
+                (v_agr["cant_15d_reciente"] / v_agr["cant_15d_anterior"]).clip(0.5, 3.0),
+                np.where(v_agr["cant_15d_reciente"] > 0, 2.0, 1.0)
+            )
+        else:
+            v_agr["factor_tendencia"] = 1.0
+
         # ABC Classification
         v_agr = v_agr.sort_values("ingreso_generado", ascending=False)
         v_agr["acumulado"] = v_agr["ingreso_generado"].cumsum()
@@ -331,38 +390,41 @@ def inventario(sede: str = "Todas", x_session_id: str = Header(default="default-
         df_a  = df_a.merge(v_agr, on="Referencia", how="left")
         df_a["uds_vendidas"] = df_a["uds_vendidas"].fillna(0)
         df_a["clasificacion_abc"] = df_a["clasificacion_abc"].fillna("C") # Si no se vendió, es C
+        df_a["factor_tendencia"] = df_a.get("factor_tendencia", 1.0).fillna(1.0)
         
-        max_fecha = df_v_filtered["Fecha"].max()
-        min_fecha = df_v_filtered["Fecha"].min()
         if pd.notna(max_fecha) and pd.notna(min_fecha):
             df_a["dias_sin_venta"] = (max_fecha - df_a["ultima_venta"]).dt.days
             
             dias_periodo = (max_fecha - min_fecha).days
             dias_periodo = dias_periodo if dias_periodo > 0 else 1
             df_a["rotacion_diaria"] = df_a["uds_vendidas"] / dias_periodo
+            df_a["rotacion_proyectada"] = df_a["rotacion_diaria"] * df_a["factor_tendencia"]
             
             import numpy as np
-            df_a["cobertura_dias"] = np.where(df_a["rotacion_diaria"] > 0, df_a["Total"] / df_a["rotacion_diaria"], 9999)
+            df_a["cobertura_dias"] = np.where(df_a["rotacion_proyectada"] > 0, df_a["Total"] / df_a["rotacion_proyectada"], 9999)
             df_a["cobertura_dias"] = df_a["cobertura_dias"].round(1)
         else:
             df_a["dias_sin_venta"] = 9999
             df_a["cobertura_dias"] = 9999
             df_a["rotacion_diaria"] = 0
+            df_a["rotacion_proyectada"] = 0
     else:
         df_a["uds_vendidas"] = 0
         df_a["dias_sin_venta"] = 9999
         df_a["cobertura_dias"] = 9999
         df_a["rotacion_diaria"] = 0
+        df_a["rotacion_proyectada"] = 0
+        df_a["factor_tendencia"] = 1.0
         df_a["clasificacion_abc"] = "C"
 
     df_a["dias_sin_venta"] = df_a["dias_sin_venta"].fillna(9999)
     df_a["cobertura_dias"] = df_a["cobertura_dias"].fillna(9999)
 
-    # 1. Bajo Stock (Reabastecer): Cobertura crítica (<= 15 días) y con rotación
-    bajo = df_a[(df_a["cobertura_dias"] <= 15) & (df_a["rotacion_diaria"] > 0)].copy()
+    # 1. Bajo Stock (Reabastecer): Cobertura crítica (<= 15 días) y con rotación proyectada
+    bajo = df_a[(df_a["cobertura_dias"] <= 15) & (df_a["rotacion_proyectada"] > 0)].copy()
     
     # Calcular déficit real en unidades (cuánto falta para llegar a 15 días de cobertura)
-    bajo["stock_ideal"] = bajo["rotacion_diaria"] * 15
+    bajo["stock_ideal"] = bajo["rotacion_proyectada"] * 15
     bajo["deficit"] = bajo["stock_ideal"] - bajo["Total"]
     bajo["deficit"] = bajo["deficit"].apply(lambda x: max(1, round(x)))
 

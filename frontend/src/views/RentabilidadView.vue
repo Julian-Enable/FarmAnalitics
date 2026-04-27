@@ -82,6 +82,53 @@
       </div>
     </div>
     
+    <div v-if="data && data.matriz_abc?.length" class="card" style="margin-top: 16px;">
+      <div class="section-header-row">
+        <SectionTitle :icon="Crosshair" title="Matriz Estratégica: ABC Cruzado (Ventas vs Utilidad)" />
+        <div style="display: flex; gap: 8px;">
+          <select v-model="filtroMatriz" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); font-size: 13px;">
+            <option value="Todos">Todas las clasificaciones</option>
+            <option value="A-A">Tiradores (A-A) - Alta Venta, Alto Margen</option>
+            <option value="A-C">Destructores (A-C) - Alta Venta, Bajo Margen</option>
+            <option value="C-A">Oportunidades (C-A) - Baja Venta, Alto Margen</option>
+          </select>
+          <button class="export-btn" @click="exportMatriz">
+            <Download size="16" /> Exportar CSV
+          </button>
+        </div>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>Ingreso (Ventas)</th>
+            <th>Utilidad (Margen)</th>
+            <th>Clasificación</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in paginatedMatriz" :key="row.Referencia">
+            <td>{{ row.nombre }}</td>
+            <td>{{ store.fmt(row.ingreso_total) }} <span class="badge" style="margin-left: 6px;" :class="row.abc_ventas==='A' ? 'badge-green' : 'badge-amber'">Ventas: {{row.abc_ventas}}</span></td>
+            <td>{{ store.fmt(row.utilidad_total) }} <span class="badge" style="margin-left: 6px;" :class="row.abc_margen==='A' ? 'badge-green' : 'badge-amber'">Margen: {{row.abc_margen}}</span></td>
+            <td><strong style="font-size: 16px;">{{ row.matriz_abc }}</strong></td>
+            <td>
+              <span v-if="row.matriz_abc === 'A-A'" class="badge badge-green">🚀 Tirador</span>
+              <span v-else-if="row.matriz_abc === 'A-C'" class="badge badge-red">⚠️ Destructor</span>
+              <span v-else-if="row.matriz_abc === 'C-A'" class="badge badge-amber">💡 Oportunidad</span>
+              <span v-else class="badge" style="background: var(--code-bg);">Normal</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <Paginator 
+        v-model="pageMatriz" 
+        :totalItems="filteredMatriz.length" 
+        :itemsPerPage="itemsPerPage" 
+      />
+    </div>
+    
     <div v-if="data && data.por_laboratorio.length" class="card" style="margin-top: 16px;">
       <SectionTitle :icon="Building2" title="Rentabilidad por Laboratorio" />
       <BarChart :horizontal="true" formatTooltip="currency" :categories="topLabCat" :series="[{name: 'Utilidad', data: topLabData}]" />
@@ -98,7 +145,7 @@ import BarChart from '../components/charts/BarChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
 import Paginator from '../components/ui/Paginator.vue'
 import { exportToCSV } from '../utils/export'
-import { DollarSign, Gem, TrendingUp, Percent, Package, BarChart2, Trophy, AlertTriangle, Building2, Download } from 'lucide-vue-next'
+import { DollarSign, Gem, TrendingUp, Percent, Package, BarChart2, Trophy, AlertTriangle, Building2, Download, Crosshair } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.rentabilidad)
@@ -142,10 +189,32 @@ const topLabData = computed(() => data.value?.por_laboratorio?.map(d => d.utilid
 // Paginación
 const itemsPerPage = 10
 const pageBajoMargen = ref(1)
+const pageMatriz = ref(1)
+const filtroMatriz = ref('Todos')
 
 const paginatedBajoMargen = computed(() => {
   const start = (pageBajoMargen.value - 1) * itemsPerPage
   return sortedBajoMargen.value.slice(start, start + itemsPerPage)
+})
+
+const filteredMatriz = computed(() => {
+  if (!data.value?.matriz_abc) return []
+  let list = data.value.matriz_abc
+  if (filtroMatriz.value !== 'Todos') {
+    list = list.filter(r => r.matriz_abc === filtroMatriz.value)
+  }
+  return list
+})
+
+const paginatedMatriz = computed(() => {
+  const start = (pageMatriz.value - 1) * itemsPerPage
+  return filteredMatriz.value.slice(start, start + itemsPerPage)
+})
+
+// Reset pagina al filtrar matriz
+import { watch } from 'vue'
+watch(filtroMatriz, () => {
+  pageMatriz.value = 1
 })
 
 // Exportación
@@ -159,5 +228,20 @@ function exportBajoMargen() {
     { key: 'margen_pct', label: 'Margen (%)' }
   ]
   exportToCSV(sortedBajoMargen.value, cols, 'Alerta_Bajo_Margen')
+}
+
+function exportMatriz() {
+  const cols = [
+    { key: 'Referencia', label: 'Referencia' },
+    { key: 'nombre', label: 'Producto' },
+    { key: 'cant_vend', label: 'Cantidad Vendida' },
+    { key: 'ingreso_total', label: 'Ingreso Total (Ventas)' },
+    { key: 'utilidad_total', label: 'Utilidad Total (Margen)' },
+    { key: 'margen_pct', label: 'Margen (%)' },
+    { key: 'abc_ventas', label: 'ABC Ventas' },
+    { key: 'abc_margen', label: 'ABC Margen' },
+    { key: 'matriz_abc', label: 'Matriz Cruzada' }
+  ]
+  exportToCSV(filteredMatriz.value, cols, 'Matriz_Estrategica_ABC')
 }
 </script>

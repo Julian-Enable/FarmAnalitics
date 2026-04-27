@@ -67,8 +67,8 @@
                 <th @click="sortByBajo('Descripcion')" style="cursor: pointer;">
                   Descripción <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'Descripcion' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
-                <th @click="sortByBajo('rotacion_diaria')" style="cursor: pointer;">
-                  Rotación (diaria) <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'rotacion_diaria' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
+                <th @click="sortByBajo('rotacion_proyectada')" style="cursor: pointer;">
+                  Rotación Proyectada <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'rotacion_proyectada' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
                 <th @click="sortByBajo('Total')" style="cursor: pointer;">
                   Stock Actual <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'Total' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
@@ -91,7 +91,11 @@
                 </td>
                 <td>{{ row.Referencia }}</td>
                 <td>{{ row.Descripcion?.substring(0, 35) }}</td>
-                <td>{{ row.rotacion_diaria > 0 ? row.rotacion_diaria.toFixed(2) : '0.00' }} uds/día</td>
+                <td>
+                  {{ row.rotacion_proyectada > 0 ? row.rotacion_proyectada.toFixed(2) : '0.00' }} uds/día
+                  <span v-if="row.factor_tendencia > 1.2" class="badge badge-amber" style="margin-left: 4px; font-size: 10px; padding: 2px 4px;" title="Demanda Acelerando">🚀</span>
+                  <span v-else-if="row.factor_tendencia < 0.8" class="badge" style="margin-left: 4px; font-size: 10px; padding: 2px 4px; background: var(--border);" title="Demanda Cayendo">📉</span>
+                </td>
                 <td><span class="badge" :class="row.Total === 0 ? 'badge-red' : 'badge-amber'">{{ store.fmtN(row.Total) }}</span></td>
                 <td>
                   <span class="badge" :class="row.cobertura_dias < 7 ? 'badge-red' : 'badge-amber'">
@@ -283,7 +287,9 @@ function exportBajoStock() {
     { key: 'clasificacion_abc', label: 'Clase ABC' },
     { key: 'Referencia', label: 'Referencia' },
     { key: 'Descripcion', label: 'Descripción' },
-    { key: 'rotacion_diaria', label: 'Rotación Diaria' },
+    { key: 'rotacion_diaria', label: 'Rotación Histórica' },
+    { key: 'rotacion_proyectada', label: 'Rotación Proyectada (Tendencia)' },
+    { key: 'factor_tendencia', label: 'Factor Tendencia' },
     { key: 'Total', label: 'Stock Actual' },
     { key: 'cobertura_dias', label: 'Días Cobertura' },
     { key: 'deficit', label: 'Déficit Sugerido' }
