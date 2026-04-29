@@ -10,12 +10,12 @@
     </div>
 
     <ModuleInfo>
-      <p><strong>Objetivo:</strong> Identificar qué necesitas comprar con urgencia y dónde tienes capital en exceso, usando la regla de inventario sano de <strong>25–40 días de cobertura</strong>.</p>
+      <p><strong>¿Cómo usar esta página?</strong> Es muy fácil: mira la tabla de abajo y compra lo que dice en la última columna.</p>
       <ul style="margin-left: 20px; margin-top: 8px;">
-        <li><strong>Zona Sana:</strong> Cobertura entre 25 y 40 días. El producto tiene stock suficiente sin sobrepasar capital innecesario.</li>
-        <li><strong>Bajo Stock (&lt; 25 días):</strong> Necesitas reabastecer. El déficit indica cuántas unidades faltan para llegar a 25 días.</li>
-        <li><strong>Sobrestock (&gt; 40 días):</strong> Exceso de capital inmovilizado en productos que se venden lento. Riesgo de vencimiento y costo de oportunidad.</li>
-        <li><strong>Inventario Quieto:</strong> Productos sin ninguna venta en los últimos 60 días. Capital completamente atrapado.</li>
+        <li><strong>Zona Sana (Verde):</strong> Tienes suficiente para 25 a 40 días. ¡Todo bien!</li>
+        <li><strong>Bajo Stock (Rojo/Naranja):</strong> Te queda poco. Mira la columna <strong>"Cantidad a Comprar"</strong> para saber cuánto pedir.</li>
+        <li><strong>Venta Diaria Esperada:</strong> Cuántas cajitas vendes en promedio cada día.</li>
+        <li><strong>Días que Alcanza:</strong> Para cuántos días tienes medicina antes de quedar en cero.</li>
       </ul>
     </ModuleInfo>
 
@@ -70,16 +70,16 @@
                   Descripción <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'Descripcion' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
                 <th @click="sortByBajo('rotacion_proyectada')" style="cursor: pointer;">
-                  Rotación Proyectada <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'rotacion_proyectada' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
+                  Venta Diaria Esperada <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'rotacion_proyectada' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
                 <th @click="sortByBajo('Total')" style="cursor: pointer;">
-                  Stock Actual <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'Total' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
+                  Inventario Actual <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'Total' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
                 <th @click="sortByBajo('cobertura_dias')" style="cursor: pointer;">
-                  Cobertura <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'cobertura_dias' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
+                  Días que Alcanza <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'cobertura_dias' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
                 <th @click="sortByBajo('deficit')" style="cursor: pointer;">
-                  Déficit Sugerido <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'deficit' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
+                  Cantidad a Comprar <span style="opacity: 0.5; font-size: 10px;">{{ sortBajoCol === 'deficit' ? (sortBajoDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
               </tr>
             </thead>
@@ -105,7 +105,7 @@
                     {{ row.cobertura_dias < 9999 ? Math.round(row.cobertura_dias) + ' d' : '+999 d' }}
                   </span>
                 </td>
-                <td><span style="color: var(--red); font-weight: 600;">-{{ store.fmtN(row.deficit) }}</span></td>
+                <td><span style="color: var(--accent); font-weight: 700;">{{ store.fmtN(row.deficit) }} uds</span></td>
               </tr>
               <tr v-if="!data.bajo_stock_tabla.length">
                 <td colspan="7" style="text-align: center; color: var(--fg-muted);">No hay alertas urgentes de reabastecimiento.</td>
@@ -122,7 +122,7 @@
 
       <!-- Top Déficit -->
       <div class="card">
-        <SectionTitle :icon="TrendingDown" title="Top 15 Mayor Déficit (Unidades)" />
+        <SectionTitle :icon="TrendingDown" title="Top 15 Productos para Pedir Ya (Unidades)" />
         <BarChart v-if="topDefCat.length" :horizontal="true" :categories="topDefCat" :series="[{name: 'Déficit', data: topDefData}]" />
         <p v-else style="padding: 10px; color: var(--fg-muted);">No hay productos con déficit urgente.</p>
       </div>
@@ -287,15 +287,14 @@ const paginatedQuieto = computed(() => {
 // Exportación
 function exportBajoStock() {
   const cols = [
-    { key: 'clasificacion_abc', label: 'Clase ABC' },
-    { key: 'Referencia', label: 'Referencia' },
-    { key: 'Descripcion', label: 'Descripción' },
-    { key: 'rotacion_diaria', label: 'Rotación Histórica' },
-    { key: 'rotacion_proyectada', label: 'Rotación Proyectada (Tendencia)' },
-    { key: 'factor_tendencia', label: 'Factor Tendencia' },
-    { key: 'Total', label: 'Stock Actual' },
-    { key: 'cobertura_dias', label: 'Días Cobertura' },
-    { key: 'deficit', label: 'Déficit Sugerido' }
+    { key: 'clasificacion_abc', label: 'Importancia (ABC)' },
+    { key: 'Referencia', label: 'Código' },
+    { key: 'Descripcion', label: 'Nombre del Producto' },
+    { key: 'rotacion_diaria', label: 'Venta Diaria Promedio' },
+    { key: 'rotacion_proyectada', label: 'Venta Diaria Esperada (Tendencia)' },
+    { key: 'Total', label: 'Inventario Actual' },
+    { key: 'cobertura_dias', label: 'Días que alcanza el stock' },
+    { key: 'deficit', label: 'Unidades a Comprar' }
   ]
   exportToCSV(sortedBajo.value, cols, 'Alerta_Bajo_Stock')
 }
