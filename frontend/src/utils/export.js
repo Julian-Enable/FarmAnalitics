@@ -17,6 +17,9 @@ export function exportToCSV(data, columns, filename = 'exportacion') {
   const rows = data.map(row => {
     return columns.map(col => {
       let cellData = row[col.key];
+      if (col.formatter && typeof col.formatter === 'function') {
+        cellData = col.formatter(cellData);
+      }
       if (cellData === null || cellData === undefined) {
         cellData = '';
       }

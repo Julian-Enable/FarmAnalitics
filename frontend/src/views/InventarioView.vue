@@ -290,10 +290,10 @@ function exportBajoStock() {
     { key: 'clasificacion_abc', label: 'Importancia (ABC)' },
     { key: 'Referencia', label: 'Código' },
     { key: 'Descripcion', label: 'Nombre del Producto' },
-    { key: 'rotacion_diaria', label: 'Venta Diaria Promedio' },
-    { key: 'rotacion_proyectada', label: 'Venta Diaria Esperada (Tendencia)' },
+    { key: 'rotacion_diaria', label: 'Venta Diaria Promedio', formatter: v => v ? Number(v).toFixed(2) : 0 },
+    { key: 'rotacion_proyectada', label: 'Venta Diaria Esperada (Tendencia)', formatter: v => v ? Number(v).toFixed(2) : 0 },
     { key: 'Total', label: 'Inventario Actual' },
-    { key: 'cobertura_dias', label: 'Días que alcanza el stock' },
+    { key: 'cobertura_dias', label: 'Días que alcanza el stock', formatter: v => v && v < 9999 ? Number(v).toFixed(1) : '+999' },
     { key: 'deficit', label: 'Unidades a Comprar' }
   ]
   exportToCSV(sortedBajo.value, cols, 'Alerta_Bajo_Stock')
@@ -305,7 +305,7 @@ function exportQuieto() {
     { key: 'Descripcion', label: 'Descripción' },
     { key: 'dias_sin_venta', label: 'Días Sin Venta' },
     { key: 'Total', label: 'Stock Actual' },
-    { key: 'capital_inmovilizado', label: 'Capital Inmovilizado' }
+    { key: 'capital_inmovilizado', label: 'Capital Inmovilizado', formatter: v => v ? Math.round(v) : 0 }
   ]
   exportToCSV(sortedQuieto.value, cols, 'Inventario_Quieto')
 }
