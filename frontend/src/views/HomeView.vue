@@ -151,7 +151,7 @@
           <div v-if="data.alertas.capital_quieto > 0" class="fire-card fire-info">
             <div class="fire-card-icon"><Warehouse size="20" /></div>
             <div class="fire-card-body">
-              <span class="fire-card-num">{{ store.fmt(data.alertas.capital_quieto) }}</span>
+              <span class="fire-card-num">{{ _store.fmt(data.alertas.capital_quieto) }}</span>
               <span class="fire-card-label">Capital inmovilizado<br><small>inventario quieto +60 días</small></span>
             </div>
             <span class="fire-badge fire-badge-info">REVISAR</span>
@@ -179,7 +179,7 @@
             <div v-for="(s, i) in data.sedes" :key="i" class="sede-row">
               <div class="sede-row-top">
                 <span class="sede-name">{{ s.sede }}</span>
-                <span class="sede-value">{{ store.fmt(s.ingresos) }}</span>
+                <span class="sede-value">{{ _store.fmt(s.ingresos) }}</span>
               </div>
               <div class="sede-progress-track">
                 <div class="sede-progress-fill" :style="{ width: s.pct + '%' }"></div>
