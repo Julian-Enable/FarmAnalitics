@@ -10,12 +10,12 @@
     </div>
 
     <ModuleInfo>
-      <p><strong>Objetivo:</strong> Identificar qué necesitas comprar con urgencia, priorizando los productos más rentables, y dónde tienes dinero estancado.</p>
+      <p><strong>Objetivo:</strong> Identificar qué necesitas comprar con urgencia y dónde tienes capital en exceso, usando la regla de inventario sano de <strong>25–40 días de cobertura</strong>.</p>
       <ul style="margin-left: 20px; margin-top: 8px;">
-        <li><strong>Clasificación ABC:</strong> Calculada dinámicamente según los ingresos que genera cada producto. <strong>A</strong> (80% del ingreso, vitales), <strong>B</strong> (15%), <strong>C</strong> (5%).</li>
-        <li><strong>Rotación y Cobertura:</strong> Mide la velocidad de venta diaria y calcula para cuántos días te alcanza el stock actual.</li>
-        <li><strong>Reabastecer:</strong> Alertas de productos con stock crítico (&le; 15 días) que SÍ tienen rotación (se están vendiendo).</li>
-        <li><strong>Inventario Quieto:</strong> Dinero atrapado en productos que llevan más de 60 días sin venderse.</li>
+        <li><strong>Zona Sana:</strong> Cobertura entre 25 y 40 días. El producto tiene stock suficiente sin sobrepasar capital innecesario.</li>
+        <li><strong>Bajo Stock (&lt; 25 días):</strong> Necesitas reabastecer. El déficit indica cuántas unidades faltan para llegar a 25 días.</li>
+        <li><strong>Sobrestock (&gt; 40 días):</strong> Exceso de capital inmovilizado en productos que se venden lento. Riesgo de vencimiento y costo de oportunidad.</li>
+        <li><strong>Inventario Quieto:</strong> Productos sin ninguna venta en los últimos 60 días. Capital completamente atrapado.</li>
       </ul>
     </ModuleInfo>
 
@@ -34,10 +34,12 @@
       <div v-for="i in 4" :key="i" class="card skeleton" style="height: 100px;"></div>
     </div>
     <div v-else-if="data" class="kpi-grid kpi-grid-4">
-      <KpiCard :icon="AlertTriangle" label="Reabastecer (Con Demanda)" :value="store.fmtN(data.kpis.bajo_stock)" />
-      <KpiCard :icon="OctagonX" label="Agotado (0 Stock, rotando)" :value="store.fmtN(data.kpis.sin_stock)" />
-      <KpiCard :icon="Snail" label="Prods. Sin Rotación (>60d)" :value="store.fmtN(data.kpis.inventario_quieto)" />
-      <KpiCard :icon="Banknote" label="Capital Inmovilizado" :value="store.fmt(data.kpis.capital_quieto)" />
+      <KpiCard :icon="AlertTriangle" label="Bajo Stock (< 25 días)" :value="store.fmtN(data.kpis.bajo_stock)" />
+      <KpiCard :icon="OctagonX"     label="Agotado (0 stock, con demanda)" :value="store.fmtN(data.kpis.sin_stock)" />
+      <KpiCard :icon="TrendingUp"   label="Sobrestock (> 40 días)" :value="store.fmtN(data.kpis.sobre_stock || 0)" />
+      <KpiCard :icon="Snail"        label="Sin Rotación (> 60 días)" :value="store.fmtN(data.kpis.inventario_quieto)" />
+      <KpiCard :icon="Banknote"     label="Capital Quieto (> 60d)" :value="store.fmt(data.kpis.capital_quieto)" />
+      <KpiCard :icon="Banknote"     label="Capital en Exceso (> 40d)" :value="store.fmt(data.kpis.capital_exceso || 0)" />
     </div>
     <div v-else class="empty-state">
       <div class="empty-icon"><PackageOpen size="48" color="var(--border)" /></div>
@@ -49,7 +51,7 @@
       <!-- Tabla de Bajo Stock -->
       <div class="card" style="grid-column: span 2;">
         <div class="section-header-row">
-          <SectionTitle :icon="ClipboardList" title="Reabastecer (Bajo Mínimo y Con Demanda)" />
+          <SectionTitle :icon="ClipboardList" :title="'Reabastecer — Bajo Mínimo (' + (data.kpis.inv_min_dias || 25) + ' días) con Demanda Activa'" />
           <button class="export-btn" @click="exportBajoStock">
             <Download size="16" /> Exportar CSV
           </button>
@@ -98,7 +100,8 @@
                 </td>
                 <td><span class="badge" :class="row.Total === 0 ? 'badge-red' : 'badge-amber'">{{ store.fmtN(row.Total) }}</span></td>
                 <td>
-                  <span class="badge" :class="row.cobertura_dias < 7 ? 'badge-red' : 'badge-amber'">
+                  <span class="badge" 
+                    :class="row.cobertura_dias === 0 ? 'badge-red' : row.cobertura_dias < 10 ? 'badge-red' : row.cobertura_dias < 25 ? 'badge-amber' : 'badge-green'">
                     {{ row.cobertura_dias < 9999 ? Math.round(row.cobertura_dias) + ' d' : '+999 d' }}
                   </span>
                 </td>

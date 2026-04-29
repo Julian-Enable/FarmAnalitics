@@ -15,6 +15,10 @@ router = APIRouter(prefix="/api")
 
 SEDES = ["PRINCIPAL", "SUCURSAL", "MORATO", "VARDI", "CEDI"]
 
+# ── Reglas de negocio de inventario ─────────────────────────────────────────
+INV_MIN_DIAS = 25   # Mínimo de días saludables de cobertura
+INV_MAX_DIAS = 40   # Máximo de días saludables de cobertura (sobre esto = sobrestock)
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _safe(val):
@@ -194,8 +198,9 @@ def resumen(x_session_id: str = Header(default="default-session")):
                 df_a["Total"] / df_a["rotacion_diaria"],
                 9999
             )
-            productos_criticos_7d = int(len(df_a[(df_a["cobertura_dias"] <= 7) & (df_a["rotacion_diaria"] > 0)]))
-            productos_atencion_15d = int(len(df_a[(df_a["cobertura_dias"] > 7) & (df_a["cobertura_dias"] <= 15) & (df_a["rotacion_diaria"] > 0)]))
+            # Alertas con regla 25-40 días
+            productos_criticos_7d = int(len(df_a[(df_a["cobertura_dias"] <= INV_MIN_DIAS * 0.4) & (df_a["rotacion_diaria"] > 0)]))
+            productos_atencion_15d = int(len(df_a[(df_a["cobertura_dias"] > INV_MIN_DIAS * 0.4) & (df_a["cobertura_dias"] < INV_MIN_DIAS) & (df_a["rotacion_diaria"] > 0)]))
 
     # Top 5 productos por ingreso
     top_prod_df = (df_v.groupby(["Referencia", "Descripcion"], as_index=False)["Ingreso"]
@@ -532,17 +537,24 @@ def inventario(sede: str = "Todas", x_session_id: str = Header(default="default-
     df_a["dias_sin_venta"] = df_a["dias_sin_venta"].fillna(9999)
     df_a["cobertura_dias"] = df_a["cobertura_dias"].fillna(9999)
 
-    # 1. Bajo Stock (Reabastecer): Cobertura crítica (<= 15 días) y con rotación proyectada
-    bajo = df_a[(df_a["cobertura_dias"] <= 15) & (df_a["rotacion_proyectada"] > 0)].copy()
+    # 1. Bajo Stock: Cobertura por debajo del mínimo saludable (25 días)
+    bajo = df_a[(df_a["cobertura_dias"] < INV_MIN_DIAS) & (df_a["rotacion_proyectada"] > 0)].copy()
     
-    # Calcular déficit real en unidades (cuánto falta para llegar a 15 días de cobertura)
-    bajo["stock_ideal"] = bajo["rotacion_proyectada"] * 15
+    # Calcular déficit real en unidades para llegar a 25 días de cobertura
+    bajo["stock_ideal"] = bajo["rotacion_proyectada"] * INV_MIN_DIAS
     bajo["deficit"] = bajo["stock_ideal"] - bajo["Total"]
     bajo["deficit"] = bajo["deficit"].apply(lambda x: max(1, round(x)))
 
+    # 2. Sobrestock: Cobertura por encima del máximo saludable (40 días) con rotación real
+    sobre = df_a[(df_a["cobertura_dias"] > INV_MAX_DIAS) & (df_a["cobertura_dias"] < 9999) & (df_a["rotacion_proyectada"] > 0)].copy()
+    if "Precio Compra" in sobre.columns:
+        sobre["capital_exceso"] = (sobre["Total"] - (sobre["rotacion_proyectada"] * INV_MAX_DIAS)) * sobre["Precio Compra"]
+    else:
+        sobre["capital_exceso"] = 0
+
     sin_stock = df_a[(df_a["Total"]==0) & (df_a["rotacion_diaria"] > 0)]
 
-    # 2. Inventario Quieto: Tiene stock PERO no se vende hace más de 60 días (y tiene fecha de venta antigua o nunca)
+    # 3. Inventario Quieto: stock sin venta en 60+ días
     quieto = df_a[(df_a["Total"] > 0) & (df_a["dias_sin_venta"] > 60)].copy()
     if "Precio Compra" in quieto.columns:
         quieto["capital_inmovilizado"] = quieto["Total"] * quieto["Precio Compra"]
@@ -559,6 +571,11 @@ def inventario(sede: str = "Todas", x_session_id: str = Header(default="default-
                    .assign(nombre=lambda x: x["Descripcion"].str[:30]))
     top_deficit = json.loads(top_deficit.to_json(orient="records"))
 
+    top_sobre = (sobre.nlargest(15, "capital_exceso")
+                  .sort_values("capital_exceso", ascending=True)
+                  .assign(nombre=lambda x: x["Descripcion"].str[:30]))
+    top_sobre = json.loads(top_sobre.to_json(orient="records"))
+
     stock_sede = {}
     for s in SEDES:
         if s in df_i.columns:
@@ -566,18 +583,24 @@ def inventario(sede: str = "Todas", x_session_id: str = Header(default="default-
 
     return {
         "kpis": {
-            "bajo_stock":   len(bajo),
-            "sin_stock":    len(sin_stock),
-            "stock_total":  int(df_a["Total"].sum()),
+            "bajo_stock":      len(bajo),
+            "sin_stock":       len(sin_stock),
+            "sobre_stock":     len(sobre),
+            "stock_total":     int(df_a["Total"].sum()),
             "inventario_quieto": len(quieto),
-            "capital_quieto": float(quieto["capital_inmovilizado"].sum()) if len(quieto) > 0 else 0
+            "capital_quieto":  float(quieto["capital_inmovilizado"].sum()) if len(quieto) > 0 else 0,
+            "capital_exceso":  float(sobre["capital_exceso"].sum()) if len(sobre) > 0 else 0,
+            "inv_min_dias":    INV_MIN_DIAS,
+            "inv_max_dias":    INV_MAX_DIAS,
         },
-        "bajo_stock_tabla": _df_to_records(bajo.sort_values(["clasificacion_abc", "cobertura_dias"], ascending=[True, True])),
+        "bajo_stock_tabla":       _df_to_records(bajo.sort_values(["clasificacion_abc", "cobertura_dias"], ascending=[True, True])),
+        "sobre_stock_tabla":      _df_to_records(sobre.sort_values("cobertura_dias", ascending=False)),
         "inventario_quieto_tabla": _df_to_records(quieto.sort_values("capital_inmovilizado", ascending=False)),
-        "top_deficit":       top_deficit,
-        "top_quieto":        top_quieto,
-        "stock_por_sede":    stock_sede,
-        "sedes_disponibles": SEDES
+        "top_deficit":            top_deficit,
+        "top_quieto":             top_quieto,
+        "top_sobre":              top_sobre,
+        "stock_por_sede":         stock_sede,
+        "sedes_disponibles":      SEDES
     }
 
 
