@@ -104,6 +104,34 @@ def resumen(x_session_id: str = Header(default="default-session")):
     n_fact     = int(df_v["Factura"].nunique()) if "Factura" in df_v.columns else 0
     ticket     = ing_total / n_fact if n_fact > 0 else 0
 
+    # Período analizado
+    fecha_ini = str(df_v["Fecha"].min().date()) if df_v["Fecha"].notna().any() else None
+    fecha_fin = str(df_v["Fecha"].max().date()) if df_v["Fecha"].notna().any() else None
+    max_fecha = df_v["Fecha"].max()
+    min_fecha = df_v["Fecha"].min()
+    dias_periodo = max((max_fecha - min_fecha).days, 1) if pd.notna(max_fecha) and pd.notna(min_fecha) else 1
+
+    # Comparación primera mitad vs segunda mitad del período
+    variacion_ing = variacion_und = variacion_ticket = None
+    if pd.notna(max_fecha) and pd.notna(min_fecha) and dias_periodo > 2:
+        mid_fecha = min_fecha + pd.Timedelta(days=dias_periodo // 2)
+        df_primera = df_v[df_v["Fecha"] <= mid_fecha]
+        df_segunda = df_v[df_v["Fecha"] > mid_fecha]
+        ing1 = float(df_primera["Ingreso"].sum())
+        ing2 = float(df_segunda["Ingreso"].sum())
+        und1 = float(df_primera["Cant"].sum())
+        und2 = float(df_segunda["Cant"].sum())
+        fact1 = int(df_primera["Factura"].nunique()) if "Factura" in df_primera.columns else 1
+        fact2 = int(df_segunda["Factura"].nunique()) if "Factura" in df_segunda.columns else 1
+        tick1 = ing1 / fact1 if fact1 > 0 else 0
+        tick2 = ing2 / fact2 if fact2 > 0 else 0
+        if ing1 > 0:
+            variacion_ing = round((ing2 - ing1) / ing1 * 100, 1)
+        if und1 > 0:
+            variacion_und = round((und2 - und1) / und1 * 100, 1)
+        if tick1 > 0:
+            variacion_ticket = round((tick2 - tick1) / tick1 * 100, 1)
+
     # Utilidad bruta
     util_bruta = margen_pct = None
     if df_i is not None and "Precio Compra" in df_i.columns and "Precio Venta" in df_i.columns:
@@ -120,29 +148,28 @@ def resumen(x_session_id: str = Header(default="default-session")):
         tend = [{"fecha": str(r["Fecha"].date()), "ingreso": round(r["Ingreso"], 0)}
                 for _, r in s.iterrows()]
 
-    # Por sede
-    sedes = (df_v.groupby("Punto Venta", as_index=False)
+    # Por sede (con % participación)
+    sedes_df = (df_v.groupby("Punto Venta", as_index=False)
              .agg(ingresos=("Ingreso","sum"), unidades=("Cant","sum"))
              .sort_values("ingresos", ascending=False)
              .rename(columns={"Punto Venta":"sede"}))
-    sedes = json.loads(sedes.to_json(orient="records"))
+    total_sedes = float(sedes_df["ingresos"].sum())
+    sedes_df["pct"] = (sedes_df["ingresos"] / total_sedes * 100).round(1) if total_sedes > 0 else 0
+    sedes = json.loads(sedes_df.to_json(orient="records"))
 
     # ── Signos vitales cruzados (requieren inventario + ventas) ──
-    alertas_criticas = 0
     capital_quieto = 0.0
     productos_sin_stock = 0
-    top_productos = []
-    top_vendedores = []
+    productos_criticos_7d = 0   # se agotan en < 7 días
+    productos_atencion_15d = 0  # se agotan en < 15 días
 
     if df_i is not None:
         import numpy as np
-        from datetime import timedelta
         df_a = df_i.copy()
         if "Total" not in df_a.columns:
             numeric_cols = [c for c in SEDES if c in df_a.columns]
             df_a["Total"] = df_a[numeric_cols].sum(axis=1) if numeric_cols else 0
 
-        # Capital inmovilizado (sin venta en 60+ días)
         v_agr = df_v.groupby("Referencia", as_index=False).agg(
             uds_vendidas=("Cant", "sum"),
             ultima_venta=("Fecha", "max")
@@ -150,7 +177,6 @@ def resumen(x_session_id: str = Header(default="default-session")):
         df_a = df_a.merge(v_agr, on="Referencia", how="left")
         df_a["uds_vendidas"] = df_a["uds_vendidas"].fillna(0)
 
-        max_fecha = df_v["Fecha"].max()
         if pd.notna(max_fecha):
             df_a["dias_sin_venta"] = (max_fecha - df_a["ultima_venta"]).dt.days.fillna(9999)
         else:
@@ -160,41 +186,53 @@ def resumen(x_session_id: str = Header(default="default-session")):
         if "Precio Compra" in quieto.columns:
             capital_quieto = float((quieto["Total"] * quieto["Precio Compra"]).sum())
 
-        # Productos sin stock con rotación (alertas críticas)
-        min_fecha = df_v["Fecha"].min()
         if pd.notna(max_fecha) and pd.notna(min_fecha):
-            dias_periodo = max((max_fecha - min_fecha).days, 1)
             df_a["rotacion_diaria"] = df_a["uds_vendidas"] / dias_periodo
-            bajo = df_a[(df_a["rotacion_diaria"] > 0) & (df_a["Total"] <= 0)]
-            alertas_criticas = len(bajo)
-            productos_sin_stock = len(bajo)
+            productos_sin_stock = int(len(df_a[(df_a["rotacion_diaria"] > 0) & (df_a["Total"] <= 0)]))
+            df_a["cobertura_dias"] = np.where(
+                df_a["rotacion_diaria"] > 0,
+                df_a["Total"] / df_a["rotacion_diaria"],
+                9999
+            )
+            productos_criticos_7d = int(len(df_a[(df_a["cobertura_dias"] <= 7) & (df_a["rotacion_diaria"] > 0)]))
+            productos_atencion_15d = int(len(df_a[(df_a["cobertura_dias"] > 7) & (df_a["cobertura_dias"] <= 15) & (df_a["rotacion_diaria"] > 0)]))
 
     # Top 5 productos por ingreso
     top_prod_df = (df_v.groupby(["Referencia", "Descripcion"], as_index=False)["Ingreso"]
                    .sum().nlargest(5, "Ingreso"))
-    top_productos = [{"nombre": r["Descripcion"][:30], "ingreso": round(r["Ingreso"], 0)}
+    ing_max_prod = float(top_prod_df["Ingreso"].max()) if len(top_prod_df) > 0 else 1
+    top_productos = [{"nombre": r["Descripcion"][:32], "ingreso": round(r["Ingreso"], 0),
+                      "pct": round(r["Ingreso"] / ing_max_prod * 100, 0)}
                      for _, r in top_prod_df.iterrows()]
 
     # Top 5 vendedores
+    top_vendedores = []
     if "Vendedor" in df_v.columns:
         top_vend_df = (df_v.groupby("Vendedor", as_index=False)["Ingreso"]
                        .sum().nlargest(5, "Ingreso"))
-        top_vendedores = [{"vendedor": r["Vendedor"][:25], "ingreso": round(r["Ingreso"], 0)}
+        ing_max_vend = float(top_vend_df["Ingreso"].max()) if len(top_vend_df) > 0 else 1
+        top_vendedores = [{"vendedor": r["Vendedor"][:25], "ingreso": round(r["Ingreso"], 0),
+                           "pct": round(r["Ingreso"] / ing_max_vend * 100, 0)}
                           for _, r in top_vend_df.iterrows()]
 
     return {
+        "periodo": {"inicio": fecha_ini, "fin": fecha_fin, "dias": dias_periodo},
         "kpis": {
-            "ingresos":   round(ing_total, 0),
-            "unidades":   und_total,
-            "facturas":   n_fact,
-            "ticket":     round(ticket, 0),
-            "utilidad":   round(util_bruta, 0) if util_bruta else None,
-            "margen_pct": margen_pct,
+            "ingresos":        round(ing_total, 0),
+            "unidades":        und_total,
+            "facturas":        n_fact,
+            "ticket":          round(ticket, 0),
+            "utilidad":        round(util_bruta, 0) if util_bruta else None,
+            "margen_pct":      margen_pct,
+            "variacion_ing":   variacion_ing,
+            "variacion_und":   variacion_und,
+            "variacion_ticket": variacion_ticket,
         },
         "alertas": {
-            "productos_sin_stock": productos_sin_stock,
+            "sin_stock":           productos_sin_stock,
+            "criticos_7d":         productos_criticos_7d,
+            "atencion_15d":        productos_atencion_15d,
             "capital_quieto":      round(capital_quieto, 0),
-            "alertas_criticas":    alertas_criticas,
         },
         "tendencia":      tend,
         "sedes":          sedes,
