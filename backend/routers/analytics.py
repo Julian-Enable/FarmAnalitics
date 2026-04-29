@@ -127,6 +127,61 @@ def resumen(x_session_id: str = Header(default="default-session")):
              .rename(columns={"Punto Venta":"sede"}))
     sedes = json.loads(sedes.to_json(orient="records"))
 
+    # ── Signos vitales cruzados (requieren inventario + ventas) ──
+    alertas_criticas = 0
+    capital_quieto = 0.0
+    productos_sin_stock = 0
+    top_productos = []
+    top_vendedores = []
+
+    if df_i is not None:
+        import numpy as np
+        from datetime import timedelta
+        df_a = df_i.copy()
+        if "Total" not in df_a.columns:
+            numeric_cols = [c for c in SEDES if c in df_a.columns]
+            df_a["Total"] = df_a[numeric_cols].sum(axis=1) if numeric_cols else 0
+
+        # Capital inmovilizado (sin venta en 60+ días)
+        v_agr = df_v.groupby("Referencia", as_index=False).agg(
+            uds_vendidas=("Cant", "sum"),
+            ultima_venta=("Fecha", "max")
+        )
+        df_a = df_a.merge(v_agr, on="Referencia", how="left")
+        df_a["uds_vendidas"] = df_a["uds_vendidas"].fillna(0)
+
+        max_fecha = df_v["Fecha"].max()
+        if pd.notna(max_fecha):
+            df_a["dias_sin_venta"] = (max_fecha - df_a["ultima_venta"]).dt.days.fillna(9999)
+        else:
+            df_a["dias_sin_venta"] = 9999
+
+        quieto = df_a[(df_a["Total"] > 0) & (df_a["dias_sin_venta"] > 60)]
+        if "Precio Compra" in quieto.columns:
+            capital_quieto = float((quieto["Total"] * quieto["Precio Compra"]).sum())
+
+        # Productos sin stock con rotación (alertas críticas)
+        min_fecha = df_v["Fecha"].min()
+        if pd.notna(max_fecha) and pd.notna(min_fecha):
+            dias_periodo = max((max_fecha - min_fecha).days, 1)
+            df_a["rotacion_diaria"] = df_a["uds_vendidas"] / dias_periodo
+            bajo = df_a[(df_a["rotacion_diaria"] > 0) & (df_a["Total"] <= 0)]
+            alertas_criticas = len(bajo)
+            productos_sin_stock = len(bajo)
+
+    # Top 5 productos por ingreso
+    top_prod_df = (df_v.groupby(["Referencia", "Descripcion"], as_index=False)["Ingreso"]
+                   .sum().nlargest(5, "Ingreso"))
+    top_productos = [{"nombre": r["Descripcion"][:30], "ingreso": round(r["Ingreso"], 0)}
+                     for _, r in top_prod_df.iterrows()]
+
+    # Top 5 vendedores
+    if "Vendedor" in df_v.columns:
+        top_vend_df = (df_v.groupby("Vendedor", as_index=False)["Ingreso"]
+                       .sum().nlargest(5, "Ingreso"))
+        top_vendedores = [{"vendedor": r["Vendedor"][:25], "ingreso": round(r["Ingreso"], 0)}
+                          for _, r in top_vend_df.iterrows()]
+
     return {
         "kpis": {
             "ingresos":   round(ing_total, 0),
@@ -136,8 +191,15 @@ def resumen(x_session_id: str = Header(default="default-session")):
             "utilidad":   round(util_bruta, 0) if util_bruta else None,
             "margen_pct": margen_pct,
         },
-        "tendencia": tend,
-        "sedes":     sedes,
+        "alertas": {
+            "productos_sin_stock": productos_sin_stock,
+            "capital_quieto":      round(capital_quieto, 0),
+            "alertas_criticas":    alertas_criticas,
+        },
+        "tendencia":      tend,
+        "sedes":          sedes,
+        "top_productos":  top_productos,
+        "top_vendedores": top_vendedores,
     }
 
 
