@@ -114,9 +114,9 @@
             <td>{{ store.fmt(row.utilidad_total) }} <span class="badge" style="margin-left: 6px;" :class="row.abc_margen==='A' ? 'badge-green' : 'badge-amber'">Margen: {{row.abc_margen}}</span></td>
             <td><strong style="font-size: 16px;">{{ row.matriz_abc }}</strong></td>
             <td>
-              <span v-if="row.matriz_abc === 'A-A'" class="badge badge-green">🚀 Tirador</span>
-              <span v-else-if="row.matriz_abc === 'A-C'" class="badge badge-red">⚠️ Destructor</span>
-              <span v-else-if="row.matriz_abc === 'C-A'" class="badge badge-amber">💡 Oportunidad</span>
+              <span v-if="row.matriz_abc === 'A-A'" class="badge badge-green"><Rocket size="12" style="margin-right:4px;" /> Tirador</span>
+              <span v-else-if="row.matriz_abc === 'A-C'" class="badge badge-red"><AlertOctagon size="12" style="margin-right:4px;" /> Destructor</span>
+              <span v-else-if="row.matriz_abc === 'C-A'" class="badge badge-amber"><Lightbulb size="12" style="margin-right:4px;" /> Oportunidad</span>
               <span v-else class="badge" style="background: var(--code-bg);">Normal</span>
             </td>
           </tr>
@@ -145,7 +145,7 @@ import BarChart from '../components/charts/BarChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
 import Paginator from '../components/ui/Paginator.vue'
 import { exportToCSV } from '../utils/export'
-import { DollarSign, Gem, TrendingUp, Percent, Package, BarChart2, Trophy, AlertTriangle, Building2, Download, Crosshair } from 'lucide-vue-next'
+import { DollarSign, Gem, TrendingUp, Percent, Package, BarChart2, Trophy, AlertTriangle, Building2, Download, Crosshair, Rocket, AlertOctagon, Lightbulb } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.rentabilidad)

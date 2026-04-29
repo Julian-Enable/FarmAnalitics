@@ -46,9 +46,9 @@
         <label>Estado</label>
         <select v-model="filters.estado" @change="applyFilters">
           <option value="Todos">Todos</option>
-          <option value="sobre_compra">🟡 Sobrecompra</option>
-          <option value="desabastecimiento">🔴 Desabastecimiento</option>
-          <option value="equilibrio">🟢 Equilibrio</option>
+          <option value="sobre_compra">Sobrecompra</option>
+          <option value="desabastecimiento">Desabastecimiento</option>
+          <option value="equilibrio">Equilibrio</option>
         </select>
       </div>
       <div class="filter-group" style="flex: 2;">
@@ -120,8 +120,11 @@
                   </span>
                 </td>
                 <td>
-                  <span class="badge" :class="{'badge-amber': row.estado === 'sobre_compra', 'badge-red': row.estado === 'desabastecimiento', 'badge-green': row.estado === 'equilibrio'}">
-                    {{ row.estado === 'sobre_compra' ? '🟡 Sobre' : (row.estado === 'desabastecimiento' ? '🔴 Falta' : '🟢 OK') }}
+                  <span class="badge" style="display: inline-flex; align-items: center; gap: 4px;" :class="{'badge-amber': row.estado === 'sobre_compra', 'badge-red': row.estado === 'desabastecimiento', 'badge-green': row.estado === 'equilibrio'}">
+                    <ArrowUpCircle v-if="row.estado === 'sobre_compra'" size="14" />
+                    <AlertCircle v-else-if="row.estado === 'desabastecimiento'" size="14" />
+                    <CheckCircle2 v-else size="14" />
+                    {{ row.estado === 'sobre_compra' ? 'Sobre' : (row.estado === 'desabastecimiento' ? 'Falta' : 'OK') }}
                   </span>
                 </td>
               </tr>
@@ -153,7 +156,7 @@ import BarChart from '../components/charts/BarChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
 import Paginator from '../components/ui/Paginator.vue'
 import { exportToCSV } from '../utils/export'
-import { Scale, ShoppingCart, Package, AlertTriangle, Timer, Calculator, Truck, Download } from 'lucide-vue-next'
+import { Scale, ShoppingCart, Package, AlertTriangle, Timer, Calculator, Truck, Download, ArrowUpCircle, AlertCircle, CheckCircle2 } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.compras)

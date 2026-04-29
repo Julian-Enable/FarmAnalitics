@@ -93,8 +93,8 @@
                 <td>{{ row.Descripcion?.substring(0, 35) }}</td>
                 <td>
                   {{ row.rotacion_proyectada > 0 ? row.rotacion_proyectada.toFixed(2) : '0.00' }} uds/día
-                  <span v-if="row.factor_tendencia > 1.2" class="badge badge-amber" style="margin-left: 4px; font-size: 10px; padding: 2px 4px;" title="Demanda Acelerando">🚀</span>
-                  <span v-else-if="row.factor_tendencia < 0.8" class="badge" style="margin-left: 4px; font-size: 10px; padding: 2px 4px; background: var(--border);" title="Demanda Cayendo">📉</span>
+                  <span v-if="row.factor_tendencia > 1.2" class="badge badge-amber" style="margin-left: 4px; font-size: 10px; padding: 2px 4px;" title="Demanda Acelerando"><TrendingUp size="12" /></span>
+                  <span v-else-if="row.factor_tendencia < 0.8" class="badge" style="margin-left: 4px; font-size: 10px; padding: 2px 4px; background: var(--border);" title="Demanda Cayendo"><TrendingDown size="12" /></span>
                 </td>
                 <td><span class="badge" :class="row.Total === 0 ? 'badge-red' : 'badge-amber'">{{ store.fmtN(row.Total) }}</span></td>
                 <td>
@@ -196,7 +196,7 @@ import BarChart from '../components/charts/BarChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
 import Paginator from '../components/ui/Paginator.vue'
 import { exportToCSV } from '../utils/export'
-import { BrainCircuit, AlertTriangle, OctagonX, Snail, Banknote, PackageOpen, ClipboardList, TrendingDown, Landmark, Download } from 'lucide-vue-next'
+import { BrainCircuit, AlertTriangle, OctagonX, Snail, Banknote, PackageOpen, ClipboardList, TrendingDown, Landmark, Download, TrendingUp } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.inventario)
