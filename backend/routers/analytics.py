@@ -657,9 +657,16 @@ def compras(proveedor: str = "Todos", estado: str = "Todos", buscar: str = "", x
     comp["venta_diaria"] = comp["uds_vendidas"] / dias_periodo
     comp["cobertura_dias"] = comp.apply(lambda x: (x["inv_actual"] / x["venta_diaria"]) if x["venta_diaria"] > 0 else 9999, axis=1)
 
-    # 6. Estado
-    comp["diferencia"] = comp["uds_compradas"] - comp["uds_vendidas"]
-    comp["estado"] = comp["diferencia"].apply(lambda d: "sobre_compra" if d > 0 else ("desabastecimiento" if d < 0 else "equilibrio"))
+    # 6. Estado (Basado en Cobertura 25-40 días)
+    def calcular_estado_flujo(row):
+        if row["cobertura_dias"] < INV_MIN_DIAS:
+            return "desabastecimiento" # Falta
+        elif row["cobertura_dias"] > INV_MAX_DIAS:
+            return "sobre_compra"      # Sobre / Exceso
+        else:
+            return "equilibrio"        # OK
+            
+    comp["estado"] = comp.apply(calcular_estado_flujo, axis=1)
 
     # Aplicar filtros
     filtered = comp.copy()
