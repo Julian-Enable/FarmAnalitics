@@ -44,7 +44,7 @@
           </div>
           <div class="cmd-kpi-body">
             <span class="cmd-kpi-label">Ingresos Totales</span>
-            <span class="cmd-kpi-value">{{ store.fmt(data.kpis.ingresos) }}</span>
+            <span class="cmd-kpi-value">{{ _store.fmt(data.kpis.ingresos) }}</span>
             <span v-if="data.kpis.variacion_ing != null" class="cmd-kpi-delta" :class="data.kpis.variacion_ing >= 0 ? 'delta-up' : 'delta-down'">
               <TrendingUp v-if="data.kpis.variacion_ing >= 0" size="12" />
               <TrendingDown v-else size="12" />
@@ -59,7 +59,7 @@
           </div>
           <div class="cmd-kpi-body">
             <span class="cmd-kpi-label">Utilidad Bruta</span>
-            <span class="cmd-kpi-value">{{ data.kpis.utilidad != null ? store.fmt(data.kpis.utilidad) : '—' }}</span>
+            <span class="cmd-kpi-value">{{ data.kpis.utilidad != null ? _store.fmt(data.kpis.utilidad) : '—' }}</span>
             <span v-if="data.kpis.margen_pct != null" class="cmd-kpi-sub">Margen: {{ data.kpis.margen_pct }}%</span>
           </div>
         </div>
@@ -70,7 +70,7 @@
           </div>
           <div class="cmd-kpi-body">
             <span class="cmd-kpi-label">Ticket Promedio</span>
-            <span class="cmd-kpi-value">{{ store.fmt(data.kpis.ticket) }}</span>
+            <span class="cmd-kpi-value">{{ _store.fmt(data.kpis.ticket) }}</span>
             <span v-if="data.kpis.variacion_ticket != null" class="cmd-kpi-delta" :class="data.kpis.variacion_ticket >= 0 ? 'delta-up' : 'delta-down'">
               <TrendingUp v-if="data.kpis.variacion_ticket >= 0" size="12" />
               <TrendingDown v-else size="12" />
@@ -85,7 +85,7 @@
           </div>
           <div class="cmd-kpi-body">
             <span class="cmd-kpi-label">Unidades Vendidas</span>
-            <span class="cmd-kpi-value">{{ store.fmtN(data.kpis.unidades) }}</span>
+            <span class="cmd-kpi-value">{{ _store.fmtN(data.kpis.unidades) }}</span>
             <span v-if="data.kpis.variacion_und != null" class="cmd-kpi-delta" :class="data.kpis.variacion_und >= 0 ? 'delta-up' : 'delta-down'">
               <TrendingUp v-if="data.kpis.variacion_und >= 0" size="12" />
               <TrendingDown v-else size="12" />
@@ -100,7 +100,7 @@
           </div>
           <div class="cmd-kpi-body">
             <span class="cmd-kpi-label">Total Facturas</span>
-            <span class="cmd-kpi-value">{{ store.fmtN(data.kpis.facturas) }}</span>
+            <span class="cmd-kpi-value">{{ _store.fmtN(data.kpis.facturas) }}</span>
             <span class="cmd-kpi-sub">{{ data.periodo?.dias ? (data.kpis.facturas / data.periodo.dias).toFixed(1) + ' facturas/día' : '' }}</span>
           </div>
         </div>
@@ -204,25 +204,43 @@
               <div class="ranking-bar-wrap">
                 <div class="ranking-bar-fill" :style="{ width: p.pct + '%' }"></div>
               </div>
-              <span class="ranking-val">{{ store.fmt(p.ingreso) }}</span>
+              <span class="ranking-val">{{ _store.fmt(p.ingreso) }}</span>
             </div>
           </div>
           <p v-else style="padding: 20px; color: var(--fg-muted);">Carga el archivo de ventas.</p>
         </div>
 
+        <!-- Top Vendedores / Laboratorios -->
         <div class="card">
-          <SectionTitle :icon="Users" title="Top 5 Vendedores por Ingreso" />
-          <div v-if="data.top_vendedores?.length" class="ranking-list">
-            <div v-for="(v, i) in data.top_vendedores" :key="i" class="ranking-row">
-              <span class="rank-badge" :class="[`rank-${i < 3 ? i+1 : 'n'}`]">{{ i + 1 }}</span>
-              <span class="ranking-name">{{ v.vendedor }}</span>
-              <div class="ranking-bar-wrap">
-                <div class="ranking-bar-fill" :style="{ width: v.pct + '%' }"></div>
+          <!-- Si hay datos de vendedores, muéstralos -->
+          <template v-if="data.top_vendedores?.length">
+            <SectionTitle :icon="Users" title="Top 5 Vendedores por Ingreso" />
+            <div class="ranking-list">
+              <div v-for="(v, i) in data.top_vendedores" :key="i" class="ranking-row">
+                <span class="rank-badge" :class="[`rank-${i < 3 ? i+1 : 'n'}`]">{{ i + 1 }}</span>
+                <span class="ranking-name">{{ v.vendedor }}</span>
+                <div class="ranking-bar-wrap">
+                  <div class="ranking-bar-fill" :style="{ width: v.pct + '%' }"></div>
+                </div>
+                <span class="ranking-val">{{ _store.fmt(v.ingreso) }}</span>
               </div>
-              <span class="ranking-val">{{ store.fmt(v.ingreso) }}</span>
             </div>
-          </div>
-          <p v-else style="padding: 20px; color: var(--fg-muted);">El archivo no contiene columna de Vendedor.</p>
+          </template>
+          <!-- Si no hay vendedores, muestra laboratorios -->
+          <template v-else>
+            <SectionTitle :icon="FlaskConical" title="Top 5 Laboratorios por Ingreso" />
+            <div v-if="data.top_laboratorios?.length" class="ranking-list">
+              <div v-for="(l, i) in data.top_laboratorios" :key="i" class="ranking-row">
+                <span class="rank-badge" :class="[`rank-${i < 3 ? i+1 : 'n'}`]">{{ i + 1 }}</span>
+                <span class="ranking-name">{{ l.laboratorio }}</span>
+                <div class="ranking-bar-wrap">
+                  <div class="ranking-bar-fill" :style="{ width: l.pct + '%' }"></div>
+                </div>
+                <span class="ranking-val">{{ _store.fmt(l.ingreso) }}</span>
+              </div>
+            </div>
+            <p v-else style="padding: 20px; color: var(--fg-muted);">Sin datos de laboratorio disponibles.</p>
+          </template>
         </div>
       </div>
 
@@ -246,10 +264,9 @@ import LineChart from '../components/charts/LineChart.vue'
 import {
   LayoutDashboard, DollarSign, TrendingUp, TrendingDown, Percent, Package,
   Receipt, CreditCard, Activity, LineChart as LineChartIcon,
-  Store, Trophy, Users, Gem, OctagonX, Timer, AlertTriangle, Warehouse, Siren
+  Store, Trophy, Users, Gem, OctagonX, Timer, AlertTriangle, Warehouse, Siren, FlaskConical
 } from 'lucide-vue-next'
 
-const store   = computed(() => useDashboardStore())
 const _store  = useDashboardStore()
 const data    = computed(() => _store.data.resumen)
 const loading = computed(() => _store.loading.resumen)

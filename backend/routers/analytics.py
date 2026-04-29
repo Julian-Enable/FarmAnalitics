@@ -205,15 +205,26 @@ def resumen(x_session_id: str = Header(default="default-session")):
                       "pct": round(r["Ingreso"] / ing_max_prod * 100, 0)}
                      for _, r in top_prod_df.iterrows()]
 
-    # Top 5 vendedores
+    # Top 5 vendedores (busca varias columnas posibles)
     top_vendedores = []
-    if "Vendedor" in df_v.columns:
-        top_vend_df = (df_v.groupby("Vendedor", as_index=False)["Ingreso"]
+    vend_col = next((c for c in ["Vendedor", "Asesor", "Usuario", "Cajero", "Nombre Vendedor"] if c in df_v.columns), None)
+    if vend_col:
+        top_vend_df = (df_v.groupby(vend_col, as_index=False)["Ingreso"]
                        .sum().nlargest(5, "Ingreso"))
         ing_max_vend = float(top_vend_df["Ingreso"].max()) if len(top_vend_df) > 0 else 1
-        top_vendedores = [{"vendedor": r["Vendedor"][:25], "ingreso": round(r["Ingreso"], 0),
+        top_vendedores = [{"vendedor": str(r[vend_col])[:25], "ingreso": round(r["Ingreso"], 0),
                            "pct": round(r["Ingreso"] / ing_max_vend * 100, 0)}
                           for _, r in top_vend_df.iterrows()]
+
+    # Top 5 laboratorios por ingreso (siempre disponible como alternativa)
+    top_laboratorios = []
+    if "Laboratorio" in df_v.columns:
+        top_lab_df = (df_v.groupby("Laboratorio", as_index=False)["Ingreso"]
+                      .sum().nlargest(5, "Ingreso"))
+        ing_max_lab = float(top_lab_df["Ingreso"].max()) if len(top_lab_df) > 0 else 1
+        top_laboratorios = [{"laboratorio": str(r["Laboratorio"])[:28], "ingreso": round(r["Ingreso"], 0),
+                             "pct": round(r["Ingreso"] / ing_max_lab * 100, 0)}
+                            for _, r in top_lab_df.iterrows()]
 
     return {
         "periodo": {"inicio": fecha_ini, "fin": fecha_fin, "dias": dias_periodo},
@@ -234,10 +245,11 @@ def resumen(x_session_id: str = Header(default="default-session")):
             "atencion_15d":        productos_atencion_15d,
             "capital_quieto":      round(capital_quieto, 0),
         },
-        "tendencia":      tend,
-        "sedes":          sedes,
-        "top_productos":  top_productos,
-        "top_vendedores": top_vendedores,
+        "tendencia":        tend,
+        "sedes":            sedes,
+        "top_productos":    top_productos,
+        "top_vendedores":   top_vendedores,
+        "top_laboratorios": top_laboratorios,
     }
 
 
