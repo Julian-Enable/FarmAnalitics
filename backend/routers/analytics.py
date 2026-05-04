@@ -13,7 +13,9 @@ from backend.services.processing import (
 
 router = APIRouter(prefix="/api")
 
-SEDES = ["PRINCIPAL", "SUCURSAL", "MORATO", "VARDI", "CEDI"]
+SEDES = ["PRINCIPAL", "SUCURSAL", "MORATO", "VARDI", "CEDI", "OFICINA 805"]
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024
+ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls"}
 
 # ── Reglas de negocio de inventario ─────────────────────────────────────────
 INV_MIN_DIAS = 25   # Mínimo de días saludables de cobertura
@@ -33,6 +35,24 @@ def _df_to_records(df: pd.DataFrame, max_rows: int = 200) -> list[dict]:
     df = df.head(max_rows).copy()
     # Usar json.loads(to_json()) para manejar correctamente NaN/Inf a null
     return json.loads(df.to_json(orient="records"))
+
+
+async def _read_upload(file: UploadFile) -> bytes:
+    """Valida extensión y tamaño antes de leer el archivo en memoria."""
+    from pathlib import Path
+
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in ALLOWED_EXTENSIONS:
+        raise HTTPException(400, f"Formato no soportado: {file.filename}")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, f"Archivo vacío: {file.filename}")
+    if len(content) > MAX_UPLOAD_SIZE:
+        max_mb = MAX_UPLOAD_SIZE // (1024 * 1024)
+        raise HTTPException(413, f"Archivo demasiado grande: {file.filename}. Máximo {max_mb} MB")
+
+    return content
 
 
 # ── Upload ────────────────────────────────────────────────────────────────────
@@ -57,8 +77,12 @@ async def upload_files(
     if ventas:
         dfs = []
         for f in ventas:
-            content = await f.read()
-            dfs.append(leer_bytes(content, f.filename))
+            content = await _read_upload(f)
+            df = leer_bytes(content, f.filename)
+            if not df.empty:
+                dfs.append(df)
+        if not dfs:
+            raise HTTPException(400, "No se encontraron datos válidos en los archivos de ventas")
         df_v = procesar_ventas(pd.concat(dfs, ignore_index=True))
         set_df(x_session_id, "ventas", df_v)
         resultados["ventas"] = len(df_v)
@@ -67,16 +91,22 @@ async def upload_files(
     if compras:
         dfs = []
         for f in compras:
-            content = await f.read()
-            dfs.append(leer_bytes(content, f.filename))
+            content = await _read_upload(f)
+            df = leer_bytes(content, f.filename)
+            if not df.empty:
+                dfs.append(df)
+        if not dfs:
+            raise HTTPException(400, "No se encontraron datos válidos en los archivos de compras")
         df_c = procesar_compras(pd.concat(dfs, ignore_index=True))
         set_df(x_session_id, "compras", df_c)
         resultados["compras"] = len(df_c)
 
     # Inventario
     if inventario:
-        content = await inventario.read()
+        content = await _read_upload(inventario)
         df_i = procesar_inventario(leer_bytes(content, inventario.filename))
+        if df_i.empty:
+            raise HTTPException(400, "No se encontraron datos válidos en el archivo de inventario")
         set_df(x_session_id, "inventario", df_i)
         resultados["inventario"] = len(df_i)
 
@@ -171,8 +201,13 @@ def resumen(x_session_id: str = Header(default="default-session")):
         import numpy as np
         df_a = df_i.copy()
         if "Total" not in df_a.columns:
-            numeric_cols = [c for c in SEDES if c in df_a.columns]
-            df_a["Total"] = df_a[numeric_cols].sum(axis=1) if numeric_cols else 0
+            # Detección dinámica de sedes: columnas numéricas que no sean de precio/referencia
+            excluir = ["Referencia", "Descripcion", "Laboratorio", "Nivel", "Precio Compra", "Precio Venta", "Comision", "Utilidad", "Stock Maximo", "Stock Minimo", "Total", "IVA", "Codigo"]
+            posibles_sedes = [c for c in df_a.columns if c not in excluir and pd.api.types.is_numeric_dtype(df_a[c])]
+            df_a["Total"] = df_a[posibles_sedes].sum(axis=1) if posibles_sedes else 0
+        else:
+            # Si ya tiene una columna Total, nos aseguramos que sea numérica
+            df_a["Total"] = pd.to_numeric(df_a["Total"], errors="coerce").fillna(0)
 
         v_agr = df_v.groupby("Referencia", as_index=False).agg(
             uds_vendidas=("Cant", "sum"),
@@ -212,7 +247,7 @@ def resumen(x_session_id: str = Header(default="default-session")):
 
     # Top 5 vendedores (busca varias columnas posibles)
     top_vendedores = []
-    vend_col = next((c for c in ["Vendedor", "Asesor", "Usuario", "Cajero", "Nombre Vendedor"] if c in df_v.columns), None)
+    vend_col = next((c for c in ["Creada", "Vendedor", "Asesor", "Usuario", "Cajero", "Nombre Vendedor"] if c in df_v.columns), None)
     if vend_col:
         top_vend_df = (df_v.groupby(vend_col, as_index=False)["Ingreso"]
                        .sum().nlargest(5, "Ingreso"))
@@ -314,7 +349,7 @@ def ventas(sede: str = "Todas", nivel: str = "Todos",
     # Tendencia mensual
     tend_mensual = []
     if df["Fecha"].notna().any():
-        s = df.set_index("Fecha").resample("M")["Ingreso"].sum().reset_index()
+        s = df.set_index("Fecha").resample("ME")["Ingreso"].sum().reset_index()
         tend_mensual = [{"mes": r["Fecha"].strftime("%b %Y"), "ingreso": round(r["Ingreso"], 0)}
                         for _, r in s.iterrows()]
 
@@ -451,6 +486,12 @@ def inventario(sede: str = "Todas", x_session_id: str = Header(default="default-
         df_a["Total"] = df_a[sede]
     else:
         df_a = df_i.copy()
+        if "Total" not in df_a.columns:
+            excluir = ["Referencia", "Descripcion", "Laboratorio", "Nivel", "Precio Compra", "Precio Venta", "Comision", "Utilidad", "Stock Maximo", "Stock Minimo", "Total", "IVA", "Codigo"]
+            posibles_sedes = [c for c in df_a.columns if c not in excluir and pd.api.types.is_numeric_dtype(df_a[c])]
+            df_a["Total"] = df_a[posibles_sedes].sum(axis=1) if posibles_sedes else 0
+        else:
+            df_a["Total"] = pd.to_numeric(df_a["Total"], errors="coerce").fillna(0)
 
     if df_v is not None and "Fecha" in df_v.columns:
         if sede != "Todas":
@@ -581,6 +622,10 @@ def inventario(sede: str = "Todas", x_session_id: str = Header(default="default-
         if s in df_i.columns:
             stock_sede[s] = int(df_i[s].sum())
 
+    # Obtener sedes dinámicamente para el selector del frontend
+    excluir_selector = ["Referencia", "Descripcion", "Laboratorio", "Nivel", "Precio Compra", "Precio Venta", "Comision", "Utilidad", "Stock Maximo", "Stock Minimo", "Total", "IVA", "Codigo"]
+    sedes_finales = [c for c in df_i.columns if c not in excluir_selector and pd.api.types.is_numeric_dtype(df_i[c])]
+
     return {
         "kpis": {
             "bajo_stock":      len(bajo),
@@ -600,7 +645,7 @@ def inventario(sede: str = "Todas", x_session_id: str = Header(default="default-
         "top_quieto":             top_quieto,
         "top_sobre":              top_sobre,
         "stock_por_sede":         stock_sede,
-        "sedes_disponibles":      SEDES
+        "sedes_disponibles":      sedes_finales
     }
 
 

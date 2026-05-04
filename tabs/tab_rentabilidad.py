@@ -22,10 +22,10 @@ def render(df_v, df_c, df_i):
         Cant_Vend=("Cant", "sum"), Descripcion=("Descripcion", "first"),
         Laboratorio=("Laboratorio", "first"),
     )
-    rent = v_agg.merge(
-        df_i[["Referencia", "Precio Compra", "Precio Venta", "Nivel"]],
-        on="Referencia", how="inner",
-    )
+    cols_inv = ["Referencia", "Precio Compra", "Precio Venta"]
+    if "Nivel" in df_i.columns:
+        cols_inv.append("Nivel")
+    rent = v_agg.merge(df_i[cols_inv], on="Referencia", how="inner")
     rent["Margen_Unit"] = rent["Precio Venta"] - rent["Precio Compra"]
     rent["Margen_Pct"] = ((rent["Margen_Unit"] / rent["Precio Venta"]) * 100).round(2)
     rent["Utilidad_Total"] = rent["Margen_Unit"] * rent["Cant_Vend"]

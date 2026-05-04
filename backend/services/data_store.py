@@ -3,8 +3,6 @@
 # Almacén en memoria de los DataFrames procesados (sesión única)
 # =============================================================================
 import pandas as pd
-
-import pandas as pd
 import time
 
 # Almacén global de sesiones
