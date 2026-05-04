@@ -193,7 +193,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   async function fetchCompras(params = {}) {
-    if (!status.ventas || !status.compras) return
+    if (!status.ventas || !status.compras || !status.inventario) return
     loading.compras = true
     clearModuleError('compras')
     try {

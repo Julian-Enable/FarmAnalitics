@@ -4,6 +4,11 @@
 # =============================================================================
 import pandas as pd
 
+EXCLUDED_INVENTORY_COLUMNS = {
+    "Referencia", "Descripcion", "Laboratorio", "Nivel", "Precio Compra", "Precio Venta",
+    "Comision", "Utilidad", "Stock Maximo", "Stock Minimo", "Total", "IVA", "Codigo",
+}
+
 
 def procesar_ventas(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -28,6 +33,17 @@ def procesar_inventario(df: pd.DataFrame) -> pd.DataFrame:
     for col in ["Total", "Stock Minimo", "Stock Maximo", "Precio Compra", "Precio Venta"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    for col in df.columns:
+        if col not in EXCLUDED_INVENTORY_COLUMNS:
+            numeric = pd.to_numeric(df[col], errors="coerce")
+            if numeric.notna().any():
+                df[col] = numeric.fillna(0)
+    if "Total" not in df.columns:
+        sede_cols = [
+            c for c in df.columns
+            if c not in EXCLUDED_INVENTORY_COLUMNS and pd.api.types.is_numeric_dtype(df[c])
+        ]
+        df["Total"] = df[sede_cols].sum(axis=1) if sede_cols else 0
     return df
 
 
@@ -58,4 +74,3 @@ def leer_bytes(content: bytes, filename: str) -> pd.DataFrame:
         return pd.DataFrame()
         
     return pd.concat(hojas_validas, ignore_index=True)
-

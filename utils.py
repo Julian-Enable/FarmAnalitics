@@ -4,6 +4,11 @@
 import streamlit as st
 import pandas as pd
 
+EXCLUDED_INVENTORY_COLUMNS = {
+    "Referencia", "Descripcion", "Laboratorio", "Nivel", "Precio Compra", "Precio Venta",
+    "Comision", "Utilidad", "Stock Maximo", "Stock Minimo", "Total", "IVA", "Codigo",
+}
+
 
 def leer_archivo(archivo):
     """Lee un archivo CSV o Excel y retorna un DataFrame.
@@ -88,6 +93,17 @@ def procesar_inventario(df):
     for col in cols_numericas:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    for col in df.columns:
+        if col not in EXCLUDED_INVENTORY_COLUMNS:
+            numeric = pd.to_numeric(df[col], errors="coerce")
+            if numeric.notna().any():
+                df[col] = numeric.fillna(0)
+    if "Total" not in df.columns:
+        sede_cols = [
+            c for c in df.columns
+            if c not in EXCLUDED_INVENTORY_COLUMNS and pd.api.types.is_numeric_dtype(df[c])
+        ]
+        df["Total"] = df[sede_cols].sum(axis=1) if sede_cols else 0
     return df
 
 

@@ -107,7 +107,7 @@
                 <td style="background: var(--bg); border-right: 1px solid var(--border); font-weight: 700;">{{ store.fmtN(row.inv_actual) }}</td>
                 <td>
                   <span class="badge" 
-                        :class="row.cobertura_dias < 15 ? 'badge-red' : ((row.cobertura_dias >= 180 && isPerecedero(row)) ? 'badge-red' : (row.cobertura_dias > 90 ? 'badge-amber' : 'badge-green'))">
+                        :class="row.cobertura_dias < data.kpis.inv_min_dias ? 'badge-red' : ((row.cobertura_dias >= 180 && isPerecedero(row)) ? 'badge-red' : (row.cobertura_dias > data.kpis.inv_max_dias ? 'badge-amber' : 'badge-green'))">
                     <template v-if="row.cobertura_dias >= 9999">
                       {{ isPerecedero(row) ? '+999 d (Riesgo Vencimiento)' : '+999 d (No perecedero)' }}
                     </template>

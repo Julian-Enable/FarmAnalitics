@@ -16,6 +16,10 @@ router = APIRouter(prefix="/api")
 SEDES = ["PRINCIPAL", "SUCURSAL", "MORATO", "VARDI", "CEDI", "OFICINA 805"]
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024
 ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls"}
+EXCLUDED_INVENTORY_COLUMNS = {
+    "Referencia", "Descripcion", "Laboratorio", "Nivel", "Precio Compra", "Precio Venta",
+    "Comision", "Utilidad", "Stock Maximo", "Stock Minimo", "Total", "IVA", "Codigo",
+}
 REQUIRED_COLUMNS = {
     "ventas": ["Referencia", "Descripcion", "Cant", "Precio Venta", "Laboratorio", "Fecha", "Punto Venta"],
     "compras": ["FECHA", "PROVEEDOR", "REFERENCIA", "DESCRIPCION", "LABORATORIO", "PRECIO", "CANT", "SEDE"],
@@ -40,6 +44,58 @@ def _df_to_records(df: pd.DataFrame, max_rows: int = 200) -> list[dict]:
     df = df.head(max_rows).copy()
     # Usar json.loads(to_json()) para manejar correctamente NaN/Inf a null
     return json.loads(df.to_json(orient="records"))
+
+
+def _inclusive_days(min_fecha, max_fecha, default: int = 1) -> int:
+    """Dias calendario del periodo, incluyendo fecha inicial y final."""
+    if pd.isna(min_fecha) or pd.isna(max_fecha):
+        return default
+    return max((max_fecha - min_fecha).days + 1, 1)
+
+
+def _inventory_with_total(df_i: pd.DataFrame) -> pd.DataFrame:
+    """Devuelve inventario con Total numerico; si falta, suma columnas numericas de sedes."""
+    df = df_i.copy()
+    if "Total" in df.columns:
+        df["Total"] = pd.to_numeric(df["Total"], errors="coerce").fillna(0)
+        return df
+
+    posibles_sedes = [
+        c for c in df.columns
+        if c not in EXCLUDED_INVENTORY_COLUMNS and pd.api.types.is_numeric_dtype(df[c])
+    ]
+    df["Total"] = df[posibles_sedes].sum(axis=1) if posibles_sedes else 0
+    return df
+
+
+def _inventory_price_lookup(df_i: pd.DataFrame, extra_cols: list[str] | None = None) -> pd.DataFrame:
+    cols = ["Referencia", "Precio Compra", "Precio Venta"] + (extra_cols or [])
+    cols = [c for c in cols if c in df_i.columns]
+    inv = df_i[cols].copy()
+    inv["Precio Compra"] = pd.to_numeric(inv.get("Precio Compra"), errors="coerce").fillna(0)
+    if "Precio Venta" in inv.columns:
+        inv["Precio Venta"] = pd.to_numeric(inv["Precio Venta"], errors="coerce").fillna(0)
+    agg = {c: "first" for c in cols if c != "Referencia"}
+    return inv.groupby("Referencia", as_index=False).agg(agg)
+
+
+def _sales_profit_frame(df_v: pd.DataFrame, df_i: pd.DataFrame) -> pd.DataFrame:
+    """Rentabilidad por referencia usando ingreso real de ventas y costo de inventario."""
+    v = df_v.groupby("Referencia", as_index=False).agg(
+        cant_vend=("Cant", "sum"),
+        ingreso_total=("Ingreso", "sum"),
+        descripcion=("Descripcion", "first"),
+        laboratorio=("Laboratorio", "first"),
+    )
+    extra = ["Nivel"] if "Nivel" in df_i.columns else []
+    r = v.merge(_inventory_price_lookup(df_i, extra), on="Referencia", how="inner")
+    r["costo_total"] = r["Precio Compra"] * r["cant_vend"]
+    r["utilidad_total"] = r["ingreso_total"] - r["costo_total"]
+    r["precio_venta_prom"] = r["ingreso_total"] / r["cant_vend"].where(r["cant_vend"] != 0)
+    r["margen_unit"] = r["precio_venta_prom"] - r["Precio Compra"]
+    r["margen_pct"] = ((r["utilidad_total"] / r["ingreso_total"]) * 100).round(2)
+    r["margen_pct"] = r["margen_pct"].replace([float("inf"), float("-inf")], 0).fillna(0)
+    return r
 
 
 def _column_diagnostic(kind: str, df: pd.DataFrame) -> dict:
@@ -192,7 +248,7 @@ def resumen(x_session_id: str = Header(default="default-session")):
     fecha_fin = str(df_v["Fecha"].max().date()) if df_v["Fecha"].notna().any() else None
     max_fecha = df_v["Fecha"].max()
     min_fecha = df_v["Fecha"].min()
-    dias_periodo = max((max_fecha - min_fecha).days, 1) if pd.notna(max_fecha) and pd.notna(min_fecha) else 1
+    dias_periodo = _inclusive_days(min_fecha, max_fecha)
 
     # Comparación primera mitad vs segunda mitad del período
     variacion_ing = variacion_und = variacion_ticket = None
@@ -217,11 +273,9 @@ def resumen(x_session_id: str = Header(default="default-session")):
 
     # Utilidad bruta
     util_bruta = margen_pct = None
-    if df_i is not None and "Precio Compra" in df_i.columns and "Precio Venta" in df_i.columns:
-        v = df_v.groupby("Referencia", as_index=False)["Cant"].sum()
-        m = v.merge(df_i[["Referencia", "Precio Compra", "Precio Venta"]], on="Referencia", how="inner")
-        m["Util"] = (m["Precio Venta"] - m["Precio Compra"]) * m["Cant"]
-        util_bruta = float(m["Util"].sum())
+    if df_i is not None and "Precio Compra" in df_i.columns:
+        m = _sales_profit_frame(df_v, df_i)
+        util_bruta = float(m["utilidad_total"].sum())
         margen_pct = round(util_bruta / ing_total * 100, 1) if ing_total else 0
 
     # Tendencia semanal
@@ -248,7 +302,7 @@ def resumen(x_session_id: str = Header(default="default-session")):
 
     if df_i is not None:
         import numpy as np
-        df_a = df_i.copy()
+        df_a = _inventory_with_total(df_i)
         if "Total" not in df_a.columns:
             # Detección dinámica de sedes: columnas numéricas que no sean de precio/referencia
             excluir = ["Referencia", "Descripcion", "Laboratorio", "Nivel", "Precio Compra", "Precio Venta", "Comision", "Utilidad", "Stock Maximo", "Stock Minimo", "Total", "IVA", "Codigo"]
@@ -367,7 +421,7 @@ def ventas(sede: str = "Todas", nivel: str = "Todos",
     ing_total = float(df["Ingreso"].sum())
     dias_periodo = 1
     if df["Fecha"].notna().any():
-        dias_periodo = max((df["Fecha"].max() - df["Fecha"].min()).days, 1)
+        dias_periodo = _inclusive_days(df["Fecha"].min(), df["Fecha"].max())
     promedio_diario = round(ing_total / dias_periodo, 0)
 
     top_prod = (df.groupby(["Referencia","Descripcion"], as_index=False)["Cant"]
@@ -438,18 +492,7 @@ def rentabilidad(x_session_id: str = Header(default="default-session")):
     if "Precio Compra" not in df_i.columns:
         raise HTTPException(400, "Inventario sin columna Precio Compra")
 
-    v = df_v.groupby("Referencia", as_index=False).agg(
-        cant_vend=("Cant","sum"),
-        descripcion=("Descripcion","first"),
-        laboratorio=("Laboratorio","first"),
-    )
-    r = v.merge(df_i[["Referencia","Precio Compra","Precio Venta"] +
-                      (["Nivel"] if "Nivel" in df_i.columns else [])],
-                on="Referencia", how="inner")
-    r["margen_unit"]   = r["Precio Venta"] - r["Precio Compra"]
-    r["margen_pct"]    = ((r["margen_unit"] / r["Precio Venta"]) * 100).round(2)
-    r["utilidad_total"] = r["margen_unit"] * r["cant_vend"]
-    r["ingreso_total"]  = r["Precio Venta"] * r["cant_vend"]
+    r = _sales_profit_frame(df_v, df_i)
 
     # --- ABC CRUZADO ---
     # ABC Ventas (Ingreso)
@@ -488,7 +531,7 @@ def rentabilidad(x_session_id: str = Header(default="default-session")):
     top_r = json.loads(top_r.to_json(orient="records"))
     bajo_m = r[r["cant_vend"]>=5].nsmallest(15,"margen_pct").copy()
     bajo_m["nombre"] = bajo_m["descripcion"].str[:30]
-    bajo_m["precio_venta"] = bajo_m["Precio Venta"]
+    bajo_m["precio_venta"] = bajo_m["precio_venta_prom"]
     bajo_m = json.loads(bajo_m.to_json(orient="records"))
 
     por_cat = []
@@ -540,15 +583,9 @@ def inventario(
 
     if sede != "Todas" and sede in df_i.columns:
         df_a = df_i.copy()
-        df_a["Total"] = df_a[sede]
+        df_a["Total"] = pd.to_numeric(df_a[sede], errors="coerce").fillna(0)
     else:
-        df_a = df_i.copy()
-        if "Total" not in df_a.columns:
-            excluir = ["Referencia", "Descripcion", "Laboratorio", "Nivel", "Precio Compra", "Precio Venta", "Comision", "Utilidad", "Stock Maximo", "Stock Minimo", "Total", "IVA", "Codigo"]
-            posibles_sedes = [c for c in df_a.columns if c not in excluir and pd.api.types.is_numeric_dtype(df_a[c])]
-            df_a["Total"] = df_a[posibles_sedes].sum(axis=1) if posibles_sedes else 0
-        else:
-            df_a["Total"] = pd.to_numeric(df_a["Total"], errors="coerce").fillna(0)
+        df_a = _inventory_with_total(df_i)
 
     if df_v is not None and "Fecha" in df_v.columns:
         if sede != "Todas":
@@ -610,8 +647,7 @@ def inventario(
         if pd.notna(max_fecha) and pd.notna(min_fecha):
             df_a["dias_sin_venta"] = (max_fecha - df_a["ultima_venta"]).dt.days
             
-            dias_periodo = (max_fecha - min_fecha).days
-            dias_periodo = dias_periodo if dias_periodo > 0 else 1
+            dias_periodo = _inclusive_days(min_fecha, max_fecha)
             df_a["rotacion_diaria"] = df_a["uds_vendidas"] / dias_periodo
             df_a["rotacion_proyectada"] = df_a["rotacion_diaria"] * df_a["factor_tendencia"]
             
@@ -733,7 +769,8 @@ def compras(
     v_agr = df_v.groupby("Referencia", as_index=False)["Cant"].sum().rename(columns={"Cant": "uds_vendidas"})
 
     # 3. Cruzar con Inventario Actual
-    comp = df_i[["Referencia", "Descripcion", "Total"]].copy()
+    df_i_total = _inventory_with_total(df_i)
+    comp = df_i_total[["Referencia", "Descripcion", "Total"]].copy()
     comp = comp.rename(columns={"Total": "inv_actual"})
     
     # Intentar obtener Categoría/Nivel para diferenciar perecederos
@@ -764,7 +801,7 @@ def compras(
     # 5. Días del Periodo
     dias_periodo = 30
     if "Fecha" in df_v.columns and df_v["Fecha"].notna().any():
-        dias_periodo = (df_v["Fecha"].max() - df_v["Fecha"].min()).days or 30
+        dias_periodo = _inclusive_days(df_v["Fecha"].min(), df_v["Fecha"].max(), default=30)
         
     comp["venta_diaria"] = comp["uds_vendidas"] / dias_periodo
     comp["cobertura_dias"] = comp.apply(lambda x: (x["inv_actual"] / x["venta_diaria"]) if x["venta_diaria"] > 0 else 9999, axis=1)

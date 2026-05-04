@@ -20,16 +20,19 @@ def render(df_v, df_c, df_i):
     # ── Cruzar ventas con precios del inventario ─────────────────────────
     v_agg = df_v.groupby("Referencia", as_index=False).agg(
         Cant_Vend=("Cant", "sum"), Descripcion=("Descripcion", "first"),
-        Laboratorio=("Laboratorio", "first"),
+        Laboratorio=("Laboratorio", "first"), Ingreso_Total=("Ingreso", "sum"),
     )
     cols_inv = ["Referencia", "Precio Compra", "Precio Venta"]
     if "Nivel" in df_i.columns:
         cols_inv.append("Nivel")
-    rent = v_agg.merge(df_i[cols_inv], on="Referencia", how="inner")
-    rent["Margen_Unit"] = rent["Precio Venta"] - rent["Precio Compra"]
-    rent["Margen_Pct"] = ((rent["Margen_Unit"] / rent["Precio Venta"]) * 100).round(2)
-    rent["Utilidad_Total"] = rent["Margen_Unit"] * rent["Cant_Vend"]
-    rent["Ingreso_Total"] = rent["Precio Venta"] * rent["Cant_Vend"]
+    inv_prices = df_i[cols_inv].groupby("Referencia", as_index=False).first()
+    rent = v_agg.merge(inv_prices, on="Referencia", how="inner")
+    rent["Costo_Total"] = rent["Precio Compra"] * rent["Cant_Vend"]
+    rent["Utilidad_Total"] = rent["Ingreso_Total"] - rent["Costo_Total"]
+    rent["Precio_Venta_Prom"] = rent["Ingreso_Total"] / rent["Cant_Vend"].where(rent["Cant_Vend"] != 0)
+    rent["Margen_Unit"] = rent["Precio_Venta_Prom"] - rent["Precio Compra"]
+    rent["Margen_Pct"] = ((rent["Utilidad_Total"] / rent["Ingreso_Total"]) * 100).round(2)
+    rent["Margen_Pct"] = rent["Margen_Pct"].replace([float("inf"), float("-inf")], 0).fillna(0)
 
     util_total = rent["Utilidad_Total"].sum()
     ing_total = rent["Ingreso_Total"].sum()

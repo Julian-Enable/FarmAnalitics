@@ -117,7 +117,7 @@
                 <td><span class="badge" :class="row.Total === 0 ? 'badge-red' : 'badge-amber'">{{ store.fmtN(row.Total) }}</span></td>
                 <td>
                   <span class="badge" 
-                    :class="row.cobertura_dias === 0 ? 'badge-red' : row.cobertura_dias < 10 ? 'badge-red' : row.cobertura_dias < 25 ? 'badge-amber' : 'badge-green'">
+                    :class="row.cobertura_dias === 0 ? 'badge-red' : row.cobertura_dias < data.kpis.inv_min_dias * 0.4 ? 'badge-red' : row.cobertura_dias < data.kpis.inv_min_dias ? 'badge-amber' : 'badge-green'">
                     {{ row.cobertura_dias < 9999 ? Math.round(row.cobertura_dias) + ' d' : '+999 d' }}
                   </span>
                 </td>

@@ -29,12 +29,12 @@ def render(df_v, df_c, df_i):
     ]
 
     if df_i is not None and "Precio Compra" in df_i.columns:
-        v_agg = df_v.groupby("Referencia", as_index=False)["Cant"].sum()
-        merged = v_agg.merge(
-            df_i[["Referencia", "Precio Compra", "Precio Venta"]],
-            on="Referencia", how="inner",
+        v_agg = df_v.groupby("Referencia", as_index=False).agg(
+            Cant=("Cant", "sum"), Ingreso=("Ingreso", "sum")
         )
-        merged["Util"] = (merged["Precio Venta"] - merged["Precio Compra"]) * merged["Cant"]
+        inv_cost = df_i[["Referencia", "Precio Compra"]].groupby("Referencia", as_index=False).first()
+        merged = v_agg.merge(inv_cost, on="Referencia", how="inner")
+        merged["Util"] = merged["Ingreso"] - (merged["Precio Compra"] * merged["Cant"])
         util_bruta = merged["Util"].sum()
         margen_prom = (util_bruta / total_ing * 100) if total_ing > 0 else 0
         kpis.append({"icon": "💰", "value": fmt_cop(util_bruta), "label": "Utilidad Bruta"})
@@ -69,7 +69,7 @@ def render(df_v, df_c, df_i):
     render_section_header("📋", "Rendimiento por Punto de Venta")
     resumen = df_v.groupby("Punto Venta").agg(
         Ingresos=("Ingreso", "sum"), Unidades=("Cant", "sum"),
-        Facturas=("Factura", "nunique"),
+        Facturas=("Factura", "nunique") if "Factura" in df_v.columns else ("Cant", "count"),
     ).reset_index()
     resumen["Ticket Prom."] = (resumen["Ingresos"] / resumen["Facturas"]).round(0)
     resumen = resumen.sort_values("Ingresos", ascending=False)
