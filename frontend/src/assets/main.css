@@ -197,6 +197,50 @@ html, body {
 .btn-upload:active { transform: scale(0.98); }
 .btn-upload:disabled { opacity: 0.5; cursor: not-allowed; }
 
+.btn-secondary,
+.btn-danger {
+  width: 100%;
+  padding: 8px 9px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: inherit;
+}
+
+.btn-secondary {
+  background: white;
+  color: var(--fg);
+  border: 1px solid var(--border-md);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-danger {
+  background: #fff1f2;
+  color: #be123c;
+  border: 1px solid #fecdd3;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #ffe4e6;
+}
+
+.btn-secondary:disabled,
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Status dots */
 .status-dot {
   width: 7px; height: 7px;
@@ -213,6 +257,17 @@ html, body {
   flex: 1;
   padding: 28px 32px;
   min-height: 100vh;
+}
+
+.app-error-banner {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #be123c;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  font-size: 0.86rem;
+  font-weight: 600;
 }
 
 /* ── Page header ──────────────────────────────────────────── */
@@ -400,7 +455,7 @@ html, body {
 .filter-group { display: flex; flex-direction: column; gap: 4px; }
 .filter-group label { font-size: 0.75rem; font-weight: 500; color: var(--fg-muted); }
 
-select, input[type="date"] {
+select, input[type="date"], input[type="number"] {
   border: 1px solid var(--border-md);
   border-radius: var(--radius-sm);
   padding: 7px 10px;
@@ -411,7 +466,7 @@ select, input[type="date"] {
   font-family: inherit;
   transition: border-color 0.15s ease;
 }
-select:focus, input[type="date"]:focus {
+select:focus, input[type="date"]:focus, input[type="number"]:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(94,106,210,0.12);
 }

@@ -71,6 +71,23 @@
         </span>
       </button>
 
+      <button
+        class="btn-secondary"
+        :disabled="store.exporting || !hasLoadedData"
+        @click="store.exportFullReport"
+      >
+        <Download size="15" />
+        {{ store.exporting ? 'Exportando...' : 'Exportar reporte' }}
+      </button>
+
+      <button
+        class="btn-danger"
+        :disabled="!hasLoadedData && !hasFiles"
+        @click="handleReset"
+      >
+        <Trash2 size="15" /> Limpiar datos
+      </button>
+
       <!-- Estado -->
       <div style="margin-top:12px;">
         <div v-for="(label, key) in dataLabels" :key="key"
@@ -81,10 +98,33 @@
       </div>
 
       <div v-if="store.uploadError"
-           style="margin-top:8px;padding:8px 10px;background:var(--red-bg);
+           style="margin-top:8px;padding:8px 10px;background:#fff1f2;
                   border-radius:8px;font-size:0.74rem;color:var(--red); display:flex; gap: 6px; align-items: flex-start;">
         <AlertCircle size="14" style="flex-shrink:0; margin-top:2px;" />
         <span>{{ store.uploadError }}</span>
+      </div>
+
+      <div v-if="store.lastError && !store.uploadError"
+           style="margin-top:8px;padding:8px 10px;background:#fff1f2;
+                  border-radius:8px;font-size:0.74rem;color:#be123c; display:flex; gap: 6px; align-items: flex-start;">
+        <AlertCircle size="14" style="flex-shrink:0; margin-top:2px;" />
+        <span>{{ store.lastError }}</span>
+      </div>
+
+      <div v-if="store.uploadDiagnostic" style="margin-top:10px;">
+        <div v-for="diag in diagnosticItems" :key="diag.tipo"
+             style="font-size:0.72rem;padding:6px 8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:white;">
+          <div style="display:flex;justify-content:space-between;gap:8px;font-weight:700;">
+            <span>{{ diagnosticLabels[diag.tipo] || diag.tipo }}</span>
+            <span :style="{ color: diag.ok ? 'var(--green)' : 'var(--red)' }">
+              {{ diag.ok ? 'OK' : 'Faltan columnas' }}
+            </span>
+          </div>
+          <div style="color:var(--fg-muted);margin-top:2px;">{{ store.fmtN(diag.filas) }} filas · {{ diag.columnas.length }} columnas</div>
+          <div v-if="diag.faltantes.length" style="color:var(--red);margin-top:2px;">
+            Faltan: {{ diag.faltantes.join(', ') }}
+          </div>
+        </div>
       </div>
     </div>
   </aside>
@@ -94,7 +134,7 @@
 import { ref, computed, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDashboardStore } from '../stores/dashboard'
-import { LayoutDashboard, TrendingUp, DollarSign, AlertCircle, Scale, Store, FileUp, Database, FileSpreadsheet, Activity } from 'lucide-vue-next'
+import { LayoutDashboard, TrendingUp, DollarSign, AlertCircle, Scale, Store, FileUp, Database, Activity, Download, Trash2 } from 'lucide-vue-next'
 
 const store  = useDashboardStore()
 const router = useRouter()
@@ -105,6 +145,12 @@ const inventarioFile = ref(null)
 
 const hasFiles = computed(() =>
   ventasFiles.value.length > 0 || comprasFiles.value.length > 0 || inventarioFile.value
+)
+const hasLoadedData = computed(() =>
+  store.status.ventas || store.status.compras || store.status.inventario
+)
+const diagnosticItems = computed(() =>
+  store.uploadDiagnostic ? Object.values(store.uploadDiagnostic) : []
 )
 
 const navItems = [
@@ -121,6 +167,11 @@ const dataLabels = {
   compras:    'Compras cargadas',
   inventario: 'Inventario cargado',
 }
+const diagnosticLabels = {
+  ventas: 'Ventas',
+  compras: 'Compras',
+  inventario: 'Inventario',
+}
 
 function onVentas(e)    { ventasFiles.value    = [...e.target.files] }
 function onCompras(e)   { comprasFiles.value   = [...e.target.files] }
@@ -135,5 +186,13 @@ async function handleUpload() {
     await store.fetchResumen()
     router.push('/')
   }
+}
+
+async function handleReset() {
+  ventasFiles.value = []
+  comprasFiles.value = []
+  inventarioFile.value = null
+  await store.resetSession()
+  router.push('/')
 }
 </script>

@@ -2,6 +2,9 @@
   <div id="app">
     <AppSidebar />
     <main class="main">
+      <div v-if="store.lastError" class="app-error-banner">
+        {{ store.lastError }}
+      </div>
       <router-view v-slot="{ Component }">
         <transition name="fade" mode="out-in">
           <component :is="Component" />

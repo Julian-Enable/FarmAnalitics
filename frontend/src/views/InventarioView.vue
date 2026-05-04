@@ -28,18 +28,34 @@
           <option v-for="s in data.sedes_disponibles" :key="s" :value="s">{{ s }}</option>
         </select>
       </div>
+      <div class="filter-group">
+        <label>Mínimo sano (días)</label>
+        <input type="number" min="1" v-model.number="store.settings.inv_min_dias" @change="applyFilters" />
+      </div>
+      <div class="filter-group">
+        <label>Máximo sano (días)</label>
+        <input type="number" min="2" v-model.number="store.settings.inv_max_dias" @change="applyFilters" />
+      </div>
+      <div class="filter-group">
+        <label>Inventario quieto (días)</label>
+        <input type="number" min="1" v-model.number="store.settings.quieto_dias" @change="applyFilters" />
+      </div>
+    </div>
+
+    <div v-if="store.errors.inventario" class="card" style="border-color:#fecdd3;color:#be123c;margin-bottom:16px;background:#fff1f2;">
+      {{ store.errors.inventario }}
     </div>
 
     <div v-if="loading" class="kpi-grid kpi-grid-4">
       <div v-for="i in 4" :key="i" class="card skeleton" style="height: 100px;"></div>
     </div>
     <div v-else-if="data" class="kpi-grid kpi-grid-4">
-      <KpiCard :icon="AlertTriangle" label="Bajo Stock (< 25 días)" :value="store.fmtN(data.kpis.bajo_stock)" />
+      <KpiCard :icon="AlertTriangle" :label="'Bajo Stock (< ' + data.kpis.inv_min_dias + ' días)'" :value="store.fmtN(data.kpis.bajo_stock)" />
       <KpiCard :icon="OctagonX"     label="Agotado (0 stock, con demanda)" :value="store.fmtN(data.kpis.sin_stock)" />
-      <KpiCard :icon="TrendingUp"   label="Sobrestock (> 40 días)" :value="store.fmtN(data.kpis.sobre_stock || 0)" />
-      <KpiCard :icon="Snail"        label="Sin Rotación (> 60 días)" :value="store.fmtN(data.kpis.inventario_quieto)" />
-      <KpiCard :icon="Banknote"     label="Capital Quieto (> 60d)" :value="store.fmt(data.kpis.capital_quieto)" />
-      <KpiCard :icon="Banknote"     label="Capital en Exceso (> 40d)" :value="store.fmt(data.kpis.capital_exceso || 0)" />
+      <KpiCard :icon="TrendingUp"   :label="'Sobrestock (> ' + data.kpis.inv_max_dias + ' días)'" :value="store.fmtN(data.kpis.sobre_stock || 0)" />
+      <KpiCard :icon="Snail"        :label="'Sin Rotación (> ' + data.kpis.quieto_dias + ' días)'" :value="store.fmtN(data.kpis.inventario_quieto)" />
+      <KpiCard :icon="Banknote"     :label="'Capital Quieto (> ' + data.kpis.quieto_dias + 'd)'" :value="store.fmt(data.kpis.capital_quieto)" />
+      <KpiCard :icon="Banknote"     :label="'Capital en Exceso (> ' + data.kpis.inv_max_dias + 'd)'" :value="store.fmt(data.kpis.capital_exceso || 0)" />
     </div>
     <div v-else class="empty-state">
       <div class="empty-icon"><PackageOpen size="48" color="var(--border)" /></div>
@@ -139,7 +155,7 @@
       <!-- Tabla de Inventario Quieto -->
       <div class="card" style="grid-column: span 2;">
         <div class="section-header-row">
-          <SectionTitle :icon="Snail" title="Inventario Quieto (Sin Ventas > 60 Días)" />
+          <SectionTitle :icon="Snail" :title="'Inventario Quieto (Sin Ventas > ' + data.kpis.quieto_dias + ' días)'" />
           <button class="export-btn" @click="exportQuieto">
             <Download size="16" /> Exportar CSV
           </button>

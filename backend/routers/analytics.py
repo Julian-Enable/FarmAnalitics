@@ -16,6 +16,11 @@ router = APIRouter(prefix="/api")
 SEDES = ["PRINCIPAL", "SUCURSAL", "MORATO", "VARDI", "CEDI", "OFICINA 805"]
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024
 ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls"}
+REQUIRED_COLUMNS = {
+    "ventas": ["Referencia", "Descripcion", "Cant", "Precio Venta", "Laboratorio", "Fecha", "Punto Venta"],
+    "compras": ["FECHA", "PROVEEDOR", "REFERENCIA", "DESCRIPCION", "LABORATORIO", "PRECIO", "CANT", "SEDE"],
+    "inventario": ["Referencia", "Descripcion", "Laboratorio"],
+}
 
 # ── Reglas de negocio de inventario ─────────────────────────────────────────
 INV_MIN_DIAS = 25   # Mínimo de días saludables de cobertura
@@ -35,6 +40,28 @@ def _df_to_records(df: pd.DataFrame, max_rows: int = 200) -> list[dict]:
     df = df.head(max_rows).copy()
     # Usar json.loads(to_json()) para manejar correctamente NaN/Inf a null
     return json.loads(df.to_json(orient="records"))
+
+
+def _column_diagnostic(kind: str, df: pd.DataFrame) -> dict:
+    required = REQUIRED_COLUMNS[kind]
+    columns = [str(c) for c in df.columns]
+    missing = [c for c in required if c not in columns]
+    return {
+        "tipo": kind,
+        "filas": int(len(df)),
+        "columnas": columns,
+        "requeridas": required,
+        "faltantes": missing,
+        "ok": not missing,
+    }
+
+
+def _ensure_required_columns(kind: str, df: pd.DataFrame) -> dict:
+    diagnostic = _column_diagnostic(kind, df)
+    if diagnostic["faltantes"]:
+        missing = ", ".join(diagnostic["faltantes"])
+        raise HTTPException(400, f"{kind.capitalize()} sin columnas requeridas: {missing}")
+    return diagnostic
 
 
 async def _read_upload(file: UploadFile) -> bytes:
@@ -66,6 +93,8 @@ async def upload_files(
 ):
     """Recibe archivos, los procesa y los almacena en memoria."""
     resultados = {}
+    diagnostico = {}
+    pending_data = {}
 
     # Normalizar: si llega un solo archivo, convertirlo a lista
     if ventas and not isinstance(ventas, list):
@@ -83,8 +112,10 @@ async def upload_files(
                 dfs.append(df)
         if not dfs:
             raise HTTPException(400, "No se encontraron datos válidos en los archivos de ventas")
-        df_v = procesar_ventas(pd.concat(dfs, ignore_index=True))
-        set_df(x_session_id, "ventas", df_v)
+        df_raw = pd.concat(dfs, ignore_index=True)
+        diagnostico["ventas"] = _ensure_required_columns("ventas", df_raw)
+        df_v = procesar_ventas(df_raw)
+        pending_data["ventas"] = df_v
         resultados["ventas"] = len(df_v)
 
     # Compras
@@ -97,8 +128,10 @@ async def upload_files(
                 dfs.append(df)
         if not dfs:
             raise HTTPException(400, "No se encontraron datos válidos en los archivos de compras")
-        df_c = procesar_compras(pd.concat(dfs, ignore_index=True))
-        set_df(x_session_id, "compras", df_c)
+        df_raw = pd.concat(dfs, ignore_index=True)
+        diagnostico["compras"] = _ensure_required_columns("compras", df_raw)
+        df_c = procesar_compras(df_raw)
+        pending_data["compras"] = df_c
         resultados["compras"] = len(df_c)
 
     # Inventario
@@ -107,15 +140,31 @@ async def upload_files(
         df_i = procesar_inventario(leer_bytes(content, inventario.filename))
         if df_i.empty:
             raise HTTPException(400, "No se encontraron datos válidos en el archivo de inventario")
-        set_df(x_session_id, "inventario", df_i)
+        diagnostico["inventario"] = _ensure_required_columns("inventario", df_i)
+        pending_data["inventario"] = df_i
         resultados["inventario"] = len(df_i)
 
-    return {"ok": True, "filas": resultados}
+    for key, df in pending_data.items():
+        set_df(x_session_id, key, df)
+
+    return {"ok": True, "filas": resultados, "diagnostico": diagnostico}
 
 
 @router.get("/status")
 def status(x_session_id: str = Header(default="default-session")):
     return get_status(x_session_id)
+
+
+@router.get("/schema")
+def schema():
+    return {
+        "columnas_requeridas": REQUIRED_COLUMNS,
+        "umbrales_default": {
+            "inv_min_dias": INV_MIN_DIAS,
+            "inv_max_dias": INV_MAX_DIAS,
+            "quieto_dias": 60,
+        },
+    }
 
 
 @router.delete("/reset")
@@ -475,11 +524,19 @@ def rentabilidad(x_session_id: str = Header(default="default-session")):
 # ── Inventario ────────────────────────────────────────────────────────────────
 
 @router.get("/inventario")
-def inventario(sede: str = "Todas", x_session_id: str = Header(default="default-session")):
+def inventario(
+    sede: str = "Todas",
+    inv_min_dias: int = INV_MIN_DIAS,
+    inv_max_dias: int = INV_MAX_DIAS,
+    quieto_dias: int = 60,
+    x_session_id: str = Header(default="default-session")
+):
     df_i = get_df(x_session_id, "inventario")
     df_v = get_df(x_session_id, "ventas")
     if df_i is None:
         raise HTTPException(404, "No hay datos de inventario")
+    if inv_min_dias <= 0 or inv_max_dias <= inv_min_dias or quieto_dias <= 0:
+        raise HTTPException(400, "Umbrales inválidos: usa mínimo > 0, máximo > mínimo y quieto > 0")
 
     if sede != "Todas" and sede in df_i.columns:
         df_a = df_i.copy()
@@ -578,25 +635,25 @@ def inventario(sede: str = "Todas", x_session_id: str = Header(default="default-
     df_a["dias_sin_venta"] = df_a["dias_sin_venta"].fillna(9999)
     df_a["cobertura_dias"] = df_a["cobertura_dias"].fillna(9999)
 
-    # 1. Bajo Stock: Cobertura por debajo del mínimo saludable (25 días)
-    bajo = df_a[(df_a["cobertura_dias"] < INV_MIN_DIAS) & (df_a["rotacion_proyectada"] > 0)].copy()
+    # 1. Bajo Stock: Cobertura por debajo del mínimo saludable configurado.
+    bajo = df_a[(df_a["cobertura_dias"] < inv_min_dias) & (df_a["rotacion_proyectada"] > 0)].copy()
     
-    # Calcular déficit real en unidades para llegar a 25 días de cobertura
-    bajo["stock_ideal"] = bajo["rotacion_proyectada"] * INV_MIN_DIAS
+    # Calcular déficit real en unidades para llegar a la cobertura mínima.
+    bajo["stock_ideal"] = bajo["rotacion_proyectada"] * inv_min_dias
     bajo["deficit"] = bajo["stock_ideal"] - bajo["Total"]
     bajo["deficit"] = bajo["deficit"].apply(lambda x: max(1, round(x)))
 
-    # 2. Sobrestock: Cobertura por encima del máximo saludable (40 días) con rotación real
-    sobre = df_a[(df_a["cobertura_dias"] > INV_MAX_DIAS) & (df_a["cobertura_dias"] < 9999) & (df_a["rotacion_proyectada"] > 0)].copy()
+    # 2. Sobrestock: Cobertura por encima del máximo saludable configurado.
+    sobre = df_a[(df_a["cobertura_dias"] > inv_max_dias) & (df_a["cobertura_dias"] < 9999) & (df_a["rotacion_proyectada"] > 0)].copy()
     if "Precio Compra" in sobre.columns:
-        sobre["capital_exceso"] = (sobre["Total"] - (sobre["rotacion_proyectada"] * INV_MAX_DIAS)) * sobre["Precio Compra"]
+        sobre["capital_exceso"] = (sobre["Total"] - (sobre["rotacion_proyectada"] * inv_max_dias)) * sobre["Precio Compra"]
     else:
         sobre["capital_exceso"] = 0
 
     sin_stock = df_a[(df_a["Total"]==0) & (df_a["rotacion_diaria"] > 0)]
 
-    # 3. Inventario Quieto: stock sin venta en 60+ días
-    quieto = df_a[(df_a["Total"] > 0) & (df_a["dias_sin_venta"] > 60)].copy()
+    # 3. Inventario Quieto: stock sin venta por encima del umbral configurado.
+    quieto = df_a[(df_a["Total"] > 0) & (df_a["dias_sin_venta"] > quieto_dias)].copy()
     if "Precio Compra" in quieto.columns:
         quieto["capital_inmovilizado"] = quieto["Total"] * quieto["Precio Compra"]
     else:
@@ -635,8 +692,9 @@ def inventario(sede: str = "Todas", x_session_id: str = Header(default="default-
             "inventario_quieto": len(quieto),
             "capital_quieto":  float(quieto["capital_inmovilizado"].sum()) if len(quieto) > 0 else 0,
             "capital_exceso":  float(sobre["capital_exceso"].sum()) if len(sobre) > 0 else 0,
-            "inv_min_dias":    INV_MIN_DIAS,
-            "inv_max_dias":    INV_MAX_DIAS,
+            "inv_min_dias":    inv_min_dias,
+            "inv_max_dias":    inv_max_dias,
+            "quieto_dias":     quieto_dias,
         },
         "bajo_stock_tabla":       _df_to_records(bajo.sort_values(["clasificacion_abc", "cobertura_dias"], ascending=[True, True])),
         "sobre_stock_tabla":      _df_to_records(sobre.sort_values("cobertura_dias", ascending=False)),
@@ -652,12 +710,21 @@ def inventario(sede: str = "Todas", x_session_id: str = Header(default="default-
 # ── Compras vs Ventas ─────────────────────────────────────────────────────────
 
 @router.get("/compras")
-def compras(proveedor: str = "Todos", estado: str = "Todos", buscar: str = "", x_session_id: str = Header(default="default-session")):
+def compras(
+    proveedor: str = "Todos",
+    estado: str = "Todos",
+    buscar: str = "",
+    inv_min_dias: int = INV_MIN_DIAS,
+    inv_max_dias: int = INV_MAX_DIAS,
+    x_session_id: str = Header(default="default-session")
+):
     df_c = get_df(x_session_id, "compras")
     df_v = get_df(x_session_id, "ventas")
     df_i = get_df(x_session_id, "inventario")
     if df_c is None or df_v is None or df_i is None:
         raise HTTPException(404, "Se requieren Compras, Ventas e Inventario para la conciliación.")
+    if inv_min_dias <= 0 or inv_max_dias <= inv_min_dias:
+        raise HTTPException(400, "Umbrales inválidos: usa mínimo > 0 y máximo > mínimo")
 
     # 1. Agrupar Compras por Referencia
     c_agr = df_c.groupby("REFERENCIA", as_index=False)["CANT"].sum().rename(columns={"REFERENCIA": "Referencia", "CANT": "uds_compradas"})
@@ -704,9 +771,9 @@ def compras(proveedor: str = "Todos", estado: str = "Todos", buscar: str = "", x
 
     # 6. Estado (Basado en Cobertura 25-40 días)
     def calcular_estado_flujo(row):
-        if row["cobertura_dias"] < INV_MIN_DIAS:
+        if row["cobertura_dias"] < inv_min_dias:
             return "desabastecimiento" # Falta
-        elif row["cobertura_dias"] > INV_MAX_DIAS:
+        elif row["cobertura_dias"] > inv_max_dias:
             return "sobre_compra"      # Sobre / Exceso
         else:
             return "equilibrio"        # OK
@@ -745,7 +812,9 @@ def compras(proveedor: str = "Todos", estado: str = "Todos", buscar: str = "", x
             "total_vendido":  int(comp["uds_vendidas"].sum()),
             "n_sobre_compra": int(len(comp[comp["estado"]=="sobre_compra"])),
             "n_desabastecimiento": int(len(comp[comp["estado"]=="desabastecimiento"])),
-            "dias_periodo": int(dias_periodo)
+            "dias_periodo": int(dias_periodo),
+            "inv_min_dias": inv_min_dias,
+            "inv_max_dias": inv_max_dias,
         },
         "comparativo": json.loads(filtered.sort_values("uds_compradas", ascending=False).to_json(orient="records")),
         "top_proveedores": top_prov,

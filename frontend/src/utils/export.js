@@ -41,4 +41,70 @@ export function exportToCSV(data, columns, filename = 'exportacion') {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function escapeHtml(value) {
+  if (value === null || value === undefined) return ''
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function buildSheetHtml(sheet) {
+  const rows = sheet.data || []
+  const columns = sheet.columns || []
+  const headers = columns.map(col => `<th>${escapeHtml(col.label)}</th>`).join('')
+  const body = rows.map(row => {
+    const cells = columns.map(col => {
+      let value = row[col.key]
+      if (col.formatter && typeof col.formatter === 'function') value = col.formatter(value)
+      return `<td>${escapeHtml(value)}</td>`
+    }).join('')
+    return `<tr>${cells}</tr>`
+  }).join('')
+
+  return `
+    <h2>${escapeHtml(sheet.name)}</h2>
+    <table>
+      <thead><tr>${headers}</tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+  `
+}
+
+export function exportWorkbookAsExcel(sheets, filename = 'reporte') {
+  const validSheets = sheets.filter(sheet => sheet?.data?.length && sheet?.columns?.length)
+  if (!validSheets.length) {
+    alert('No hay datos para exportar.')
+    return
+  }
+
+  const html = `
+    <html>
+      <head>
+        <meta charset="UTF-8" />
+        <style>
+          body { font-family: Arial, sans-serif; }
+          h2 { margin-top: 24px; }
+          table { border-collapse: collapse; margin-bottom: 24px; }
+          th, td { border: 1px solid #999; padding: 6px 8px; font-size: 12px; }
+          th { background: #eef0fb; font-weight: 700; }
+        </style>
+      </head>
+      <body>${validSheets.map(buildSheetHtml).join('<br style="page-break-after: always;" />')}</body>
+    </html>
+  `
+
+  const blob = new Blob(['\uFEFF' + html], { type: 'application/vnd.ms-excel;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${filename}.xls`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
 }
