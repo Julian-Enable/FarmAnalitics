@@ -29,6 +29,9 @@ REQUIRED_COLUMNS = {
 # ── Reglas de negocio de inventario ─────────────────────────────────────────
 INV_MIN_DIAS = 25   # Mínimo de días saludables de cobertura
 INV_MAX_DIAS = 40   # Máximo de días saludables de cobertura (sobre esto = sobrestock)
+LOW_MARGIN_PCT = 5.0
+HIGH_ROTATION_QUANTILE = 0.80
+HIGH_ROTATION_MIN_UNITS = 5
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -96,6 +99,14 @@ def _sales_profit_frame(df_v: pd.DataFrame, df_i: pd.DataFrame) -> pd.DataFrame:
     r["margen_pct"] = ((r["utilidad_total"] / r["ingreso_total"]) * 100).round(2)
     r["margen_pct"] = r["margen_pct"].replace([float("inf"), float("-inf")], 0).fillna(0)
     return r
+
+
+def _high_rotation_threshold(r: pd.DataFrame) -> float:
+    positive_units = r.loc[r["cant_vend"] > 0, "cant_vend"]
+    if positive_units.empty:
+        return HIGH_ROTATION_MIN_UNITS
+    threshold = float(positive_units.quantile(HIGH_ROTATION_QUANTILE))
+    return max(float(HIGH_ROTATION_MIN_UNITS), threshold)
 
 
 def _column_diagnostic(kind: str, df: pd.DataFrame) -> dict:
@@ -493,6 +504,12 @@ def rentabilidad(x_session_id: str = Header(default="default-session")):
         raise HTTPException(400, "Inventario sin columna Precio Compra")
 
     r = _sales_profit_frame(df_v, df_i)
+    max_fecha = df_v["Fecha"].max() if "Fecha" in df_v.columns else pd.NaT
+    min_fecha = df_v["Fecha"].min() if "Fecha" in df_v.columns else pd.NaT
+    dias_periodo = _inclusive_days(min_fecha, max_fecha)
+    r["rotacion_diaria"] = (r["cant_vend"] / dias_periodo).round(3)
+    r["utilidad_unit"] = r["margen_unit"].round(2)
+    r["precio_compra"] = r["Precio Compra"]
 
     # --- ABC CRUZADO ---
     # ABC Ventas (Ingreso)
@@ -529,7 +546,17 @@ def rentabilidad(x_session_id: str = Header(default="default-session")):
     top_r = (r.nlargest(15,"utilidad_total").sort_values("utilidad_total",ascending=True)
               .assign(nombre=lambda x: x["descripcion"].str[:30]))
     top_r = json.loads(top_r.to_json(orient="records"))
-    bajo_m = r[r["cant_vend"]>=5].nsmallest(15,"margen_pct").copy()
+
+    umbral_alta_rotacion = _high_rotation_threshold(r)
+    bajo_m = r[
+        (r["margen_pct"] < LOW_MARGIN_PCT)
+        & (r["cant_vend"] >= umbral_alta_rotacion)
+    ].copy()
+    bajo_m_total = len(bajo_m)
+    bajo_m = bajo_m.sort_values(
+        ["margen_pct", "cant_vend", "ingreso_total"],
+        ascending=[True, False, False],
+    ).head(50)
     bajo_m["nombre"] = bajo_m["descripcion"].str[:30]
     bajo_m["precio_venta"] = bajo_m["precio_venta_prom"]
     bajo_m = json.loads(bajo_m.to_json(orient="records"))
@@ -555,6 +582,10 @@ def rentabilidad(x_session_id: str = Header(default="default-session")):
             "margen_global":  round(util_total/ing_total*100,1) if ing_total else 0,
             "ingreso_total":  round(ing_total,0),
             "productos":      len(r),
+            "bajo_margen_count": bajo_m_total,
+            "bajo_margen_umbral_pct": LOW_MARGIN_PCT,
+            "alta_rotacion_min_unidades": round(umbral_alta_rotacion, 2),
+            "dias_periodo": dias_periodo,
         },
         "top_rentables": top_r,
         "bajo_margen":   bajo_m,
