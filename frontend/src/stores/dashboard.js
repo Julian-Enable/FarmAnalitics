@@ -100,7 +100,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   async function uploadFiles() {
-    if (!files.ventas.length && !files.compras.length && !files.inventario) return
+    if (!files.ventas.length && !files.compras.length && !files.inventario && !files.notas_credito) return
     uploading.value = true
     uploadError.value = null
     uploadDiagnostic.value = null
@@ -111,6 +111,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
       files.ventas.forEach(f => fd.append('ventas', f))
       files.compras.forEach(f => fd.append('compras', f))
       if (files.inventario) fd.append('inventario', files.inventario)
+      if (files.notas_credito) fd.append('notas_credito', files.notas_credito)
 
       const { data: result } = await axios.post('/api/upload', fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
