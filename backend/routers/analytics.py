@@ -758,8 +758,9 @@ def proyeccion_metas(
             dias_v = df_v["Fecha_Date"].nunique()
             
             # Filtro para excluir reemplazos temporales:
-            # Si un vendedor aporta menos del 2% del total de la sede Y trabajó menos de 5 días en el mes, se considera temporal/reemplazo.
-            if aporte_v < 0.02 and dias_v < 5:
+            # Si un vendedor aporta menos del 5% del total de la sede, se considera temporal/reemplazo
+            # y no se le asigna meta individual.
+            if aporte_v < 0.05:
                 continue
                 
             ticket_v = ingreso_v / max(df_v["Factura"].nunique(), 1)
