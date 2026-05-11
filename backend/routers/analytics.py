@@ -5,6 +5,9 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Header
 from typing import Optional, Union
 import pandas as pd
 import json
+import calendar
+import holidays
+from datetime import datetime, timedelta, date
 
 from backend.services.data_store import get_df, set_df, get_status, clear_all
 from backend.services.processing import (
@@ -646,6 +649,23 @@ def proyeccion_metas(
     fechas_m1 = set(fechas_unicas[:mitad_idx])
     fechas_m2 = set(fechas_unicas[mitad_idx:])
 
+    # Calcular exactitud del mes actual
+    fecha_max = df["Fecha"].max()
+    year = fecha_max.year
+    month = fecha_max.month
+    _, dias_en_mes = calendar.monthrange(year, month)
+    
+    # Calcular festivos y domingos en Colombia para este mes
+    co_holidays = holidays.CO(years=year)
+    domingos_festivos = 0
+    habiles = 0
+    for day in range(1, dias_en_mes + 1):
+        dt = date(year, month, day)
+        if dt.weekday() == 6 or dt in co_holidays:
+            domingos_festivos += 1
+        else:
+            habiles += 1
+
     col_sede = "Punto Venta" if "Punto Venta" in df.columns else None
     col_vend = "Creada" if "Creada" in df.columns else None
     
@@ -670,15 +690,15 @@ def proyeccion_metas(
         tendencia = idp_m2 / idp_m1 if idp_m1 > 0 else 1.0
         tendencia_capeada = min(max(tendencia, 0.9), 1.15)
         
-        # Proyección base
-        proyeccion_base = idp_sede * 30 * tendencia_capeada
+        # Proyección base a días reales del mes
+        proyeccion_base = idp_sede * dias_en_mes * tendencia_capeada
         
         # Asignación de meta según tendencia y agresividad
         if tendencia > 1.05:
             meta_sede = proyeccion_base * factor_crecimiento
         elif tendencia < 0.95:
             # Meta de recuperación
-            meta_sede = (idp_sede * 30) * (factor_crecimiento + 0.02)
+            meta_sede = (idp_sede * dias_en_mes) * (factor_crecimiento + 0.02)
         else:
             meta_sede = proyeccion_base * factor_crecimiento
             
@@ -739,7 +759,10 @@ def proyeccion_metas(
         "resumen": {
             "ingreso_actual_total": sum(s["ingreso_actual"] for s in sedes_data),
             "meta_total": sum(s["meta_sugerida"] for s in sedes_data),
-            "proyeccion_total": sum(s["proyeccion_base"] for s in sedes_data)
+            "proyeccion_total": sum(s["proyeccion_base"] for s in sedes_data),
+            "dias_mes": dias_en_mes,
+            "dias_habiles": habiles,
+            "dias_festivos": domingos_festivos
         },
         "sedes": sedes_data
     }

@@ -36,7 +36,11 @@
     
     <div v-else-if="data" class="kpi-grid kpi-grid-3">
       <KpiCard :icon="DollarSign" label="Ingreso Actual (Periodo)" :value="store.fmt(data.resumen.ingreso_actual_total)" />
-      <KpiCard :icon="TrendingUp" label="Proyección Mes (30d)" :value="store.fmt(data.resumen.proyeccion_total)" />
+      <KpiCard :icon="TrendingUp" :label="'Proyección Mes (' + data.resumen.dias_mes + 'd)'" :value="store.fmt(data.resumen.proyeccion_total)">
+        <template #sub>
+          <span style="font-size: 11px; color: var(--fg-muted);">{{ data.resumen.dias_habiles }} hábiles, {{ data.resumen.dias_festivos }} festivos</span>
+        </template>
+      </KpiCard>
       <div class="cmd-kpi-card" style="border: 1px solid var(--accent-light); background: #f8fafc;">
         <div class="cmd-kpi-icon-wrap" style="background: var(--accent-light);">
           <Target size="18" color="var(--accent)" />

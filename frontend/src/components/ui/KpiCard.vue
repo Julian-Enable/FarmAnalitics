@@ -6,6 +6,7 @@
     </div>
     <div class="kpi-value">{{ value }}</div>
     <div class="kpi-label">{{ label }}</div>
+    <slot name="sub"></slot>
   </div>
 </template>
 
