@@ -47,7 +47,10 @@
       <KpiCard :icon="DollarSign" label="Ingreso Actual (Periodo)" :value="store.fmt(data.resumen.ingreso_actual_total)" />
       <KpiCard :icon="TrendingUp" :label="'Proyección Mes (' + data.resumen.dias_mes + 'd)'" :value="store.fmt(data.resumen.proyeccion_total)">
         <template #sub>
-          <span style="font-size: 11px; color: var(--fg-muted);">{{ data.resumen.dias_habiles }} hábiles, {{ data.resumen.dias_festivos }} festivos</span>
+          <div style="font-size: 11px; color: var(--fg-muted); display: flex; flex-direction: column; gap: 2px; margin-top: 2px;">
+            <span>{{ data.resumen.dias_habiles }} hábiles, {{ data.resumen.dias_festivos }} festivos</span>
+            <span><strong>Base histórica:</strong> {{ data.resumen.mes_base_usado }}</span>
+          </div>
         </template>
       </KpiCard>
       <div class="cmd-kpi-card" style="border: 1px solid var(--accent-light); background: #f8fafc;">

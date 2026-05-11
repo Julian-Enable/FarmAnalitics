@@ -642,19 +642,37 @@ def proyeccion_metas(
     if "Fecha" not in df.columns:
         raise HTTPException(400, "No hay columna Fecha para calcular metas")
 
-    df["Fecha_Date"] = df["Fecha"].dt.date
-    fechas_unicas = sorted(df["Fecha_Date"].dropna().unique())
+    fecha_max_data = df["Fecha"].max()
+    year_max = fecha_max_data.year
+    month_max = fecha_max_data.month
+    
+    # Determinar el "último mes completo" (mes anterior al último mes en los datos)
+    if month_max == 1:
+        mes_ant = 12
+        year_ant = year_max - 1
+    else:
+        mes_ant = month_max - 1
+        year_ant = year_max
+        
+    df_mes_ant = df[(df["Fecha"].dt.year == year_ant) & (df["Fecha"].dt.month == mes_ant)]
+    
+    if not df_mes_ant.empty:
+        df_base = df_mes_ant
+        mes_base_nombre = f"{mes_ant:02d}/{year_ant}"
+    else:
+        df_base = df
+        mes_base_nombre = "todo el periodo cargado"
+
+    df_base["Fecha_Date"] = df_base["Fecha"].dt.date
+    fechas_unicas = sorted(df_base["Fecha_Date"].dropna().unique())
     if not fechas_unicas:
-        raise HTTPException(400, "No hay fechas válidas en ventas")
+        raise HTTPException(400, "No hay fechas válidas en ventas para el periodo base")
         
     mitad_idx = len(fechas_unicas) // 2
     fechas_m1 = set(fechas_unicas[:mitad_idx])
     fechas_m2 = set(fechas_unicas[mitad_idx:])
 
-    # Determinar el rango de proyección
-    fecha_max_data = df["Fecha"].max()
-    year = fecha_max_data.year
-    month = fecha_max_data.month
+    # Determinar el rango de proyección objetivo
     
     if fecha_ini and fecha_fin:
         try:
@@ -679,29 +697,29 @@ def proyeccion_metas(
         except ValueError:
             raise HTTPException(400, "Formato de fecha inválido o rango erróneo")
     else:
-        # Calcular exactitud del mes actual por defecto
-        _, dias_totales_proy = calendar.monthrange(year, month)
+        # Calcular exactitud del mes actual (mes objetivo) por defecto
+        _, dias_totales_proy = calendar.monthrange(year_max, month_max)
         
         # Calcular festivos y domingos en Colombia para este mes
-        co_holidays = holidays.CO(years=year)
+        co_holidays = holidays.CO(years=year_max)
         domingos_festivos = 0
         habiles = 0
         for day in range(1, dias_totales_proy + 1):
-            dt = date(year, month, day)
+            dt = date(year_max, month_max, day)
             if dt.weekday() == 6 or dt in co_holidays:
                 domingos_festivos += 1
             else:
                 habiles += 1
 
-    col_sede = "Punto Venta" if "Punto Venta" in df.columns else None
-    col_vend = "Creada" if "Creada" in df.columns else None
+    col_sede = "Punto Venta" if "Punto Venta" in df_base.columns else None
+    col_vend = "Creada" if "Creada" in df_base.columns else None
     
     if not col_sede or not col_vend:
         raise HTTPException(400, "Faltan columnas de Sede o Vendedor")
 
     sedes_data = []
     
-    for sede, df_sede in df.groupby(col_sede):
+    for sede, df_sede in df_base.groupby(col_sede):
         dias_sede = df_sede["Fecha_Date"].nunique()
         if dias_sede == 0: continue
         ingresos_sede = df_sede["Ingreso"].sum()
@@ -789,7 +807,8 @@ def proyeccion_metas(
             "proyeccion_total": sum(s["proyeccion_base"] for s in sedes_data),
             "dias_mes": dias_totales_proy,
             "dias_habiles": habiles,
-            "dias_festivos": domingos_festivos
+            "dias_festivos": domingos_festivos,
+            "mes_base_usado": mes_base_nombre
         },
         "sedes": sedes_data
     }
