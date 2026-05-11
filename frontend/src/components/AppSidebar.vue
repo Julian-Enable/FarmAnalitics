@@ -143,7 +143,7 @@
 import { ref, computed, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDashboardStore } from '../stores/dashboard'
-import { LayoutDashboard, TrendingUp, DollarSign, AlertCircle, Scale, Store, FileUp, Database, Activity, Download, Trash2, RotateCcw } from 'lucide-vue-next'
+import { LayoutDashboard, TrendingUp, DollarSign, AlertCircle, Scale, Store, FileUp, Database, Activity, Download, Trash2, RotateCcw, Target } from 'lucide-vue-next'
 
 const store  = useDashboardStore()
 const router = useRouter()
@@ -171,6 +171,7 @@ const navItems = [
   { to: '/compras',      icon: shallowRef(Scale),           label: 'Compras vs Ventas'   },
   { to: '/sedes',        icon: shallowRef(Store),           label: 'Rendimiento Sedes'   },
   { to: '/devoluciones', icon: shallowRef(RotateCcw),       label: 'Devoluciones'        },
+  { to: '/metas',        icon: shallowRef(Target),          label: 'Proyección y Metas'  },
 ]
 
 const dataLabels = {

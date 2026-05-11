@@ -615,6 +615,136 @@ def ventas(sede: str = "Todas", nivel: str = "Todos",
     }
 
 
+# ── Metas y Proyecciones ──────────────────────────────────────────────────────
+
+@router.get("/metas")
+def proyeccion_metas(
+    agresividad: str = "normal",
+    x_session_id: str = Header(default="default-session")
+):
+    df = get_df(x_session_id, "ventas")
+    if df is None or len(df) == 0:
+        raise HTTPException(404, "No hay datos de ventas")
+
+    # Mapeo de agresividad
+    agresividad_map = {
+        "conservador": 1.02,
+        "normal": 1.05,
+        "agresivo": 1.10
+    }
+    factor_crecimiento = agresividad_map.get(agresividad, 1.05)
+
+    if "Fecha" not in df.columns:
+        raise HTTPException(400, "No hay columna Fecha para calcular metas")
+
+    df["Fecha_Date"] = df["Fecha"].dt.date
+    fechas_unicas = sorted(df["Fecha_Date"].dropna().unique())
+    if not fechas_unicas:
+        raise HTTPException(400, "No hay fechas válidas en ventas")
+        
+    mitad_idx = len(fechas_unicas) // 2
+    fechas_m1 = set(fechas_unicas[:mitad_idx])
+    fechas_m2 = set(fechas_unicas[mitad_idx:])
+
+    col_sede = "Punto Venta" if "Punto Venta" in df.columns else None
+    col_vend = "Creada" if "Creada" in df.columns else None
+    
+    if not col_sede or not col_vend:
+        raise HTTPException(400, "Faltan columnas de Sede o Vendedor")
+
+    sedes_data = []
+    
+    for sede, df_sede in df.groupby(col_sede):
+        dias_sede = df_sede["Fecha_Date"].nunique()
+        if dias_sede == 0: continue
+        ingresos_sede = df_sede["Ingreso"].sum()
+        idp_sede = ingresos_sede / dias_sede
+        
+        # Tendencia
+        df_m1 = df_sede[df_sede["Fecha_Date"].isin(fechas_m1)]
+        df_m2 = df_sede[df_sede["Fecha_Date"].isin(fechas_m2)]
+        
+        idp_m1 = df_m1["Ingreso"].sum() / max(df_m1["Fecha_Date"].nunique(), 1)
+        idp_m2 = df_m2["Ingreso"].sum() / max(df_m2["Fecha_Date"].nunique(), 1)
+        
+        tendencia = idp_m2 / idp_m1 if idp_m1 > 0 else 1.0
+        tendencia_capeada = min(max(tendencia, 0.9), 1.15)
+        
+        # Proyección base
+        proyeccion_base = idp_sede * 30 * tendencia_capeada
+        
+        # Asignación de meta según tendencia y agresividad
+        if tendencia > 1.05:
+            meta_sede = proyeccion_base * factor_crecimiento
+        elif tendencia < 0.95:
+            # Meta de recuperación
+            meta_sede = (idp_sede * 30) * (factor_crecimiento + 0.02)
+        else:
+            meta_sede = proyeccion_base * factor_crecimiento
+            
+        ticket_sede = ingresos_sede / max(df_sede["Factura"].nunique(), 1)
+        
+        vendedores = []
+        tot_peso = 0
+        vends_raw = []
+        
+        for vend, df_v in df_sede.groupby(col_vend):
+            ingreso_v = df_v["Ingreso"].sum()
+            ticket_v = ingreso_v / max(df_v["Factura"].nunique(), 1)
+            aporte_v = ingreso_v / ingresos_sede if ingresos_sede > 0 else 0
+            
+            # Eficiencia: ticket del vendedor vs ticket de la sede
+            eficiencia = ticket_v / ticket_sede if ticket_sede > 0 else 1.0
+            
+            # Peso crudo (70% aporte histórico, 30% eficiencia sobre su aporte)
+            peso_crudo = (0.7 * aporte_v) + (0.3 * eficiencia * aporte_v)
+            
+            vends_raw.append({
+                "nombre": vend,
+                "ingreso_actual": float(ingreso_v),
+                "ticket_promedio": float(ticket_v),
+                "peso_crudo": peso_crudo,
+                "aporte": round(aporte_v * 100, 1)
+            })
+            tot_peso += peso_crudo
+            
+        # Normalizar pesos a 100%
+        for v in vends_raw:
+            peso_final = v["peso_crudo"] / tot_peso if tot_peso > 0 else 0
+            meta_v = meta_sede * peso_final
+            vendedores.append({
+                "nombre": v["nombre"],
+                "ingreso_actual": v["ingreso_actual"],
+                "ticket_promedio": v["ticket_promedio"],
+                "aporte_historico": v["aporte"],
+                "peso_distribucion": round(peso_final * 100, 1),
+                "meta": float(meta_v)
+            })
+            
+        vendedores.sort(key=lambda x: x["meta"], reverse=True)
+        
+        sedes_data.append({
+            "sede": sede,
+            "ingreso_actual": float(ingresos_sede),
+            "idp": float(idp_sede),
+            "tendencia": round(tendencia, 2),
+            "proyeccion_base": float(proyeccion_base),
+            "meta_sugerida": float(meta_sede),
+            "vendedores": vendedores
+        })
+        
+    sedes_data.sort(key=lambda x: x["meta_sugerida"], reverse=True)
+    
+    return {
+        "resumen": {
+            "ingreso_actual_total": sum(s["ingreso_actual"] for s in sedes_data),
+            "meta_total": sum(s["meta_sugerida"] for s in sedes_data),
+            "proyeccion_total": sum(s["proyeccion_base"] for s in sedes_data)
+        },
+        "sedes": sedes_data
+    }
+
+
 # ── Rentabilidad ──────────────────────────────────────────────────────────────
 
 @router.get("/rentabilidad")
