@@ -60,6 +60,16 @@
         <span>{{ inventarioFile ? inventarioFile.name : 'Archivo maestro' }}</span>
       </label>
 
+      <label class="upload-zone" :class="{ uploaded: notasCreditoFile }">
+        <input type="file" accept=".csv,.xlsx,.xls" @change="onNotasCredito" />
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span v-if="notasCreditoFile" class="check">✓</span>
+          <RotateCcw size="16" />
+          <strong>Notas Crédito</strong>
+        </div>
+        <span>{{ notasCreditoFile ? notasCreditoFile.name : 'CSV / Excel — opcional' }}</span>
+      </label>
+
       <button
         class="btn-upload"
         :disabled="store.uploading || !hasFiles"
@@ -88,7 +98,6 @@
         <Trash2 size="15" /> Limpiar datos
       </button>
 
-      <!-- Estado -->
       <div style="margin-top:12px;">
         <div v-for="(label, key) in dataLabels" :key="key"
              style="display:flex;align-items:center;padding:3px 0;font-size:0.74rem;color:#6B7280;">
@@ -134,7 +143,7 @@
 import { ref, computed, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDashboardStore } from '../stores/dashboard'
-import { LayoutDashboard, TrendingUp, DollarSign, AlertCircle, Scale, Store, FileUp, Database, Activity, Download, Trash2 } from 'lucide-vue-next'
+import { LayoutDashboard, TrendingUp, DollarSign, AlertCircle, Scale, Store, FileUp, Database, Activity, Download, Trash2, RotateCcw } from 'lucide-vue-next'
 
 const store  = useDashboardStore()
 const router = useRouter()
@@ -142,9 +151,10 @@ const router = useRouter()
 const ventasFiles    = ref([])
 const comprasFiles   = ref([])
 const inventarioFile = ref(null)
+const notasCreditoFile = ref(null)
 
 const hasFiles = computed(() =>
-  ventasFiles.value.length > 0 || comprasFiles.value.length > 0 || inventarioFile.value
+  ventasFiles.value.length > 0 || comprasFiles.value.length > 0 || inventarioFile.value || notasCreditoFile.value
 )
 const hasLoadedData = computed(() =>
   store.status.ventas || store.status.compras || store.status.inventario
@@ -160,12 +170,14 @@ const navItems = [
   { to: '/inventario',   icon: shallowRef(AlertCircle),     label: 'Alertas Inventario'  },
   { to: '/compras',      icon: shallowRef(Scale),           label: 'Compras vs Ventas'   },
   { to: '/sedes',        icon: shallowRef(Store),           label: 'Rendimiento Sedes'   },
+  { to: '/devoluciones', icon: shallowRef(RotateCcw),       label: 'Devoluciones'        },
 ]
 
 const dataLabels = {
-  ventas:     'Ventas cargadas',
-  compras:    'Compras cargadas',
-  inventario: 'Inventario cargado',
+  ventas:       'Ventas cargadas',
+  compras:      'Compras cargadas',
+  inventario:   'Inventario cargado',
+  notas_credito: 'Notas crédito cargadas',
 }
 const diagnosticLabels = {
   ventas: 'Ventas',
@@ -173,14 +185,16 @@ const diagnosticLabels = {
   inventario: 'Inventario',
 }
 
-function onVentas(e)    { ventasFiles.value    = [...e.target.files] }
-function onCompras(e)   { comprasFiles.value   = [...e.target.files] }
-function onInventario(e){ inventarioFile.value = e.target.files[0] || null }
+function onVentas(e)       { ventasFiles.value      = [...e.target.files] }
+function onCompras(e)      { comprasFiles.value     = [...e.target.files] }
+function onInventario(e)   { inventarioFile.value   = e.target.files[0] || null }
+function onNotasCredito(e) { notasCreditoFile.value = e.target.files[0] || null }
 
 async function handleUpload() {
-  store.files.ventas    = ventasFiles.value
-  store.files.compras   = comprasFiles.value
-  store.files.inventario = inventarioFile.value
+  store.files.ventas        = ventasFiles.value
+  store.files.compras       = comprasFiles.value
+  store.files.inventario    = inventarioFile.value
+  store.files.notas_credito = notasCreditoFile.value
   await store.uploadFiles()
   if (store.status.ventas) {
     await store.fetchResumen()
@@ -189,9 +203,10 @@ async function handleUpload() {
 }
 
 async function handleReset() {
-  ventasFiles.value = []
-  comprasFiles.value = []
-  inventarioFile.value = null
+  ventasFiles.value      = []
+  comprasFiles.value     = []
+  inventarioFile.value   = null
+  notasCreditoFile.value = null
   await store.resetSession()
   router.push('/')
 }

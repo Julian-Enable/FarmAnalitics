@@ -8,7 +8,7 @@ import json
 
 from backend.services.data_store import get_df, set_df, get_status, clear_all
 from backend.services.processing import (
-    leer_bytes, procesar_ventas, procesar_compras, procesar_inventario,
+    leer_bytes, procesar_ventas, procesar_compras, procesar_inventario, procesar_notas_credito,
 )
 
 router = APIRouter(prefix="/api")
@@ -21,9 +21,10 @@ EXCLUDED_INVENTORY_COLUMNS = {
     "Comision", "Utilidad", "Stock Maximo", "Stock Minimo", "Total", "IVA", "Codigo",
 }
 REQUIRED_COLUMNS = {
-    "ventas": ["Referencia", "Descripcion", "Cant", "Precio Venta", "Laboratorio", "Fecha", "Punto Venta"],
-    "compras": ["FECHA", "PROVEEDOR", "REFERENCIA", "DESCRIPCION", "LABORATORIO", "PRECIO", "CANT", "SEDE"],
-    "inventario": ["Referencia", "Descripcion", "Laboratorio"],
+    "ventas":        ["Referencia", "Descripcion", "Cant", "Precio Venta", "Laboratorio", "Fecha", "Punto Venta"],
+    "compras":       ["FECHA", "PROVEEDOR", "REFERENCIA", "DESCRIPCION", "LABORATORIO", "PRECIO", "CANT", "SEDE"],
+    "inventario":    ["Referencia", "Descripcion", "Laboratorio"],
+    "notas_credito": ["Fecha", "NotaCredito", "PuntoVenta", "Total"],
 }
 
 # ── Reglas de negocio de inventario ─────────────────────────────────────────
@@ -153,10 +154,11 @@ async def _read_upload(file: UploadFile) -> bytes:
 
 @router.post("/upload")
 async def upload_files(
-    ventas:     Optional[Union[list[UploadFile], UploadFile]] = File(default=None),
-    compras:    Optional[Union[list[UploadFile], UploadFile]] = File(default=None),
-    inventario: Optional[UploadFile]                          = File(default=None),
-    x_session_id: str = Header(default="default-session")
+    ventas:         Optional[Union[list[UploadFile], UploadFile]] = File(default=None),
+    compras:        Optional[Union[list[UploadFile], UploadFile]] = File(default=None),
+    inventario:     Optional[UploadFile]                          = File(default=None),
+    notas_credito:  Optional[UploadFile]                          = File(default=None),
+    x_session_id:   str = Header(default="default-session")
 ):
     """Recibe archivos, los procesa y los almacena en memoria."""
     resultados = {}
@@ -210,6 +212,20 @@ async def upload_files(
         diagnostico["inventario"] = _ensure_required_columns("inventario", df_i)
         pending_data["inventario"] = df_i
         resultados["inventario"] = len(df_i)
+
+    # Notas Crédito
+    if notas_credito:
+        content = await _read_upload(notas_credito)
+        df_nc = leer_bytes(content, notas_credito.filename, tipo="notas_credito")
+        if df_nc.empty:
+            raise HTTPException(400, "No se encontraron datos válidos en el archivo de notas crédito")
+        diagnostico["notas_credito"] = _column_diagnostic("notas_credito", df_nc)
+        if diagnostico["notas_credito"]["faltantes"]:
+            missing = ", ".join(diagnostico["notas_credito"]["faltantes"])
+            raise HTTPException(400, f"Notas crédito sin columnas requeridas: {missing}")
+        df_nc = procesar_notas_credito(df_nc)
+        pending_data["notas_credito"] = df_nc
+        resultados["notas_credito"] = len(df_nc)
 
     for key, df in pending_data.items():
         set_df(x_session_id, key, df)
@@ -380,6 +396,21 @@ def resumen(x_session_id: str = Header(default="default-session")):
                              "pct": round(r["Ingreso"] / ing_max_lab * 100, 0)}
                             for _, r in top_lab_df.iterrows()]
 
+    # ── Devoluciones (Notas Crédito) ─────────────────────────────────────────
+    df_nc = get_df(x_session_id, "notas_credito")
+    devoluciones_resumen = None
+    if df_nc is not None and len(df_nc) > 0:
+        total_devuelto = float(df_nc["Total Neto"].sum())
+        n_notas = int(len(df_nc))
+        tasa_devolucion = round(total_devuelto / ing_total * 100, 2) if ing_total > 0 else 0
+        ingresos_netos = round(ing_total - total_devuelto, 0)
+        devoluciones_resumen = {
+            "total_devuelto": round(total_devuelto, 0),
+            "n_notas":        n_notas,
+            "tasa_pct":       tasa_devolucion,
+            "ingresos_netos": ingresos_netos,
+        }
+
     return {
         "periodo": {"inicio": fecha_ini, "fin": fecha_fin, "dias": dias_periodo},
         "kpis": {
@@ -399,11 +430,103 @@ def resumen(x_session_id: str = Header(default="default-session")):
             "atencion_15d":        productos_atencion_15d,
             "capital_quieto":      round(capital_quieto, 0),
         },
-        "tendencia":        tend,
-        "sedes":            sedes,
-        "top_productos":    top_productos,
-        "top_vendedores":   top_vendedores,
-        "top_laboratorios": top_laboratorios,
+        "devoluciones":      devoluciones_resumen,
+        "tendencia":         tend,
+        "sedes":             sedes,
+        "top_productos":     top_productos,
+        "top_vendedores":    top_vendedores,
+        "top_laboratorios":  top_laboratorios,
+    }
+
+
+# ── Notas Crédito / Devoluciones ─────────────────────────────────────────────
+
+@router.get("/notas-credito")
+def endpoint_notas_credito(x_session_id: str = Header(default="default-session")):
+    df_nc = get_df(x_session_id, "notas_credito")
+    df_v  = get_df(x_session_id, "ventas")
+    if df_nc is None:
+        raise HTTPException(404, "No hay datos de notas crédito cargados")
+
+    total_devuelto = float(df_nc["Total Neto"].sum())
+    n_notas        = int(len(df_nc))
+    promedio_nota  = round(total_devuelto / n_notas, 0) if n_notas > 0 else 0
+    total_saldo    = float(df_nc["Saldo"].sum()) if "Saldo" in df_nc.columns else 0
+
+    ing_bruto      = float(df_v["Ingreso"].sum()) if df_v is not None else 0
+    tasa_pct       = round(total_devuelto / ing_bruto * 100, 2) if ing_bruto > 0 else 0
+    ingresos_netos = round(ing_bruto - total_devuelto, 0)
+
+    # Tendencia semanal
+    tendencia = []
+    if "Fecha" in df_nc.columns and df_nc["Fecha"].notna().any():
+        s = df_nc.set_index("Fecha").resample("W")["Total Neto"].sum().reset_index()
+        tendencia = [{"fecha": str(r["Fecha"].date()), "total": round(r["Total Neto"], 0)}
+                     for _, r in s.iterrows()]
+
+    # Por sede
+    col_sede = "Punto Venta" if "Punto Venta" in df_nc.columns else None
+    por_sede = []
+    if col_sede:
+        sede_df = (df_nc.groupby(col_sede, as_index=False)
+                   .agg(total_devuelto=("Total Neto", "sum"), n_notas=("Total Neto", "count"))
+                   .sort_values("total_devuelto", ascending=False)
+                   .rename(columns={col_sede: "sede"}))
+        por_sede = json.loads(sede_df.to_json(orient="records"))
+
+    # Por vendedor
+    por_vendedor = []
+    if "Creada" in df_nc.columns:
+        vend_df = (df_nc.groupby("Creada", as_index=False)
+                   .agg(total_devuelto=("Total Neto", "sum"), n_notas=("Total Neto", "count"))
+                   .sort_values("total_devuelto", ascending=False)
+                   .rename(columns={"Creada": "vendedor"}))
+        por_vendedor = json.loads(vend_df.to_json(orient="records"))
+
+    # Por motivo
+    por_motivo = []
+    if "Motivo" in df_nc.columns:
+        mot_df = (df_nc.groupby("Motivo", as_index=False)
+                  .agg(total=("Total Neto", "sum"), n=("Total Neto", "count"))
+                  .sort_values("total", ascending=False))
+        por_motivo = json.loads(mot_df.to_json(orient="records"))
+
+    # Cruce con ventas: productos devueltos (por Factura)
+    top_productos_devueltos = []
+    if df_v is not None and "Factura" in df_nc.columns and "Factura" in df_v.columns:
+        nc_facts = df_nc[["Factura", "Total Neto"]].rename(columns={"Total Neto": "devuelto"})
+        cruce = df_v.merge(nc_facts, on="Factura", how="inner")
+        if len(cruce) > 0:
+            prod_dev = (cruce.groupby(["Referencia", "Descripcion"], as_index=False)
+                        .agg(unidades_devueltas=("Cant", "sum"),
+                             ingreso_devuelto=("devuelto", "sum"))
+                        .sort_values("ingreso_devuelto", ascending=False)
+                        .head(15))
+            prod_dev["nombre"] = prod_dev["Descripcion"].str[:35]
+            top_productos_devueltos = json.loads(prod_dev.to_json(orient="records"))
+
+    # Tabla detalle
+    cols_tabla = [c for c in ["Fecha", "NotaCredito", "Punto Venta", "Total Neto",
+                               "Creada", "Motivo", "Factura", "Observaciones", "Saldo"]
+                  if c in df_nc.columns]
+    tabla = _df_to_records(df_nc[cols_tabla].sort_values("Fecha", ascending=False), max_rows=300)
+
+    return {
+        "kpis": {
+            "total_devuelto":  round(total_devuelto, 0),
+            "n_notas":         n_notas,
+            "promedio_nota":   promedio_nota,
+            "tasa_pct":        tasa_pct,
+            "ingresos_brutos": round(ing_bruto, 0),
+            "ingresos_netos":  ingresos_netos,
+            "saldo_pendiente": round(total_saldo, 0),
+        },
+        "tendencia":               tendencia,
+        "por_sede":                por_sede,
+        "por_vendedor":            por_vendedor,
+        "por_motivo":              por_motivo,
+        "top_productos_devueltos": top_productos_devueltos,
+        "tabla":                   tabla,
     }
 
 

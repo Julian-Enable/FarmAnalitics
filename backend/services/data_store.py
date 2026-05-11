@@ -19,6 +19,7 @@ def _init_session(session_id: str):
                 "ventas": None,
                 "compras": None,
                 "inventario": None,
+                "notas_credito": None,
             },
             "last_accessed": time.time()
         }
@@ -48,7 +49,7 @@ def get_df(session_id: str, key: str) -> pd.DataFrame | None:
 
 def get_status(session_id: str) -> dict:
     if session_id not in _sessions:
-        return {"ventas": False, "compras": False, "inventario": False}
+        return {"ventas": False, "compras": False, "inventario": False, "notas_credito": False}
     _sessions[session_id]["last_accessed"] = time.time()
     data = _sessions[session_id]["data"]
     return {k: (v is not None and len(v) > 0) for k, v in data.items()}

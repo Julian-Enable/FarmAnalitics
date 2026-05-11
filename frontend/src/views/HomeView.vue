@@ -43,9 +43,10 @@
             <DollarSign size="18" color="#2563eb" />
           </div>
           <div class="cmd-kpi-body">
-            <span class="cmd-kpi-label">Ingresos Totales</span>
+            <span class="cmd-kpi-label">{{ data.devoluciones ? 'Ingresos Brutos' : 'Ingresos Totales' }}</span>
             <span class="cmd-kpi-value">{{ _store.fmt(data.kpis.ingresos) }}</span>
-            <span v-if="data.kpis.variacion_ing != null" class="cmd-kpi-delta" :class="data.kpis.variacion_ing >= 0 ? 'delta-up' : 'delta-down'">
+            <span v-if="data.devoluciones" class="cmd-kpi-sub" style="color: var(--green); font-weight: 600;">Neto: {{ _store.fmt(data.devoluciones.ingresos_netos) }}</span>
+            <span v-else-if="data.kpis.variacion_ing != null" class="cmd-kpi-delta" :class="data.kpis.variacion_ing >= 0 ? 'delta-up' : 'delta-down'">
               <TrendingUp v-if="data.kpis.variacion_ing >= 0" size="12" />
               <TrendingDown v-else size="12" />
               {{ Math.abs(data.kpis.variacion_ing) }}% vs primera mitad
@@ -61,6 +62,20 @@
             <span class="cmd-kpi-label">Utilidad Bruta</span>
             <span class="cmd-kpi-value">{{ data.kpis.utilidad != null ? _store.fmt(data.kpis.utilidad) : '—' }}</span>
             <span v-if="data.kpis.margen_pct != null" class="cmd-kpi-sub">Margen: {{ data.kpis.margen_pct }}%</span>
+          </div>
+        </div>
+
+        <div v-if="data.devoluciones" class="cmd-kpi-card" style="border: 1px solid var(--red-light); background: #fffcfc;">
+          <div class="cmd-kpi-icon-wrap" style="background: #fee2e2;">
+            <RotateCcw size="18" color="#ef4444" />
+          </div>
+          <div class="cmd-kpi-body">
+            <span class="cmd-kpi-label" style="color: var(--red);">Devoluciones (Notas Cr)</span>
+            <span class="cmd-kpi-value" style="color: var(--red);">{{ _store.fmt(data.devoluciones.total_devuelto) }}</span>
+            <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
+              <span class="cmd-kpi-sub" style="color: var(--red);">Tasa: {{ data.devoluciones.tasa_pct }}%</span>
+              <router-link to="/devoluciones" style="font-size:10px; color:var(--red); text-decoration:underline;">Ver detalle</router-link>
+            </div>
           </div>
         </div>
 
@@ -261,11 +276,8 @@ import { computed, onMounted } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
 import SectionTitle from '../components/ui/SectionTitle.vue'
 import LineChart from '../components/charts/LineChart.vue'
-import {
-  LayoutDashboard, DollarSign, TrendingUp, TrendingDown, Percent, Package,
-  Receipt, CreditCard, Activity, LineChart as LineChartIcon,
-  Store, Trophy, Users, Gem, OctagonX, Timer, AlertTriangle, Warehouse, Siren, FlaskConical
-} from 'lucide-vue-next'
+import { LayoutDashboard, TrendingUp, TrendingDown, DollarSign, Gem, CreditCard, Package, Receipt, Activity, Siren, OctagonX, Timer, AlertTriangle, Warehouse, Store, Trophy, Users, RotateCcw, FlaskConical } from 'lucide-vue-next'
+import { LineChart as LineChartIcon } from 'lucide-vue-next'
 
 const _store  = useDashboardStore()
 const data    = computed(() => _store.data.resumen)

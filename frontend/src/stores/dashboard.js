@@ -13,7 +13,7 @@ axios.interceptors.request.use(config => {
 })
 
 export const useDashboardStore = defineStore('dashboard', () => {
-  const status = reactive({ ventas: false, compras: false, inventario: false })
+  const status = reactive({ ventas: false, compras: false, inventario: false, notas_credito: false })
   const uploading = ref(false)
   const exporting = ref(false)
   const uploadError = ref(null)
@@ -35,6 +35,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     inventario: null,
     compras: null,
     sedes: null,
+    devoluciones: null,
   })
 
   const loading = reactive({
@@ -44,6 +45,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     inventario: false,
     compras: false,
     sedes: false,
+    devoluciones: false,
   })
 
   const errors = reactive({
@@ -53,6 +55,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     inventario: null,
     compras: null,
     sedes: null,
+    devoluciones: null,
   })
 
   function fmt(n) {
@@ -214,6 +217,17 @@ export const useDashboardStore = defineStore('dashboard', () => {
     finally { loading.sedes = false }
   }
 
+  async function fetchDevoluciones() {
+    if (!status.notas_credito) return
+    loading.devoluciones = true
+    clearModuleError('devoluciones')
+    try {
+      const { data: d } = await axios.get('/api/notas-credito')
+      data.devoluciones = d
+    } catch (e) { setModuleError('devoluciones', e, 'No se pudo cargar devoluciones') }
+    finally { loading.devoluciones = false }
+  }
+
   async function exportFullReport() {
     exporting.value = true
     lastError.value = null
@@ -224,6 +238,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
       if (status.inventario && !data.inventario) await fetchInventario()
       if (status.ventas && status.compras && status.inventario && !data.compras) await fetchCompras()
       if (status.ventas && !data.sedes) await fetchSedes()
+      if (status.notas_credito && !data.devoluciones) await fetchDevoluciones()
 
       exportWorkbookAsExcel([
         {
@@ -323,6 +338,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
     fmt, fmtN,
     uploadFiles, checkStatus, resetSession, exportFullReport,
     fetchResumen, fetchVentas, fetchRentabilidad,
-    fetchInventario, fetchCompras, fetchSedes,
+    fetchInventario, fetchCompras, fetchSedes, fetchDevoluciones,
   }
 })

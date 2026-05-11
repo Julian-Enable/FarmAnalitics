@@ -47,30 +47,82 @@ def procesar_inventario(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def leer_bytes(content: bytes, filename: str) -> pd.DataFrame:
+# ── Palabras clave para categorizar motivos de devolución ────────────────────
+_MOTIVO_RULES = [
+    ("Error de Facturación",   ["error de facturaci", "error factur"]),
+    ("Error del Vendedor",     ["error del vendedor", "error vendedor"]),
+    ("Solicitud del Cliente",  ["error del cliente", "error cliente", "cliente pide",
+                                "cliente no", "cliente realiza", "cliente hizo", "cliente quiere"]),
+    ("Cambio de Producto",     ["cambio", "cambi"]),
+    ("Problema de Entrega",    ["domicilio", "entrega", "demora"]),
+]
+
+def _categorizar_motivo(obs: str) -> str:
+    if not isinstance(obs, str) or not obs.strip():
+        return "Sin observación"
+    obs_l = obs.lower()
+    for categoria, keywords in _MOTIVO_RULES:
+        if any(k in obs_l for k in keywords):
+            return categoria
+    return "Otro"
+
+
+def procesar_notas_credito(df: pd.DataFrame) -> pd.DataFrame:
+    """Limpia y enriquece el DataFrame de Notas Crédito."""
+    df = df.copy()
+    df["Fecha"]    = pd.to_datetime(df.get("Fecha"),    errors="coerce")
+    df["Total"]    = pd.to_numeric(df.get("Total"),     errors="coerce").fillna(0)
+    df["SubTotal"] = pd.to_numeric(df.get("SubTotal"),  errors="coerce").fillna(0)
+    df["IVA"]      = pd.to_numeric(df.get("IVA"),       errors="coerce").fillna(0)
+    df["Saldo"]    = pd.to_numeric(df.get("Saldo"),     errors="coerce").fillna(0)
+    df["Total Neto"] = df["Total"] - df["IVA"]
+    if "Observaciones" in df.columns:
+        df["Motivo"] = df["Observaciones"].apply(_categorizar_motivo)
+    else:
+        df["Motivo"] = "Sin observación"
+    # Normalizar nombre de columna de sede para que coincida con Ventas
+    if "PuntoVenta" in df.columns and "Punto Venta" not in df.columns:
+        df = df.rename(columns={"PuntoVenta": "Punto Venta"})
+    return df
+
+
+def leer_bytes(content: bytes, filename: str, tipo: str = "auto") -> pd.DataFrame:
     """Lee un archivo desde bytes (upload). Si es Excel, lee todas las hojas de datos."""
     import io
     if filename.lower().endswith(".csv"):
         return pd.read_csv(io.BytesIO(content))
-    
+
     # Es un archivo Excel (xlsx, xls)
     xls_dict = pd.read_excel(io.BytesIO(content), sheet_name=None)
-    
+
+    # ── Notas Crédito: identificar por columna NotaCredito ───────────────────
+    if tipo == "notas_credito":
+        hojas_validas = []
+        for sheet_name, df in xls_dict.items():
+            if df.empty:
+                continue
+            columnas_upper = [str(c).upper() for c in df.columns]
+            if "NOTACREDITO" in columnas_upper or "NOTA CREDITO" in columnas_upper:
+                hojas_validas.append(df.copy())
+        if not hojas_validas:
+            # Si no encontró por NotaCredito, intentar por columnas clave
+            for sheet_name, df in xls_dict.items():
+                if not df.empty and "Total" in df.columns and "Fecha" in df.columns:
+                    hojas_validas.append(df.copy())
+        if not hojas_validas:
+            return pd.DataFrame()
+        return pd.concat(hojas_validas, ignore_index=True)
+
+    # ── Ventas / Compras / Inventario: identificar por columna Referencia ────
     hojas_validas = []
     for sheet_name, df in xls_dict.items():
         if df.empty:
             continue
-            
-        # Revisamos si la hoja tiene columnas que parezcan de nuestros datos (Ventas, Compras, Inventario)
         columnas_upper = [str(c).upper() for c in df.columns]
-        
-        # Criterio: Si tiene "REFERENCIA", "CANT", "TOTAL", "FECHA" o similares clave.
         if "REFERENCIA" in columnas_upper:
-            # Agregamos una columna indicando el origen del mes o pestaña (opcional pero útil para debug)
-            df_cleaned = df.copy()
-            hojas_validas.append(df_cleaned)
+            hojas_validas.append(df.copy())
 
     if not hojas_validas:
         return pd.DataFrame()
-        
+
     return pd.concat(hojas_validas, ignore_index=True)
