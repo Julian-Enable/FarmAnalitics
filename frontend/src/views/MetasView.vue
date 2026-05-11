@@ -19,7 +19,7 @@
     </ModuleInfo>
 
     <!-- Controls -->
-    <div v-if="data" class="filters-bar" style="justify-content: flex-start; gap: 24px;">
+    <div v-if="data || store.status.ventas" class="filters-bar" style="justify-content: flex-start; gap: 24px; flex-wrap: wrap;">
       <div class="filter-group">
         <label>Nivel de Exigencia (Agresividad)</label>
         <div style="display: flex; gap: 10px; margin-top: 4px;">
@@ -27,6 +27,15 @@
           <button class="btn-agresividad" :class="{ active: agresividad === 'normal' }" @click="setAgresividad('normal')">Normal (+5%)</button>
           <button class="btn-agresividad" :class="{ active: agresividad === 'agresivo' }" @click="setAgresividad('agresivo')">Agresivo (+10%)</button>
         </div>
+      </div>
+      
+      <div class="filter-group">
+        <label>Proyectar Desde</label>
+        <input type="date" v-model="fechaIni" @change="applyFilters" style="margin-top: 4px;" />
+      </div>
+      <div class="filter-group">
+        <label>Proyectar Hasta</label>
+        <input type="date" v-model="fechaFin" @change="applyFilters" style="margin-top: 4px;" />
       </div>
     </div>
 
@@ -120,18 +129,25 @@ import { Target, TrendingUp, DollarSign, Store } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const agresividad = ref('normal')
+const fechaIni = ref('')
+const fechaFin = ref('')
+
 const loading = computed(() => store.loading.metas)
 const data = computed(() => store.data.metas)
 
 onMounted(async () => {
   if (store.status.ventas && !data.value) {
-    await store.fetchMetas(agresividad.value)
+    await store.fetchMetas(agresividad.value, fechaIni.value || null, fechaFin.value || null)
   }
 })
 
 async function setAgresividad(val) {
   agresividad.value = val
-  await store.fetchMetas(val)
+  await applyFilters()
+}
+
+async function applyFilters() {
+  await store.fetchMetas(agresividad.value, fechaIni.value || null, fechaFin.value || null)
 }
 </script>
 

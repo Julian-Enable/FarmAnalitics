@@ -232,12 +232,14 @@ export const useDashboardStore = defineStore('dashboard', () => {
     finally { loading.devoluciones = false }
   }
 
-  async function fetchMetas(agresividad = 'normal') {
+  async function fetchMetas(agresividad = 'normal', fecha_ini = null, fecha_fin = null) {
     if (!status.ventas) return
     loading.metas = true
     clearModuleError('metas')
     try {
-      const { data: d } = await axios.get('/api/metas', { params: { agresividad } })
+      const { data: d } = await axios.get('/api/metas', { 
+        params: { agresividad, fecha_ini, fecha_fin } 
+      })
       data.metas = d
     } catch (e) { setModuleError('metas', e, 'No se pudo calcular las metas') }
     finally { loading.metas = false }

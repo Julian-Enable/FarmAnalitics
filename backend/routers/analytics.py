@@ -623,6 +623,8 @@ def ventas(sede: str = "Todas", nivel: str = "Todos",
 @router.get("/metas")
 def proyeccion_metas(
     agresividad: str = "normal",
+    fecha_ini: str = None,
+    fecha_fin: str = None,
     x_session_id: str = Header(default="default-session")
 ):
     df = get_df(x_session_id, "ventas")
@@ -649,22 +651,47 @@ def proyeccion_metas(
     fechas_m1 = set(fechas_unicas[:mitad_idx])
     fechas_m2 = set(fechas_unicas[mitad_idx:])
 
-    # Calcular exactitud del mes actual
-    fecha_max = df["Fecha"].max()
-    year = fecha_max.year
-    month = fecha_max.month
-    _, dias_en_mes = calendar.monthrange(year, month)
+    # Determinar el rango de proyección
+    fecha_max_data = df["Fecha"].max()
+    year = fecha_max_data.year
+    month = fecha_max_data.month
     
-    # Calcular festivos y domingos en Colombia para este mes
-    co_holidays = holidays.CO(years=year)
-    domingos_festivos = 0
-    habiles = 0
-    for day in range(1, dias_en_mes + 1):
-        dt = date(year, month, day)
-        if dt.weekday() == 6 or dt in co_holidays:
-            domingos_festivos += 1
-        else:
-            habiles += 1
+    if fecha_ini and fecha_fin:
+        try:
+            d_ini = datetime.strptime(fecha_ini, "%Y-%m-%d").date()
+            d_fin = datetime.strptime(fecha_fin, "%Y-%m-%d").date()
+            dias_totales_proy = (d_fin - d_ini).days + 1
+            if dias_totales_proy <= 0:
+                raise ValueError("Rango inválido")
+            
+            # Calcular festivos y domingos en el rango dado
+            co_holidays = holidays.CO(years=[d_ini.year, d_fin.year])
+            domingos_festivos = 0
+            habiles = 0
+            curr_date = d_ini
+            while curr_date <= d_fin:
+                if curr_date.weekday() == 6 or curr_date in co_holidays:
+                    domingos_festivos += 1
+                else:
+                    habiles += 1
+                curr_date += timedelta(days=1)
+                
+        except ValueError:
+            raise HTTPException(400, "Formato de fecha inválido o rango erróneo")
+    else:
+        # Calcular exactitud del mes actual por defecto
+        _, dias_totales_proy = calendar.monthrange(year, month)
+        
+        # Calcular festivos y domingos en Colombia para este mes
+        co_holidays = holidays.CO(years=year)
+        domingos_festivos = 0
+        habiles = 0
+        for day in range(1, dias_totales_proy + 1):
+            dt = date(year, month, day)
+            if dt.weekday() == 6 or dt in co_holidays:
+                domingos_festivos += 1
+            else:
+                habiles += 1
 
     col_sede = "Punto Venta" if "Punto Venta" in df.columns else None
     col_vend = "Creada" if "Creada" in df.columns else None
@@ -690,15 +717,15 @@ def proyeccion_metas(
         tendencia = idp_m2 / idp_m1 if idp_m1 > 0 else 1.0
         tendencia_capeada = min(max(tendencia, 0.9), 1.15)
         
-        # Proyección base a días reales del mes
-        proyeccion_base = idp_sede * dias_en_mes * tendencia_capeada
+        # Proyección base a días objetivo
+        proyeccion_base = idp_sede * dias_totales_proy * tendencia_capeada
         
         # Asignación de meta según tendencia y agresividad
         if tendencia > 1.05:
             meta_sede = proyeccion_base * factor_crecimiento
         elif tendencia < 0.95:
             # Meta de recuperación
-            meta_sede = (idp_sede * dias_en_mes) * (factor_crecimiento + 0.02)
+            meta_sede = (idp_sede * dias_totales_proy) * (factor_crecimiento + 0.02)
         else:
             meta_sede = proyeccion_base * factor_crecimiento
             
@@ -760,7 +787,7 @@ def proyeccion_metas(
             "ingreso_actual_total": sum(s["ingreso_actual"] for s in sedes_data),
             "meta_total": sum(s["meta_sugerida"] for s in sedes_data),
             "proyeccion_total": sum(s["proyeccion_base"] for s in sedes_data),
-            "dias_mes": dias_en_mes,
+            "dias_mes": dias_totales_proy,
             "dias_habiles": habiles,
             "dias_festivos": domingos_festivos
         },
