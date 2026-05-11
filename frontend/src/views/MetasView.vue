@@ -44,7 +44,7 @@
     </div>
     
     <div v-else-if="data" class="kpi-grid kpi-grid-3">
-      <KpiCard :icon="DollarSign" label="Ingreso Actual (Periodo)" :value="store.fmt(data.resumen.ingreso_actual_total)" />
+      <KpiCard :icon="DollarSign" label="Ingreso Base (Histórico)" :value="store.fmt(data.resumen.ingreso_actual_total)" />
       <KpiCard :icon="TrendingUp" :label="'Proyección Mes (' + data.resumen.dias_mes + 'd)'" :value="store.fmt(data.resumen.proyeccion_total)">
         <template #sub>
           <div style="font-size: 11px; color: var(--fg-muted); display: flex; flex-direction: column; gap: 2px; margin-top: 2px;">
