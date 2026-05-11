@@ -14,7 +14,7 @@
       <ul style="margin-left: 20px; margin-top: 8px;">
         <li><strong>Proyección Base:</strong> Ritmo de venta actual proyectado a 30 días, ajustado por la tendencia (si la sede aceleró o frenó en la segunda quincena).</li>
         <li><strong>Meta Sugerida:</strong> La proyección base multiplicada por un factor de agresividad, garantizando un piso de crecimiento para sedes que vienen en caída.</li>
-        <li><strong>Distribución a Vendedores:</strong> No se parte por igual. Se asigna un 70% por su aporte histórico a la sede y un 30% premiando a los que tienen un mejor Ticket Promedio.</li>
+        <li><strong>Distribución a Vendedores:</strong> Se reparte la meta global de la sede en partes exactamente iguales entre todos los vendedores base de la farmacia. Se excluyen automáticamente los vendedores temporales o reemplazos (aquellos con menos de 5 días trabajados y menos del 2% de aporte histórico).</li>
       </ul>
     </ModuleInfo>
 

@@ -750,39 +750,39 @@ def proyeccion_metas(
         ticket_sede = ingresos_sede / max(df_sede["Factura"].nunique(), 1)
         
         vendedores = []
-        tot_peso = 0
         vends_raw = []
         
         for vend, df_v in df_sede.groupby(col_vend):
             ingreso_v = df_v["Ingreso"].sum()
-            ticket_v = ingreso_v / max(df_v["Factura"].nunique(), 1)
             aporte_v = ingreso_v / ingresos_sede if ingresos_sede > 0 else 0
+            dias_v = df_v["Fecha_Date"].nunique()
             
-            # Eficiencia: ticket del vendedor vs ticket de la sede
-            eficiencia = ticket_v / ticket_sede if ticket_sede > 0 else 1.0
-            
-            # Peso crudo (70% aporte histórico, 30% eficiencia sobre su aporte)
-            peso_crudo = (0.7 * aporte_v) + (0.3 * eficiencia * aporte_v)
+            # Filtro para excluir reemplazos temporales:
+            # Si un vendedor aporta menos del 2% del total de la sede Y trabajó menos de 5 días en el mes, se considera temporal/reemplazo.
+            if aporte_v < 0.02 and dias_v < 5:
+                continue
+                
+            ticket_v = ingreso_v / max(df_v["Factura"].nunique(), 1)
             
             vends_raw.append({
                 "nombre": vend,
                 "ingreso_actual": float(ingreso_v),
                 "ticket_promedio": float(ticket_v),
-                "peso_crudo": peso_crudo,
                 "aporte": round(aporte_v * 100, 1)
             })
-            tot_peso += peso_crudo
             
-        # Normalizar pesos a 100%
+        # Distribución equitativa: peso igual para todos los vendedores fijos
+        num_vendedores = len(vends_raw)
+        peso_igual = 1.0 / num_vendedores if num_vendedores > 0 else 0
+        
         for v in vends_raw:
-            peso_final = v["peso_crudo"] / tot_peso if tot_peso > 0 else 0
-            meta_v = meta_sede * peso_final
+            meta_v = meta_sede * peso_igual
             vendedores.append({
                 "nombre": v["nombre"],
                 "ingreso_actual": v["ingreso_actual"],
                 "ticket_promedio": v["ticket_promedio"],
                 "aporte_historico": v["aporte"],
-                "peso_distribucion": round(peso_final * 100, 1),
+                "peso_distribucion": round(peso_igual * 100, 1),
                 "meta": float(meta_v)
             })
             
