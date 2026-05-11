@@ -72,7 +72,7 @@
     </div>
 
     <div v-if="data" class="metas-container">
-      <div v-for="sede in data.sedes" :key="sede.sede" class="card" style="margin-bottom: 20px;">
+      <div v-for="sede in processedSedes" :key="sede.sede" class="card" style="margin-bottom: 20px;">
         <div class="sede-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 16px;">
           <div>
             <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;">
@@ -101,20 +101,31 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="v in sede.vendedores" :key="v.nombre">
+            <tr v-for="v in sede.vendedores_calc" :key="v.nombre">
               <td style="font-weight: 500;">{{ v.nombre }}</td>
               <td>{{ store.fmt(v.ingreso_actual) }}</td>
               <td>{{ store.fmt(v.ticket_promedio) }}</td>
               <td>{{ v.aporte_historico }}%</td>
               <td>
                 <div style="display: flex; align-items: center; gap: 6px;">
-                  <div style="width: 50px; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
-                    <div :style="{ width: v.peso_distribucion + '%', background: 'var(--accent)', height: '100%' }"></div>
-                  </div>
-                  {{ v.peso_distribucion }}%
+                  <input 
+                    type="number" 
+                    min="0" 
+                    max="100" 
+                    :value="v.peso_final.toFixed(1)"
+                    @blur="updateWeight(sede.sede, v.nombre, $event.target.value)"
+                    @keyup.enter="updateWeight(sede.sede, v.nombre, $event.target.value)"
+                    style="width: 50px; padding: 2px 4px; border: 1px solid var(--border); border-radius: 4px; text-align: center; font-size: 12px;"
+                  /> <span style="font-size: 12px; color: var(--fg-muted);">%</span>
+                  <button v-if="v.isLocked" @click="clearWeight(sede.sede, v.nombre)" title="Restablecer (Equitativo)" style="background: none; border: none; cursor: pointer; color: var(--red); padding: 0; display: flex;">
+                    <RotateCcw size="14" />
+                  </button>
+                </div>
+                <div style="width: 60px; height: 4px; background: #e2e8f0; border-radius: 2px; overflow: hidden; margin-top: 4px;">
+                  <div :style="{ width: v.peso_final + '%', background: v.isLocked ? '#8b5cf6' : 'var(--accent)', height: '100%' }"></div>
                 </div>
               </td>
-              <td style="text-align: right; font-weight: 700; color: var(--accent);">{{ store.fmt(v.meta) }}</td>
+              <td style="text-align: right; font-weight: 700; color: var(--accent);">{{ store.fmt(v.meta_final) }}</td>
             </tr>
           </tbody>
         </table>
@@ -128,15 +139,58 @@ import { ref, computed, onMounted } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
 import KpiCard from '../components/ui/KpiCard.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
-import { Target, TrendingUp, DollarSign, Store } from 'lucide-vue-next'
+import { Target, TrendingUp, DollarSign, Store, RotateCcw } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const agresividad = ref('normal')
 const fechaIni = ref('')
 const fechaFin = ref('')
+const userOverrides = ref({}) // { 'Sede': { 'Vendedor': 30 } }
 
 const loading = computed(() => store.loading.metas)
 const data = computed(() => store.data.metas)
+
+// Computed property que inyecta las asignaciones personalizadas de peso
+const processedSedes = computed(() => {
+  if (!data.value || !data.value.sedes) return []
+  
+  return data.value.sedes.map(sede => {
+    const overrides = userOverrides.value[sede.sede] || {}
+    let totalLockedWeight = 0
+    let lockedCount = 0
+    
+    // Identificar pesos bloqueados
+    sede.vendedores.forEach(v => {
+      if (overrides[v.nombre] !== undefined) {
+        totalLockedWeight += overrides[v.nombre]
+        lockedCount++
+      }
+    })
+    
+    const remainingWeight = Math.max(0, 100 - totalLockedWeight)
+    const unlockedCount = Math.max(1, sede.vendedores.length - lockedCount)
+    const equalUnlockedWeight = remainingWeight / unlockedCount
+    
+    // Asignar pesos finales
+    const newVends = sede.vendedores.map(v => {
+      const isLocked = overrides[v.nombre] !== undefined
+      const finalWeight = isLocked ? overrides[v.nombre] : equalUnlockedWeight
+      const finalMeta = (sede.meta_sugerida * finalWeight) / 100
+      
+      return {
+        ...v,
+        isLocked,
+        peso_final: finalWeight,
+        meta_final: finalMeta
+      }
+    })
+    
+    return {
+      ...sede,
+      vendedores_calc: newVends
+    }
+  })
+})
 
 onMounted(async () => {
   if (store.status.ventas && !data.value) {
@@ -151,6 +205,22 @@ async function setAgresividad(val) {
 
 async function applyFilters() {
   await store.fetchMetas(agresividad.value, fechaIni.value || null, fechaFin.value || null)
+}
+
+function updateWeight(sedeName, vendName, val) {
+  const num = parseFloat(val)
+  if (isNaN(num) || num < 0 || num > 100) return
+  
+  if (!userOverrides.value[sedeName]) {
+    userOverrides.value[sedeName] = {}
+  }
+  userOverrides.value[sedeName][vendName] = num
+}
+
+function clearWeight(sedeName, vendName) {
+  if (userOverrides.value[sedeName]) {
+    delete userOverrides.value[sedeName][vendName]
+  }
 }
 </script>
 
