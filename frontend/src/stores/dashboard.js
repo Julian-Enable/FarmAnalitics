@@ -13,7 +13,7 @@ axios.interceptors.request.use(config => {
 })
 
 export const useDashboardStore = defineStore('dashboard', () => {
-  const status = reactive({ ventas: false, compras: false, inventario: false, notas_credito: false })
+  const status = reactive({ ventas: false, compras: false, inventario: false, notas_credito: false, metas: false })
   const uploading = ref(false)
   const exporting = ref(false)
   const uploadError = ref(null)
@@ -36,6 +36,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     compras: null,
     sedes: null,
     devoluciones: null,
+    metas: null,
   })
 
   const loading = reactive({
@@ -46,6 +47,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     compras: false,
     sedes: false,
     devoluciones: false,
+    metas: false,
   })
 
   const errors = reactive({
@@ -56,6 +58,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     compras: null,
     sedes: null,
     devoluciones: null,
+    metas: null,
   })
 
   function fmt(n) {
@@ -229,6 +232,17 @@ export const useDashboardStore = defineStore('dashboard', () => {
     finally { loading.devoluciones = false }
   }
 
+  async function fetchMetas(agresividad = 'normal') {
+    if (!status.ventas) return
+    loading.metas = true
+    clearModuleError('metas')
+    try {
+      const { data: d } = await axios.get('/api/metas', { params: { agresividad } })
+      data.metas = d
+    } catch (e) { setModuleError('metas', e, 'No se pudo calcular las metas') }
+    finally { loading.metas = false }
+  }
+
   async function exportFullReport() {
     exporting.value = true
     lastError.value = null
@@ -339,6 +353,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
     fmt, fmtN,
     uploadFiles, checkStatus, resetSession, exportFullReport,
     fetchResumen, fetchVentas, fetchRentabilidad,
-    fetchInventario, fetchCompras, fetchSedes, fetchDevoluciones,
+    fetchInventario, fetchCompras, fetchSedes, fetchDevoluciones, fetchMetas,
   }
 })

@@ -112,7 +112,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
 import KpiCard from '../components/ui/KpiCard.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
@@ -120,32 +120,18 @@ import { Target, TrendingUp, DollarSign, Store } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const agresividad = ref('normal')
-const loading = ref(false)
-const data = ref(null)
+const loading = computed(() => store.loading.metas)
+const data = computed(() => store.data.metas)
 
 onMounted(async () => {
-  if (store.status.ventas) {
-    await fetchMetas()
+  if (store.status.ventas && !data.value) {
+    await store.fetchMetas(agresividad.value)
   }
 })
 
 async function setAgresividad(val) {
   agresividad.value = val
-  await fetchMetas()
-}
-
-async function fetchMetas() {
-  loading.value = true
-  try {
-    const res = await window.axios.get('/api/metas', {
-      params: { agresividad: agresividad.value }
-    })
-    data.value = res.data
-  } catch (e) {
-    console.error(e)
-  } finally {
-    loading.value = false
-  }
+  await store.fetchMetas(val)
 }
 </script>
 
