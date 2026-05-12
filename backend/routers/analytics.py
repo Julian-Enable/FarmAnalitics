@@ -271,11 +271,14 @@ def resumen(
     fecha_fin: str = None,
     x_session_id: str = Header(default="default-session")
 ):
+    req_fecha_ini = fecha_ini
+    req_fecha_fin = fecha_fin
+
     df_v = get_df(x_session_id, "ventas")
     df_i = get_df(x_session_id, "inventario")
     if df_v is None:
         raise HTTPException(404, "No hay datos de ventas cargados")
-    df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin)
+    df_v = _apply_date_filter(df_v, "Fecha", req_fecha_ini, req_fecha_fin)
 
     ing_total  = float(df_v["Ingreso"].sum())
     und_total  = int(df_v["Cant"].sum())
@@ -283,8 +286,8 @@ def resumen(
     ticket     = ing_total / n_fact if n_fact > 0 else 0
 
     # Período analizado
-    fecha_ini = str(df_v["Fecha"].min().date()) if df_v["Fecha"].notna().any() else None
-    fecha_fin = str(df_v["Fecha"].max().date()) if df_v["Fecha"].notna().any() else None
+    periodo_ini = str(df_v["Fecha"].min().date()) if df_v["Fecha"].notna().any() else None
+    periodo_fin = str(df_v["Fecha"].max().date()) if df_v["Fecha"].notna().any() else None
     max_fecha = df_v["Fecha"].max()
     min_fecha = df_v["Fecha"].min()
     dias_periodo = _inclusive_days(min_fecha, max_fecha)
@@ -410,7 +413,7 @@ def resumen(
 
     # ── Devoluciones (Notas Crédito) ─────────────────────────────────────────
     df_nc = get_df(x_session_id, "notas_credito")
-    df_nc = _apply_date_filter(df_nc, "Fecha", fecha_ini, fecha_fin) if df_nc is not None else None
+    df_nc = _apply_date_filter(df_nc, "Fecha", req_fecha_ini, req_fecha_fin) if df_nc is not None else None
     devoluciones_resumen = None
     if df_nc is not None and len(df_nc) > 0:
         total_devuelto = float(df_nc["Total Neto"].sum())
@@ -425,7 +428,7 @@ def resumen(
         }
 
     return {
-        "periodo": {"inicio": fecha_ini, "fin": fecha_fin, "dias": dias_periodo},
+        "periodo": {"inicio": periodo_ini, "fin": periodo_fin, "dias": dias_periodo},
         "kpis": {
             "ingresos":        round(ing_total, 0),
             "unidades":        und_total,
