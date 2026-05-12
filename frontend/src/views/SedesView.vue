@@ -48,7 +48,7 @@
     <div v-else class="empty-state">
       <div class="empty-icon"><Store size="48" color="var(--border)" /></div>
       <h3>Faltan datos</h3>
-      <p>Sube archivos de **Ventas** para comparar el rendimiento de las sedes.</p>
+      <p>Sube archivos de <strong>Ventas</strong> para comparar el rendimiento de las sedes.</p>
     </div>
 
     <div v-if="data" class="grid-2">

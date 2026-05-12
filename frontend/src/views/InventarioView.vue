@@ -68,7 +68,7 @@
     <div v-else class="empty-state">
       <div class="empty-icon"><PackageOpen size="48" color="var(--border)" /></div>
       <h3>Faltan datos</h3>
-      <p>Sube el archivo de **Inventario** y **Ventas** para calcular la rotación cruzada.</p>
+      <p>Sube el archivo de <strong>Inventario</strong> y <strong>Ventas</strong> para calcular la rotación cruzada.</p>
     </div>
 
     <div v-if="data" class="grid-2">

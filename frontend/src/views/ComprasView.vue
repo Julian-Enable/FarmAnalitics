@@ -30,7 +30,7 @@
     <div v-else class="empty-state">
       <div class="empty-icon"><Scale size="48" color="var(--border)" /></div>
       <h3>Faltan datos</h3>
-      <p>Sube archivos de **Inventario, Compras y Ventas** para ejecutar la conciliación matemática.</p>
+      <p>Sube archivos de <strong>Inventario, Compras y Ventas</strong> para ejecutar la conciliación matemática.</p>
     </div>
 
     <!-- Filtros -->

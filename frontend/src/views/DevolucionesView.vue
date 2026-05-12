@@ -46,7 +46,7 @@
     <div v-else class="empty-state">
       <div class="empty-icon"><RotateCcw size="48" color="var(--border)" /></div>
       <h3>Faltan datos</h3>
-      <p>Sube el archivo de **Notas Crédito** (y **Ventas**) para habilitar este análisis.</p>
+      <p>Sube el archivo de <strong>Notas Crédito</strong> (y <strong>Ventas</strong>) para habilitar este análisis.</p>
     </div>
 
     <div v-if="data" class="grid-2">
