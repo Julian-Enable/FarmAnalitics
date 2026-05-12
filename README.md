@@ -5,7 +5,7 @@ Aplicacion principal:
 - Backend: FastAPI en `backend/`
 - Frontend: Vue/Vite en `frontend/`
 
-La app Streamlit de `app.py` queda como version legado/local para referencia. Para despliegue en Railway y Vercel usar FastAPI + Vue.
+`app.py` es una version Streamlit de legado para referencia local. El flujo activo de desarrollo y despliegue usa FastAPI + Vue.
 
 ## Backend
 
@@ -21,4 +21,4 @@ npm install
 npm run dev
 ```
 
-En Vercel configurar `VITE_API_URL` con la URL publica del backend en Railway.
+En Vercel configura `VITE_API_URL` con la URL publica del backend en Railway.

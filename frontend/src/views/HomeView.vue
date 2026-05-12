@@ -1,13 +1,29 @@
 <template>
   <div>
 
-    <!-- ── Encabezado de período ───────────────────────────────── -->
+    <!-- Encabezado de periodo -->
     <div class="cmd-header">
       <div class="cmd-header-left">
         <div class="cmd-title-row">
           <LayoutDashboard size="22" />
           <h2>Centro de Comando</h2>
         </div>
+        <p v-if="data?.periodo?.inicio" class="cmd-period">
+          Periodo analizado:
+          <strong>{{ formatFecha(data.periodo.inicio) }}</strong>
+          a
+          <strong>{{ formatFecha(data.periodo.fin) }}</strong>
+          <span class="cmd-period-badge">{{ data.periodo.dias }} dias</span>
+        </p>
+        <p v-else class="cmd-period">Sube tus archivos para activar el analisis</p>
+      </div>
+      <div class="cmd-header-right" v-if="data">
+        <div class="cmd-health-score" :class="healthClass">
+          <span class="health-label">Salud del Negocio</span>
+          <span class="health-value">{{ healthScore }}</span>
+        </div>
+      </div>
+    </div>
 
     <div v-if="_store.status.ventas" class="filters-bar" style="margin-bottom: 16px;">
       <div class="filter-group">
@@ -19,24 +35,8 @@
         <input type="date" v-model="filters.fecha_fin" @change="applyFilters" />
       </div>
     </div>
-        <p v-if="data?.periodo?.inicio" class="cmd-period">
-          Período analizado:
-          <strong>{{ formatFecha(data.periodo.inicio) }}</strong>
-          →
-          <strong>{{ formatFecha(data.periodo.fin) }}</strong>
-          <span class="cmd-period-badge">{{ data.periodo.dias }} días</span>
-        </p>
-        <p v-else class="cmd-period">Sube tus archivos para activar el análisis</p>
-      </div>
-      <div class="cmd-header-right" v-if="data">
-        <div class="cmd-health-score" :class="healthClass">
-          <span class="health-label">Salud del Negocio</span>
-          <span class="health-value">{{ healthScore }}</span>
-        </div>
-      </div>
-    </div>
 
-    <!-- ── Skeleton ──────────────────────────────────────────── -->
+    <!-- Skeleton ──────────────────────────────────────────── -->
     <div v-if="loading">
       <div class="kpi-grid kpi-grid-4" style="margin-bottom: 20px;">
         <div v-for="i in 6" :key="i" class="card skeleton" style="height: 90px;"></div>

@@ -1,7 +1,5 @@
 # =============================================================================
-# app.py — Entry Point del Dashboard Farmacéutico
-# Este archivo solo configura la página, carga datos y enruta a las pestañas.
-# La lógica de cada análisis vive en tabs/tab_*.py
+# app.py - dashboard Streamlit legado
 # =============================================================================
 import streamlit as st
 from styles import get_css
@@ -14,22 +12,15 @@ from utils import (
 from tabs import tab_resumen, tab_ventas, tab_rentabilidad
 from tabs import tab_inventario, tab_compras, tab_sedes
 
-# ── Configuración de página ──────────────────────────────────────────────────
-st.set_page_config(page_title="Dashboard Farmacéutico", page_icon="💊", layout="wide")
-
-# ── Inyectar CSS del Design System ───────────────────────────────────────────
+st.set_page_config(page_title="Dashboard Farmaceutico (Legado)", page_icon="??", layout="wide")
 st.markdown(get_css(), unsafe_allow_html=True)
 
-
-# =============================================================================
-# SIDEBAR — CARGA DE ARCHIVOS
-# =============================================================================
 with st.sidebar:
-    st.markdown("## 💊 Dashboard Farma")
-    st.caption("Sube tus archivos del POS para ver el análisis.")
+    st.markdown("## ?? Dashboard Farma")
+    st.caption("Modo legado local. El despliegue activo usa FastAPI + Vue.")
     st.divider()
 
-    st.markdown("#### 📈 Ventas")
+    st.markdown("#### ?? Ventas")
     arch_ventas = st.file_uploader(
         "Uno o varios archivos de ventas",
         type=["csv", "xlsx", "xls"],
@@ -37,7 +28,7 @@ with st.sidebar:
         key="ventas",
     )
 
-    st.markdown("#### 🛒 Compras")
+    st.markdown("#### ?? Compras")
     arch_compras = st.file_uploader(
         "Uno o varios archivos de compras",
         type=["csv", "xlsx", "xls"],
@@ -45,20 +36,15 @@ with st.sidebar:
         key="compras",
     )
 
-    st.markdown("#### 📦 Inventario")
+    st.markdown("#### ?? Inventario")
     arch_inv = st.file_uploader(
         "Archivo maestro de inventario",
         type=["csv", "xlsx", "xls"],
         key="inv",
     )
 
-
-# =============================================================================
-# PROCESAMIENTO DE DATOS
-# =============================================================================
 df_v = df_c = df_i = None
 
-# ── Ventas ───────────────────────────────────────────────────────────────────
 if arch_ventas:
     df_v = concatenar(arch_ventas)
     if df_v is not None and validar_columnas(df_v, COL_VENTAS, "Ventas"):
@@ -66,7 +52,6 @@ if arch_ventas:
     else:
         df_v = None
 
-# ── Compras ──────────────────────────────────────────────────────────────────
 if arch_compras:
     df_c = concatenar(arch_compras)
     if df_c is not None and validar_columnas(df_c, COL_COMPRAS, "Compras"):
@@ -74,7 +59,6 @@ if arch_compras:
     else:
         df_c = None
 
-# ── Inventario ───────────────────────────────────────────────────────────────
 if arch_inv:
     df_i = leer_archivo(arch_inv)
     if df_i is not None and validar_columnas(df_i, COL_INVENTARIO, "Inventario"):
@@ -82,46 +66,34 @@ if arch_inv:
     else:
         df_i = None
 
-
-# =============================================================================
-# CONTENIDO PRINCIPAL
-# =============================================================================
 render_main_header()
+st.warning("Esta interfaz Streamlit queda solo como referencia local. Para el producto activo usa el frontend Vue.")
 
 if df_v is None and df_c is None and df_i is None:
-    st.info("👈 Usa el **panel lateral** para subir tus archivos y activar el análisis.")
+    st.info("Usa el panel lateral para subir tus archivos y activar el analisis.")
     st.stop()
 
-
-# ── Pestañas ─────────────────────────────────────────────────────────────────
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "🏠 Resumen General",
-    "📈 Análisis de Ventas",
-    "💰 Rentabilidad",
-    "🚨 Alertas Inventario",
-    "⚖️ Compras vs Ventas",
-    "🏪 Rendimiento Sedes",
+    "Resumen General",
+    "Analisis de Ventas",
+    "Rentabilidad",
+    "Alertas Inventario",
+    "Compras vs Ventas",
+    "Rendimiento Sedes",
 ])
 
 with tab1:
     tab_resumen.render(df_v, df_c, df_i)
-
 with tab2:
     tab_ventas.render(df_v, df_c, df_i)
-
 with tab3:
     tab_rentabilidad.render(df_v, df_c, df_i)
-
 with tab4:
     tab_inventario.render(df_v, df_c, df_i)
-
 with tab5:
     tab_compras.render(df_v, df_c, df_i)
-
 with tab6:
     tab_sedes.render(df_v, df_c, df_i)
 
-
-# ── Footer ───────────────────────────────────────────────────────────────────
 st.markdown('<div class="gradient-divider"></div>', unsafe_allow_html=True)
-st.caption("💊 Dashboard Farmacéutico v2.0 — Práctica Empresarial 2026")
+st.caption("Dashboard Farmaceutico Streamlit - modo legado local")

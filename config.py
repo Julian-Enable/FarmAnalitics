@@ -1,45 +1,31 @@
 # =============================================================================
-# config.py — Design Tokens y Constantes
-# Basado en el Design System Linear/Modern
+# config.py - Design tokens y constantes compartidas
 # =============================================================================
 
-# ── Paleta de Colores ────────────────────────────────────────────────────────
-# Backgrounds: near-blacks (nunca #000000 puro)
+# Paleta de colores
 BG_DEEP = "#020203"
 BG_BASE = "#050506"
 BG_ELEVATED = "#0a0a0c"
-
-# Surfaces: translúcidas para efecto de profundidad
 SURFACE = "rgba(255,255,255,0.05)"
 SURFACE_HOVER = "rgba(255,255,255,0.08)"
-
-# Foreground: textos legibles (nunca blanco puro)
 FG = "#EDEDEF"
 FG_MUTED = "#8A8F98"
 FG_SUBTLE = "rgba(255,255,255,0.60)"
-
-# Accent: indigo como color principal interactivo
 ACCENT = "#5E6AD2"
 ACCENT_BRIGHT = "#6872D9"
 ACCENT_GLOW = "rgba(94,106,210,0.3)"
-
-# Borders: sutiles, casi invisibles
 BORDER = "rgba(255,255,255,0.06)"
 BORDER_HOVER = "rgba(255,255,255,0.10)"
 BORDER_ACCENT = "rgba(94,106,210,0.30)"
-
-# Semánticos
 GREEN = "#48bb78"
 RED = "#fc8181"
 AMBER = "#f6ad55"
 CYAN = "#4fd1c5"
 PINK = "#f687b3"
 
-# Paletas para gráficos Plotly
 CHART_PALETTE = [ACCENT, CYAN, GREEN, AMBER, RED, PINK, ACCENT_BRIGHT]
 SEDE_PALETTE = [ACCENT, GREEN, AMBER, RED, CYAN, PINK]
 
-# ── Layout Plotly base ───────────────────────────────────────────────────────
 PLOTLY_LAYOUT = dict(
     template="plotly_dark",
     paper_bgcolor="rgba(0,0,0,0)",
@@ -50,7 +36,7 @@ PLOTLY_LAYOUT = dict(
     yaxis=dict(gridcolor="rgba(255,255,255,0.04)", zerolinecolor="rgba(255,255,255,0.06)"),
 )
 
-# ── Columnas requeridas por tipo de archivo ─────────────────────────────────
+# Columnas requeridas por tipo de archivo
 COL_VENTAS = [
     "Referencia", "Descripcion", "Cant", "Precio Venta",
     "Laboratorio", "Fecha", "Punto Venta",
@@ -59,10 +45,28 @@ COL_COMPRAS = [
     "FECHA", "PROVEEDOR", "REFERENCIA", "DESCRIPCION",
     "LABORATORIO", "PRECIO", "CANT", "SEDE",
 ]
-COL_INVENTARIO = [
-    "Referencia", "Descripcion", "Laboratorio",
-    "Total", "Stock Minimo", "Stock Maximo",
-]
+COL_INVENTARIO = ["Referencia", "Descripcion", "Laboratorio"]
+COL_NOTAS_CREDITO = ["Fecha", "NotaCredito", "PuntoVenta", "Total"]
 
-# Columnas de sedes en el inventario
+REQUIRED_COLUMNS = {
+    "ventas": COL_VENTAS,
+    "compras": COL_COMPRAS,
+    "inventario": COL_INVENTARIO,
+    "notas_credito": COL_NOTAS_CREDITO,
+}
+
 SEDES_INVENTARIO = ["PRINCIPAL", "SUCURSAL", "MORATO", "VARDI", "CEDI", "OFICINA 805"]
+
+EXCLUDED_INVENTORY_COLUMNS = {
+    "Referencia", "Descripcion", "Laboratorio", "Nivel", "Precio Compra", "Precio Venta",
+    "Comision", "Utilidad", "Stock Maximo", "Stock Minimo", "Total", "IVA", "Codigo",
+}
+
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024
+ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls"}
+INV_MIN_DIAS = 25
+INV_MAX_DIAS = 40
+LOW_MARGIN_PCT = 5.0
+HIGH_ROTATION_QUANTILE = 0.80
+HIGH_ROTATION_MIN_UNITS = 5
+QUIETO_DIAS_DEFAULT = 60

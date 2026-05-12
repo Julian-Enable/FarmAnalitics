@@ -4,10 +4,7 @@
 # =============================================================================
 import pandas as pd
 
-EXCLUDED_INVENTORY_COLUMNS = {
-    "Referencia", "Descripcion", "Laboratorio", "Nivel", "Precio Compra", "Precio Venta",
-    "Comision", "Utilidad", "Stock Maximo", "Stock Minimo", "Total", "IVA", "Codigo",
-}
+from config import EXCLUDED_INVENTORY_COLUMNS
 
 
 def procesar_ventas(df: pd.DataFrame) -> pd.DataFrame:

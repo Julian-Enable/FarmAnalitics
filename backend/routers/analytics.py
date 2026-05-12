@@ -13,29 +13,15 @@ from backend.services.data_store import get_df, set_df, get_status, clear_all
 from backend.services.processing import (
     leer_bytes, procesar_ventas, procesar_compras, procesar_inventario, procesar_notas_credito,
 )
+from config import (
+    SEDES_INVENTARIO, MAX_UPLOAD_SIZE, ALLOWED_EXTENSIONS, EXCLUDED_INVENTORY_COLUMNS,
+    REQUIRED_COLUMNS, INV_MIN_DIAS, INV_MAX_DIAS, LOW_MARGIN_PCT,
+    HIGH_ROTATION_QUANTILE, HIGH_ROTATION_MIN_UNITS, QUIETO_DIAS_DEFAULT,
+)
 
 router = APIRouter(prefix="/api")
 
-SEDES = ["PRINCIPAL", "SUCURSAL", "MORATO", "VARDI", "CEDI", "OFICINA 805"]
-MAX_UPLOAD_SIZE = 50 * 1024 * 1024
-ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls"}
-EXCLUDED_INVENTORY_COLUMNS = {
-    "Referencia", "Descripcion", "Laboratorio", "Nivel", "Precio Compra", "Precio Venta",
-    "Comision", "Utilidad", "Stock Maximo", "Stock Minimo", "Total", "IVA", "Codigo",
-}
-REQUIRED_COLUMNS = {
-    "ventas":        ["Referencia", "Descripcion", "Cant", "Precio Venta", "Laboratorio", "Fecha", "Punto Venta"],
-    "compras":       ["FECHA", "PROVEEDOR", "REFERENCIA", "DESCRIPCION", "LABORATORIO", "PRECIO", "CANT", "SEDE"],
-    "inventario":    ["Referencia", "Descripcion", "Laboratorio"],
-    "notas_credito": ["Fecha", "NotaCredito", "PuntoVenta", "Total"],
-}
-
-# ── Reglas de negocio de inventario ─────────────────────────────────────────
-INV_MIN_DIAS = 25   # Mínimo de días saludables de cobertura
-INV_MAX_DIAS = 40   # Máximo de días saludables de cobertura (sobre esto = sobrestock)
-LOW_MARGIN_PCT = 5.0
-HIGH_ROTATION_QUANTILE = 0.80
-HIGH_ROTATION_MIN_UNITS = 5
+SEDES = SEDES_INVENTARIO
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -266,7 +252,7 @@ def schema():
         "umbrales_default": {
             "inv_min_dias": INV_MIN_DIAS,
             "inv_max_dias": INV_MAX_DIAS,
-            "quieto_dias": 60,
+            "quieto_dias": QUIETO_DIAS_DEFAULT,
         },
     }
 
@@ -377,7 +363,7 @@ def resumen(
         else:
             df_a["dias_sin_venta"] = 9999
 
-        quieto = df_a[(df_a["Total"] > 0) & (df_a["dias_sin_venta"] > 60)]
+        quieto = df_a[(df_a["Total"] > 0) & (df_a["dias_sin_venta"] > QUIETO_DIAS_DEFAULT)]
         if "Precio Compra" in quieto.columns:
             capital_quieto = float((quieto["Total"] * quieto["Precio Compra"]).sum())
 
@@ -424,6 +410,7 @@ def resumen(
 
     # ── Devoluciones (Notas Crédito) ─────────────────────────────────────────
     df_nc = get_df(x_session_id, "notas_credito")
+    df_nc = _apply_date_filter(df_nc, "Fecha", fecha_ini, fecha_fin) if df_nc is not None else None
     devoluciones_resumen = None
     if df_nc is not None and len(df_nc) > 0:
         total_devuelto = float(df_nc["Total Neto"].sum())
@@ -476,7 +463,7 @@ def endpoint_notas_credito(
     df_nc = get_df(x_session_id, "notas_credito")
     df_v  = get_df(x_session_id, "ventas")
     if df_nc is None:
-        raise HTTPException(404, "No hay datos de notas cr??dito cargados")
+        raise HTTPException(404, "No hay datos de notas credito cargados")
 
     df_nc = _apply_date_filter(df_nc, "Fecha", fecha_ini, fecha_fin)
     df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin) if df_v is not None else None
@@ -524,7 +511,7 @@ def endpoint_notas_credito(
                   .sort_values("total", ascending=False))
         por_motivo = json.loads(mot_df.to_json(orient="records"))
 
-    # Cruce con ventas: distribuir la devoluci??n de la factura entre sus productos
+    # Cruce con ventas: distribuir la devolucion de la factura entre sus productos
     top_productos_devueltos = []
     if df_v is not None and "Factura" in df_nc.columns and "Factura" in df_v.columns:
         nc_facts = (df_nc.groupby("Factura", as_index=False)["Total Neto"]
@@ -580,7 +567,7 @@ def endpoint_notas_credito(
     }
 
 
-# ?????? Ventas ????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+# Ventas
 
 @router.get("/ventas")
 def ventas(sede: str = "Todas", nivel: str = "Todos",
@@ -977,7 +964,7 @@ def inventario(
     sede: str = "Todas",
     inv_min_dias: int = INV_MIN_DIAS,
     inv_max_dias: int = INV_MAX_DIAS,
-    quieto_dias: int = 60,
+    quieto_dias: int = QUIETO_DIAS_DEFAULT,
     fecha_ini: str = None,
     fecha_fin: str = None,
     x_session_id: str = Header(default="default-session")
