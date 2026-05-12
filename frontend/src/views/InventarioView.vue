@@ -40,6 +40,14 @@
         <label>Inventario quieto (días)</label>
         <input type="number" min="1" v-model.number="store.settings.quieto_dias" @change="applyFilters" />
       </div>
+      <div class="filter-group">
+        <label>Fecha Inicio</label>
+        <input type="date" v-model="filters.fecha_ini" @change="applyFilters" />
+      </div>
+      <div class="filter-group">
+        <label>Fecha Fin</label>
+        <input type="date" v-model="filters.fecha_fin" @change="applyFilters" />
+      </div>
     </div>
 
     <div v-if="store.errors.inventario" class="card" style="border-color:#fecdd3;color:#be123c;margin-bottom:16px;background:#fff1f2;">
@@ -222,14 +230,18 @@ const data = computed(() => store.data.inventario)
 const loading = computed(() => store.loading.inventario)
 
 const sedeSeleccionada = ref('Todas')
+const filters = ref({ fecha_ini: '', fecha_fin: '' })
 
 function applyFilters() {
-  store.fetchInventario(sedeSeleccionada.value)
+  const params = { sede: sedeSeleccionada.value }
+  if (filters.value.fecha_ini) params.fecha_ini = filters.value.fecha_ini
+  if (filters.value.fecha_fin) params.fecha_fin = filters.value.fecha_fin
+  store.fetchInventario(params)
 }
 
 onMounted(() => {
   if (store.status.inventario && !data.value) {
-    store.fetchInventario()
+    applyFilters()
   }
 })
 

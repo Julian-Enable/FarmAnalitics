@@ -26,7 +26,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     quieto_dias: 60,
   })
 
-  const files = reactive({ ventas: [], compras: [], inventario: null })
+  const files = reactive({ ventas: [], compras: [], inventario: null, notas_credito: null })
 
   const data = reactive({
     resumen: null,
@@ -142,8 +142,8 @@ export const useDashboardStore = defineStore('dashboard', () => {
   async function resetSession() {
     try {
       await axios.delete('/api/reset')
-      Object.assign(status, { ventas: false, compras: false, inventario: false })
-      Object.assign(files, { ventas: [], compras: [], inventario: null })
+      Object.assign(status, { ventas: false, compras: false, inventario: false, notas_credito: false })
+      Object.assign(files, { ventas: [], compras: [], inventario: null, notas_credito: null })
       Object.keys(errors).forEach(key => { errors[key] = null })
       uploadDiagnostic.value = null
       uploadError.value = null
@@ -155,12 +155,12 @@ export const useDashboardStore = defineStore('dashboard', () => {
     }
   }
 
-  async function fetchResumen() {
+  async function fetchResumen(params = {}) {
     if (!status.ventas) return
     loading.resumen = true
     clearModuleError('resumen')
     try {
-      const { data: d } = await axios.get('/api/resumen')
+      const { data: d } = await axios.get('/api/resumen', { params })
       data.resumen = d
     } catch (e) { setModuleError('resumen', e, 'No se pudo cargar el resumen') }
     finally { loading.resumen = false }
@@ -177,23 +177,23 @@ export const useDashboardStore = defineStore('dashboard', () => {
     finally { loading.ventas = false }
   }
 
-  async function fetchRentabilidad() {
+  async function fetchRentabilidad(params = {}) {
     if (!status.ventas || !status.inventario) return
     loading.rentabilidad = true
     clearModuleError('rentabilidad')
     try {
-      const { data: d } = await axios.get('/api/rentabilidad')
+      const { data: d } = await axios.get('/api/rentabilidad', { params })
       data.rentabilidad = d
     } catch (e) { setModuleError('rentabilidad', e, 'No se pudo cargar rentabilidad') }
     finally { loading.rentabilidad = false }
   }
 
-  async function fetchInventario(sede = 'Todas') {
+  async function fetchInventario(params = {}) {
     if (!status.inventario) return
     loading.inventario = true
     clearModuleError('inventario')
     try {
-      const { data: d } = await axios.get('/api/inventario', { params: inventoryParams({ sede }) })
+      const { data: d } = await axios.get('/api/inventario', { params: inventoryParams(params) })
       data.inventario = d
     } catch (e) { setModuleError('inventario', e, 'No se pudo cargar inventario') }
     finally { loading.inventario = false }
@@ -221,12 +221,12 @@ export const useDashboardStore = defineStore('dashboard', () => {
     finally { loading.sedes = false }
   }
 
-  async function fetchDevoluciones() {
+  async function fetchDevoluciones(params = {}) {
     if (!status.notas_credito) return
     loading.devoluciones = true
     clearModuleError('devoluciones')
     try {
-      const { data: d } = await axios.get('/api/notas-credito')
+      const { data: d } = await axios.get('/api/notas-credito', { params })
       data.devoluciones = d
     } catch (e) { setModuleError('devoluciones', e, 'No se pudo cargar devoluciones') }
     finally { loading.devoluciones = false }

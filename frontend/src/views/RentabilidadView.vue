@@ -18,6 +18,18 @@
       </ul>
     </ModuleInfo>
 
+
+    <div v-if="store.status.ventas && store.status.inventario" class="filters-bar" style="margin-bottom: 16px;">
+      <div class="filter-group">
+        <label>Fecha Inicio</label>
+        <input type="date" v-model="filters.fecha_ini" @change="applyFilters" />
+      </div>
+      <div class="filter-group">
+        <label>Fecha Fin</label>
+        <input type="date" v-model="filters.fecha_fin" @change="applyFilters" />
+      </div>
+    </div>
+
     <div v-if="loading" class="kpi-grid kpi-grid-4">
       <div v-for="i in 4" :key="i" class="card skeleton" style="height: 100px;"></div>
     </div>
@@ -183,9 +195,18 @@ const store = useDashboardStore()
 const data = computed(() => store.data.rentabilidad)
 const loading = computed(() => store.loading.rentabilidad)
 
+const filters = ref({ fecha_ini: '', fecha_fin: '' })
+
+function applyFilters() {
+  const params = {}
+  if (filters.value.fecha_ini) params.fecha_ini = filters.value.fecha_ini
+  if (filters.value.fecha_fin) params.fecha_fin = filters.value.fecha_fin
+  store.fetchRentabilidad(params)
+}
+
 onMounted(() => {
   if (store.status.ventas && store.status.inventario && !data.value) {
-    store.fetchRentabilidad()
+    applyFilters()
   }
 })
 

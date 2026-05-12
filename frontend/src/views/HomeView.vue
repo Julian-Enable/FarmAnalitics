@@ -8,6 +8,17 @@
           <LayoutDashboard size="22" />
           <h2>Centro de Comando</h2>
         </div>
+
+    <div v-if="_store.status.ventas" class="filters-bar" style="margin-bottom: 16px;">
+      <div class="filter-group">
+        <label>Fecha Inicio</label>
+        <input type="date" v-model="filters.fecha_ini" @change="applyFilters" />
+      </div>
+      <div class="filter-group">
+        <label>Fecha Fin</label>
+        <input type="date" v-model="filters.fecha_fin" @change="applyFilters" />
+      </div>
+    </div>
         <p v-if="data?.periodo?.inicio" class="cmd-period">
           Período analizado:
           <strong>{{ formatFecha(data.periodo.inicio) }}</strong>
@@ -272,7 +283,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
 import SectionTitle from '../components/ui/SectionTitle.vue'
 import LineChart from '../components/charts/LineChart.vue'
@@ -283,8 +294,17 @@ const _store  = useDashboardStore()
 const data    = computed(() => _store.data.resumen)
 const loading = computed(() => _store.loading.resumen)
 
+const filters = ref({ fecha_ini: '', fecha_fin: '' })
+
+function applyFilters() {
+  const params = {}
+  if (filters.value.fecha_ini) params.fecha_ini = filters.value.fecha_ini
+  if (filters.value.fecha_fin) params.fecha_fin = filters.value.fecha_fin
+  _store.fetchResumen(params)
+}
+
 onMounted(() => {
-  if (_store.status.ventas && !data.value) _store.fetchResumen()
+  if (_store.status.ventas && !data.value) applyFilters()
 })
 
 const tendenciaCat  = computed(() => data.value?.tendencia?.map(d => d.fecha) || [])

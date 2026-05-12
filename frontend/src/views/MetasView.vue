@@ -39,6 +39,10 @@
       </div>
     </div>
 
+    <div v-if="weightError" class="card" style="border-color:#fecdd3;color:#be123c;margin-bottom:16px;background:#fff1f2;">
+      {{ weightError }}
+    </div>
+
     <div v-if="loading" class="kpi-grid kpi-grid-3">
       <div v-for="i in 3" :key="i" class="card skeleton" style="height: 100px;"></div>
     </div>
@@ -146,6 +150,7 @@ const agresividad = ref('normal')
 const fechaIni = ref('')
 const fechaFin = ref('')
 const userOverrides = ref({}) // { 'Sede': { 'Vendedor': 30 } }
+const weightError = ref('')
 
 const loading = computed(() => store.loading.metas)
 const data = computed(() => store.data.metas)
@@ -210,16 +215,26 @@ async function applyFilters() {
 function updateWeight(sedeName, vendName, val) {
   const num = parseFloat(val)
   if (isNaN(num) || num < 0 || num > 100) return
-  
-  if (!userOverrides.value[sedeName]) {
-    userOverrides.value[sedeName] = {}
+
+  const sedeOverrides = { ...(userOverrides.value[sedeName] || {}) }
+  const othersTotal = Object.entries(sedeOverrides)
+    .filter(([name]) => name !== vendName)
+    .reduce((acc, [, weight]) => acc + Number(weight || 0), 0)
+
+  if (othersTotal + num > 100) {
+    weightError.value = `La suma de pesos bloqueados en ${sedeName} no puede superar 100%.`
+    return
   }
-  userOverrides.value[sedeName][vendName] = num
+
+  weightError.value = ''
+  sedeOverrides[vendName] = num
+  userOverrides.value[sedeName] = sedeOverrides
 }
 
 function clearWeight(sedeName, vendName) {
   if (userOverrides.value[sedeName]) {
     delete userOverrides.value[sedeName][vendName]
+    weightError.value = ''
   }
 }
 </script>

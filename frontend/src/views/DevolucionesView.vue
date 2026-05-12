@@ -18,6 +18,18 @@
       </ul>
     </ModuleInfo>
 
+
+    <div v-if="store.status.notas_credito" class="filters-bar" style="margin-bottom: 16px;">
+      <div class="filter-group">
+        <label>Fecha Inicio</label>
+        <input type="date" v-model="filters.fecha_ini" @change="applyFilters" />
+      </div>
+      <div class="filter-group">
+        <label>Fecha Fin</label>
+        <input type="date" v-model="filters.fecha_fin" @change="applyFilters" />
+      </div>
+    </div>
+
     <div v-if="store.errors.devoluciones" class="card" style="border-color:#fecdd3;color:#be123c;margin-bottom:16px;background:#fff1f2;">
       {{ store.errors.devoluciones }}
     </div>
@@ -151,10 +163,18 @@ import { RotateCcw, Activity, Receipt, DollarSign, TrendingUp, PieChart as PieCh
 const store = useDashboardStore()
 const data = computed(() => store.data.devoluciones)
 const loading = computed(() => store.loading.devoluciones)
+const filters = ref({ fecha_ini: '', fecha_fin: '' })
+
+function applyFilters() {
+  const params = {}
+  if (filters.value.fecha_ini) params.fecha_ini = filters.value.fecha_ini
+  if (filters.value.fecha_fin) params.fecha_fin = filters.value.fecha_fin
+  store.fetchDevoluciones(params)
+}
 
 onMounted(() => {
   if (store.status.notas_credito && !data.value) {
-    store.fetchDevoluciones()
+    applyFilters()
   }
 })
 

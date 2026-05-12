@@ -43,6 +43,14 @@
         </select>
       </div>
       <div class="filter-group">
+        <label>Fecha Inicio</label>
+        <input type="date" v-model="filters.fecha_ini" @change="applyFilters" />
+      </div>
+      <div class="filter-group">
+        <label>Fecha Fin</label>
+        <input type="date" v-model="filters.fecha_fin" @change="applyFilters" />
+      </div>
+      <div class="filter-group">
         <label>Estado</label>
         <select v-model="filters.estado" @change="applyFilters">
           <option value="Todos">Todos</option>
@@ -165,6 +173,8 @@ const loading = computed(() => store.loading.compras)
 const filters = ref({
   proveedor: 'Todos',
   estado: 'Todos',
+  fecha_ini: '',
+  fecha_fin: '',
   buscar: ''
 })
 
@@ -203,7 +213,7 @@ const sortedComparativo = computed(() => {
 
 onMounted(() => {
   if (store.status.ventas && store.status.compras && store.status.inventario && !data.value) {
-    store.fetchCompras()
+    applyFilters()
   }
 })
 

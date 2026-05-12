@@ -157,7 +157,7 @@ const hasFiles = computed(() =>
   ventasFiles.value.length > 0 || comprasFiles.value.length > 0 || inventarioFile.value || notasCreditoFile.value
 )
 const hasLoadedData = computed(() =>
-  store.status.ventas || store.status.compras || store.status.inventario
+  store.status.ventas || store.status.compras || store.status.inventario || store.status.notas_credito
 )
 const diagnosticItems = computed(() =>
   store.uploadDiagnostic ? Object.values(store.uploadDiagnostic) : []

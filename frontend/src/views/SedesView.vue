@@ -27,6 +27,14 @@
           <option v-for="s in data.lista_sedes" :key="s" :value="s">{{ s }}</option>
         </select>
       </div>
+      <div class="filter-group">
+        <label>Fecha Inicio</label>
+        <input type="date" v-model="filters.fecha_ini" @change="applyFilters" />
+      </div>
+      <div class="filter-group">
+        <label>Fecha Fin</label>
+        <input type="date" v-model="filters.fecha_fin" @change="applyFilters" />
+      </div>
     </div>
 
     <div v-if="loading" class="kpi-grid kpi-grid-3">
@@ -126,12 +134,16 @@ const data = computed(() => store.data.sedes)
 const loading = computed(() => store.loading.sedes)
 
 const filters = ref({
-  sede_detalle: ''
+  sede_detalle: '',
+  fecha_ini: '',
+  fecha_fin: ''
 })
 
 function applyFilters() {
   const params = { ...filters.value }
   if (!params.sede_detalle) delete params.sede_detalle
+  if (!params.fecha_ini) delete params.fecha_ini
+  if (!params.fecha_fin) delete params.fecha_fin
   store.fetchSedes(params)
 }
 

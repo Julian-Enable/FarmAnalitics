@@ -60,6 +60,24 @@ def _inclusive_days(min_fecha, max_fecha, default: int = 1) -> int:
     return max((max_fecha - min_fecha).days + 1, 1)
 
 
+def _apply_date_filter(
+    df: pd.DataFrame,
+    date_col: str,
+    fecha_ini: str | None = None,
+    fecha_fin: str | None = None,
+) -> pd.DataFrame:
+    """Filtra por rango de fechas inclusivo si la columna existe."""
+    if df is None or date_col not in df.columns:
+        return df
+
+    filtered = df.copy()
+    if fecha_ini:
+        filtered = filtered[filtered[date_col] >= pd.Timestamp(fecha_ini)]
+    if fecha_fin:
+        filtered = filtered[filtered[date_col] <= pd.Timestamp(fecha_fin)]
+    return filtered
+
+
 def _inventory_with_total(df_i: pd.DataFrame) -> pd.DataFrame:
     """Devuelve inventario con Total numerico; si falta, suma columnas numericas de sedes."""
     df = df_i.copy()
@@ -262,11 +280,16 @@ def reset(x_session_id: str = Header(default="default-session")):
 # ── Resumen General ───────────────────────────────────────────────────────────
 
 @router.get("/resumen")
-def resumen(x_session_id: str = Header(default="default-session")):
+def resumen(
+    fecha_ini: str = None,
+    fecha_fin: str = None,
+    x_session_id: str = Header(default="default-session")
+):
     df_v = get_df(x_session_id, "ventas")
     df_i = get_df(x_session_id, "inventario")
     if df_v is None:
         raise HTTPException(404, "No hay datos de ventas cargados")
+    df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin)
 
     ing_total  = float(df_v["Ingreso"].sum())
     und_total  = int(df_v["Cant"].sum())
@@ -445,11 +468,18 @@ def resumen(x_session_id: str = Header(default="default-session")):
 # ── Notas Crédito / Devoluciones ─────────────────────────────────────────────
 
 @router.get("/notas-credito")
-def endpoint_notas_credito(x_session_id: str = Header(default="default-session")):
+def endpoint_notas_credito(
+    fecha_ini: str = None,
+    fecha_fin: str = None,
+    x_session_id: str = Header(default="default-session")
+):
     df_nc = get_df(x_session_id, "notas_credito")
     df_v  = get_df(x_session_id, "ventas")
     if df_nc is None:
-        raise HTTPException(404, "No hay datos de notas crédito cargados")
+        raise HTTPException(404, "No hay datos de notas cr??dito cargados")
+
+    df_nc = _apply_date_filter(df_nc, "Fecha", fecha_ini, fecha_fin)
+    df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin) if df_v is not None else None
 
     total_devuelto = float(df_nc["Total Neto"].sum())
     n_notas        = int(len(df_nc))
@@ -494,15 +524,32 @@ def endpoint_notas_credito(x_session_id: str = Header(default="default-session")
                   .sort_values("total", ascending=False))
         por_motivo = json.loads(mot_df.to_json(orient="records"))
 
-    # Cruce con ventas: productos devueltos (por Factura)
+    # Cruce con ventas: distribuir la devoluci??n de la factura entre sus productos
     top_productos_devueltos = []
     if df_v is not None and "Factura" in df_nc.columns and "Factura" in df_v.columns:
-        nc_facts = df_nc[["Factura", "Total Neto"]].rename(columns={"Total Neto": "devuelto"})
-        cruce = df_v.merge(nc_facts, on="Factura", how="inner")
+        nc_facts = (df_nc.groupby("Factura", as_index=False)["Total Neto"]
+                    .sum()
+                    .rename(columns={"Total Neto": "devuelto"}))
+        ventas_factura = (df_v.groupby(["Factura", "Referencia", "Descripcion"], as_index=False)
+                          .agg(cant=("Cant", "sum"), ingreso=("Ingreso", "sum")))
+        ventas_totales_factura = (ventas_factura.groupby("Factura", as_index=False)
+                                  .agg(ingreso_factura=("ingreso", "sum"), lineas=("Referencia", "count")))
+        cruce = ventas_factura.merge(nc_facts, on="Factura", how="inner").merge(
+            ventas_totales_factura, on="Factura", how="left"
+        )
         if len(cruce) > 0:
+            cruce["peso_dev"] = cruce.apply(
+                lambda row: (
+                    row["ingreso"] / row["ingreso_factura"]
+                    if row["ingreso_factura"] > 0
+                    else (1 / row["lineas"] if row["lineas"] else 0)
+                ),
+                axis=1,
+            )
+            cruce["devuelto_asignado"] = cruce["devuelto"] * cruce["peso_dev"]
             prod_dev = (cruce.groupby(["Referencia", "Descripcion"], as_index=False)
-                        .agg(unidades_devueltas=("Cant", "sum"),
-                             ingreso_devuelto=("devuelto", "sum"))
+                        .agg(unidades_devueltas=("cant", "sum"),
+                             ingreso_devuelto=("devuelto_asignado", "sum"))
                         .sort_values("ingreso_devuelto", ascending=False)
                         .head(15))
             prod_dev["nombre"] = prod_dev["Descripcion"].str[:35]
@@ -533,7 +580,7 @@ def endpoint_notas_credito(x_session_id: str = Header(default="default-session")
     }
 
 
-# ── Ventas ────────────────────────────────────────────────────────────────────
+# ?????? Ventas ????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 
 @router.get("/ventas")
 def ventas(sede: str = "Todas", nivel: str = "Todos",
@@ -544,17 +591,13 @@ def ventas(sede: str = "Todas", nivel: str = "Todos",
     if df is None:
         raise HTTPException(404, "No hay datos de ventas")
 
+    df = _apply_date_filter(df, "Fecha", fecha_ini, fecha_fin)
     if sede != "Todas":
         df = df[df["Punto Venta"] == sede]
     if nivel != "Todos" and "Nivel" in df.columns:
         df = df[df["Nivel"] == nivel]
     if laboratorio != "Todos" and "Laboratorio" in df.columns:
         df = df[df["Laboratorio"] == laboratorio]
-    if fecha_ini:
-        df = df[df["Fecha"] >= pd.Timestamp(fecha_ini)]
-    if fecha_fin:
-        df = df[df["Fecha"] <= pd.Timestamp(fecha_fin)]
-
     ing_total = float(df["Ingreso"].sum())
     dias_periodo = 1
     if df["Fecha"].notna().any():
@@ -579,9 +622,13 @@ def ventas(sede: str = "Todas", nivel: str = "Todos",
 
     vendedores = []
     if "Creada" in df.columns:
+        agg_map = {
+            "unidades": ("Cant", "sum"),
+            "ingresos": ("Ingreso", "sum"),
+        }
+        agg_map["facturas"] = ("Factura", "nunique") if "Factura" in df.columns else ("Referencia", "count")
         vendedores = (df.groupby("Creada", as_index=False)
-                      .agg(unidades=("Cant","sum"), ingresos=("Ingreso","sum"),
-                           facturas=("Referencia","count"))
+                      .agg(**agg_map)
                       .sort_values("ingresos", ascending=False)
                       .rename(columns={"Creada":"vendedor"}))
         vendedores = json.loads(vendedores.to_json(orient="records"))
@@ -818,13 +865,18 @@ def proyeccion_metas(
 # ── Rentabilidad ──────────────────────────────────────────────────────────────
 
 @router.get("/rentabilidad")
-def rentabilidad(x_session_id: str = Header(default="default-session")):
+def rentabilidad(
+    fecha_ini: str = None,
+    fecha_fin: str = None,
+    x_session_id: str = Header(default="default-session")
+):
     df_v = get_df(x_session_id, "ventas")
     df_i = get_df(x_session_id, "inventario")
     if df_v is None or df_i is None:
         raise HTTPException(404, "Necesitas ventas e inventario")
     if "Precio Compra" not in df_i.columns:
         raise HTTPException(400, "Inventario sin columna Precio Compra")
+    df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin)
 
     r = _sales_profit_frame(df_v, df_i)
     max_fecha = df_v["Fecha"].max() if "Fecha" in df_v.columns else pd.NaT
@@ -926,6 +978,8 @@ def inventario(
     inv_min_dias: int = INV_MIN_DIAS,
     inv_max_dias: int = INV_MAX_DIAS,
     quieto_dias: int = 60,
+    fecha_ini: str = None,
+    fecha_fin: str = None,
     x_session_id: str = Header(default="default-session")
 ):
     df_i = get_df(x_session_id, "inventario")
@@ -934,6 +988,8 @@ def inventario(
         raise HTTPException(404, "No hay datos de inventario")
     if inv_min_dias <= 0 or inv_max_dias <= inv_min_dias or quieto_dias <= 0:
         raise HTTPException(400, "Umbrales inválidos: usa mínimo > 0, máximo > mínimo y quieto > 0")
+
+    df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin) if df_v is not None else None
 
     if sede != "Todas" and sede in df_i.columns:
         df_a = df_i.copy()
@@ -1106,6 +1162,8 @@ def compras(
     buscar: str = "",
     inv_min_dias: int = INV_MIN_DIAS,
     inv_max_dias: int = INV_MAX_DIAS,
+    fecha_ini: str = None,
+    fecha_fin: str = None,
     x_session_id: str = Header(default="default-session")
 ):
     df_c = get_df(x_session_id, "compras")
@@ -1115,6 +1173,9 @@ def compras(
         raise HTTPException(404, "Se requieren Compras, Ventas e Inventario para la conciliación.")
     if inv_min_dias <= 0 or inv_max_dias <= inv_min_dias:
         raise HTTPException(400, "Umbrales inválidos: usa mínimo > 0 y máximo > mínimo")
+
+    df_c = _apply_date_filter(df_c, "FECHA", fecha_ini, fecha_fin)
+    df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin)
 
     # 1. Agrupar Compras por Referencia
     c_agr = df_c.groupby("REFERENCIA", as_index=False)["CANT"].sum().rename(columns={"REFERENCIA": "Referencia", "CANT": "uds_compradas"})
@@ -1216,11 +1277,17 @@ def compras(
 # ── Sedes ─────────────────────────────────────────────────────────────────────
 
 @router.get("/sedes")
-def sedes(sede_detalle: str = None, x_session_id: str = Header(default="default-session")):
+def sedes(
+    sede_detalle: str = None,
+    fecha_ini: str = None,
+    fecha_fin: str = None,
+    x_session_id: str = Header(default="default-session")
+):
     df_v = get_df(x_session_id, "ventas")
     df_i = get_df(x_session_id, "inventario")
     if df_v is None:
         raise HTTPException(404, "No hay datos de ventas")
+    df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin)
 
     comparativo = (df_v.groupby("Punto Venta", as_index=False).agg(
         ingresos=("Ingreso","sum"), unidades=("Cant","sum"),
