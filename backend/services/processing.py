@@ -125,6 +125,10 @@ def leer_bytes(content: bytes, filename: str, tipo: str = "auto") -> pd.DataFram
     for sheet_name, df in xls_dict.items():
         if df.empty:
             continue
+        # Excluir hojas de resumen/reporte para evitar mezclar periodos.
+        sheet_norm = str(sheet_name).strip().lower()
+        if sheet_norm in {"reporte", "reportes"}:
+            continue
         columnas_upper = [str(c).upper() for c in df.columns]
         if "REFERENCIA" in columnas_upper:
             hojas_validas.append(df.copy())

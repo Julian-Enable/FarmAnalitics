@@ -121,6 +121,9 @@ def _column_diagnostic(kind: str, df: pd.DataFrame) -> dict:
     required = REQUIRED_COLUMNS[kind]
     columns = [str(c) for c in df.columns]
     missing = [c for c in required if c not in columns]
+    # Compatibilidad: en ventas aceptamos "Precio" como equivalente de "Precio Venta".
+    if kind == "ventas" and "Precio Venta" in missing and "Precio" in columns:
+        missing.remove("Precio Venta")
     return {
         "tipo": kind,
         "filas": int(len(df)),
@@ -743,9 +746,6 @@ def proyeccion_metas(
     col_vend = "Creada" if "Creada" in df.columns else None
     if not col_sede:
         raise HTTPException(400, "Falta columna de Sede (Punto Venta)")
-    if not col_vend:
-        df["Creada"] = "Sin Vendedor"
-        col_vend = "Creada"
 
     sedes_data = []
 
@@ -772,18 +772,23 @@ def proyeccion_metas(
 
         vendedores = []
         vends_raw = []
-        for vend, df_v in df_base.groupby(col_vend):
-            ingreso_v = float(df_v["Ingreso"].sum())
-            aporte_v = ingreso_v / ventas_mes_anterior if ventas_mes_anterior > 0 else 0
-            if aporte_v < 0.05:
-                continue
-            ticket_v = ingreso_v / max(df_v["Factura"].nunique(), 1) if "Factura" in df_v.columns else 0.0
-            vends_raw.append({
-                "nombre": vend,
-                "ingreso_actual": ingreso_v,
-                "ticket_promedio": float(ticket_v),
-                "aporte": round(aporte_v * 100, 1)
-            })
+        if col_vend and col_vend in df_base.columns:
+            vend_valid = df_base[
+                df_base[col_vend].notna()
+                & (df_base[col_vend].astype(str).str.strip() != "")
+            ]
+            for vend, df_v in vend_valid.groupby(col_vend):
+                ingreso_v = float(df_v["Ingreso"].sum())
+                aporte_v = ingreso_v / ventas_mes_anterior if ventas_mes_anterior > 0 else 0
+                if aporte_v < 0.05:
+                    continue
+                ticket_v = ingreso_v / max(df_v["Factura"].nunique(), 1) if "Factura" in df_v.columns else 0.0
+                vends_raw.append({
+                    "nombre": vend,
+                    "ingreso_actual": ingreso_v,
+                    "ticket_promedio": float(ticket_v),
+                    "aporte": round(aporte_v * 100, 1)
+                })
 
         num_vendedores = len(vends_raw)
         peso_igual = 1.0 / num_vendedores if num_vendedores > 0 else 0
