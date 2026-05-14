@@ -699,6 +699,30 @@ def proyeccion_metas(
     else:
         hoy = date.today()
         y_obj, m_obj = hoy.year, hoy.month
+
+        # Si el mes objetivo actual no tiene base en datos, usar el último mes disponible + 1.
+        meses_disponibles = (
+            df.assign(ym=df["Fecha"].dt.to_period("M"))
+            .groupby("ym", as_index=False)
+            .size()
+            .sort_values("ym")
+        )
+        if not meses_disponibles.empty:
+            ultimo_periodo = meses_disponibles["ym"].iloc[-1]
+            ultimo_y, ultimo_m = int(ultimo_periodo.year), int(ultimo_periodo.month)
+            if m_obj == 1:
+                y_base_actual, m_base_actual = y_obj - 1, 12
+            else:
+                y_base_actual, m_base_actual = y_obj, m_obj - 1
+            existe_base_actual = (
+                (df["Fecha"].dt.year == y_base_actual) & (df["Fecha"].dt.month == m_base_actual)
+            ).any()
+            if not existe_base_actual:
+                if ultimo_m == 12:
+                    y_obj, m_obj = ultimo_y + 1, 1
+                else:
+                    y_obj, m_obj = ultimo_y, ultimo_m + 1
+
         _, dias_totales_proy = calendar.monthrange(y_obj, m_obj)
 
     if m_obj == 1:
