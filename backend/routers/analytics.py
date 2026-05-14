@@ -1,5 +1,5 @@
-# =============================================================================
-# backend/routers/analytics.py  — Todos los endpoints de análisis
+﻿# =============================================================================
+# backend/routers/analytics.py  â€” Todos los endpoints de anÃ¡lisis
 # =============================================================================
 from fastapi import APIRouter, UploadFile, File, HTTPException, Header
 from typing import Optional, Union
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api")
 
 SEDES = SEDES_INVENTARIO
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _safe(val):
     """Convierte NaN/Inf a None para JSON."""
@@ -140,7 +140,7 @@ def _ensure_required_columns(kind: str, df: pd.DataFrame) -> dict:
 
 
 async def _read_upload(file: UploadFile) -> bytes:
-    """Valida extensión y tamaño antes de leer el archivo en memoria."""
+    """Valida extensiÃ³n y tamaÃ±o antes de leer el archivo en memoria."""
     from pathlib import Path
 
     suffix = Path(file.filename or "").suffix.lower()
@@ -149,15 +149,15 @@ async def _read_upload(file: UploadFile) -> bytes:
 
     content = await file.read()
     if not content:
-        raise HTTPException(400, f"Archivo vacío: {file.filename}")
+        raise HTTPException(400, f"Archivo vacÃ­o: {file.filename}")
     if len(content) > MAX_UPLOAD_SIZE:
         max_mb = MAX_UPLOAD_SIZE // (1024 * 1024)
-        raise HTTPException(413, f"Archivo demasiado grande: {file.filename}. Máximo {max_mb} MB")
+        raise HTTPException(413, f"Archivo demasiado grande: {file.filename}. MÃ¡ximo {max_mb} MB")
 
     return content
 
 
-# ── Upload ────────────────────────────────────────────────────────────────────
+# â”€â”€ Upload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.post("/upload")
 async def upload_files(
@@ -178,7 +178,7 @@ async def upload_files(
     if compras and not isinstance(compras, list):
         compras = [compras]
 
-    # Ventas (puede ser múltiples archivos)
+    # Ventas (puede ser mÃºltiples archivos)
     if ventas:
         dfs = []
         for f in ventas:
@@ -187,7 +187,7 @@ async def upload_files(
             if not df.empty:
                 dfs.append(df)
         if not dfs:
-            raise HTTPException(400, "No se encontraron datos válidos en los archivos de ventas")
+            raise HTTPException(400, "No se encontraron datos vÃ¡lidos en los archivos de ventas")
         df_raw = pd.concat(dfs, ignore_index=True)
         diagnostico["ventas"] = _ensure_required_columns("ventas", df_raw)
         df_v = procesar_ventas(df_raw)
@@ -203,7 +203,7 @@ async def upload_files(
             if not df.empty:
                 dfs.append(df)
         if not dfs:
-            raise HTTPException(400, "No se encontraron datos válidos en los archivos de compras")
+            raise HTTPException(400, "No se encontraron datos vÃ¡lidos en los archivos de compras")
         df_raw = pd.concat(dfs, ignore_index=True)
         diagnostico["compras"] = _ensure_required_columns("compras", df_raw)
         df_c = procesar_compras(df_raw)
@@ -215,21 +215,21 @@ async def upload_files(
         content = await _read_upload(inventario)
         df_i = procesar_inventario(leer_bytes(content, inventario.filename))
         if df_i.empty:
-            raise HTTPException(400, "No se encontraron datos válidos en el archivo de inventario")
+            raise HTTPException(400, "No se encontraron datos vÃ¡lidos en el archivo de inventario")
         diagnostico["inventario"] = _ensure_required_columns("inventario", df_i)
         pending_data["inventario"] = df_i
         resultados["inventario"] = len(df_i)
 
-    # Notas Crédito
+    # Notas CrÃ©dito
     if notas_credito:
         content = await _read_upload(notas_credito)
         df_nc = leer_bytes(content, notas_credito.filename, tipo="notas_credito")
         if df_nc.empty:
-            raise HTTPException(400, "No se encontraron datos válidos en el archivo de notas crédito")
+            raise HTTPException(400, "No se encontraron datos vÃ¡lidos en el archivo de notas crÃ©dito")
         diagnostico["notas_credito"] = _column_diagnostic("notas_credito", df_nc)
         if diagnostico["notas_credito"]["faltantes"]:
             missing = ", ".join(diagnostico["notas_credito"]["faltantes"])
-            raise HTTPException(400, f"Notas crédito sin columnas requeridas: {missing}")
+            raise HTTPException(400, f"Notas crÃ©dito sin columnas requeridas: {missing}")
         df_nc = procesar_notas_credito(df_nc)
         pending_data["notas_credito"] = df_nc
         resultados["notas_credito"] = len(df_nc)
@@ -263,7 +263,7 @@ def reset(x_session_id: str = Header(default="default-session")):
     return {"ok": True}
 
 
-# ── Resumen General ───────────────────────────────────────────────────────────
+# â”€â”€ Resumen General â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.get("/resumen")
 def resumen(
@@ -285,14 +285,14 @@ def resumen(
     n_fact     = int(df_v["Factura"].nunique()) if "Factura" in df_v.columns else 0
     ticket     = ing_total / n_fact if n_fact > 0 else 0
 
-    # Período analizado
+    # PerÃ­odo analizado
     periodo_ini = str(df_v["Fecha"].min().date()) if df_v["Fecha"].notna().any() else None
     periodo_fin = str(df_v["Fecha"].max().date()) if df_v["Fecha"].notna().any() else None
     max_fecha = df_v["Fecha"].max()
     min_fecha = df_v["Fecha"].min()
     dias_periodo = _inclusive_days(min_fecha, max_fecha)
 
-    # Comparación primera mitad vs segunda mitad del período
+    # ComparaciÃ³n primera mitad vs segunda mitad del perÃ­odo
     variacion_ing = variacion_und = variacion_ticket = None
     if pd.notna(max_fecha) and pd.notna(min_fecha) and dias_periodo > 2:
         mid_fecha = min_fecha + pd.Timedelta(days=dias_periodo // 2)
@@ -327,7 +327,7 @@ def resumen(
         tend = [{"fecha": str(r["Fecha"].date()), "ingreso": round(r["Ingreso"], 0)}
                 for _, r in s.iterrows()]
 
-    # Por sede (con % participación)
+    # Por sede (con % participaciÃ³n)
     sedes_df = (df_v.groupby("Punto Venta", as_index=False)
              .agg(ingresos=("Ingreso","sum"), unidades=("Cant","sum"))
              .sort_values("ingresos", ascending=False)
@@ -336,22 +336,22 @@ def resumen(
     sedes_df["pct"] = (sedes_df["ingresos"] / total_sedes * 100).round(1) if total_sedes > 0 else 0
     sedes = json.loads(sedes_df.to_json(orient="records"))
 
-    # ── Signos vitales cruzados (requieren inventario + ventas) ──
+    # â”€â”€ Signos vitales cruzados (requieren inventario + ventas) â”€â”€
     capital_quieto = 0.0
     productos_sin_stock = 0
-    productos_criticos_7d = 0   # se agotan en < 7 días
-    productos_atencion_15d = 0  # se agotan en < 15 días
+    productos_criticos_7d = 0   # se agotan en < 7 dÃ­as
+    productos_atencion_15d = 0  # se agotan en < 15 dÃ­as
 
     if df_i is not None:
         import numpy as np
         df_a = _inventory_with_total(df_i)
         if "Total" not in df_a.columns:
-            # Detección dinámica de sedes: columnas numéricas que no sean de precio/referencia
+            # DetecciÃ³n dinÃ¡mica de sedes: columnas numÃ©ricas que no sean de precio/referencia
             excluir = ["Referencia", "Descripcion", "Laboratorio", "Nivel", "Precio Compra", "Precio Venta", "Comision", "Utilidad", "Stock Maximo", "Stock Minimo", "Total", "IVA", "Codigo"]
             posibles_sedes = [c for c in df_a.columns if c not in excluir and pd.api.types.is_numeric_dtype(df_a[c])]
             df_a["Total"] = df_a[posibles_sedes].sum(axis=1) if posibles_sedes else 0
         else:
-            # Si ya tiene una columna Total, nos aseguramos que sea numérica
+            # Si ya tiene una columna Total, nos aseguramos que sea numÃ©rica
             df_a["Total"] = pd.to_numeric(df_a["Total"], errors="coerce").fillna(0)
 
         v_agr = df_v.groupby("Referencia", as_index=False).agg(
@@ -378,7 +378,7 @@ def resumen(
                 df_a["Total"] / df_a["rotacion_diaria"],
                 9999
             )
-            # Alertas con regla 25-40 días
+            # Alertas con regla 25-40 dÃ­as
             productos_criticos_7d = int(len(df_a[(df_a["cobertura_dias"] <= INV_MIN_DIAS * 0.4) & (df_a["rotacion_diaria"] > 0)]))
             productos_atencion_15d = int(len(df_a[(df_a["cobertura_dias"] > INV_MIN_DIAS * 0.4) & (df_a["cobertura_dias"] < INV_MIN_DIAS) & (df_a["rotacion_diaria"] > 0)]))
 
@@ -411,7 +411,7 @@ def resumen(
                              "pct": round(r["Ingreso"] / ing_max_lab * 100, 0)}
                             for _, r in top_lab_df.iterrows()]
 
-    # ── Devoluciones (Notas Crédito) ─────────────────────────────────────────
+    # â”€â”€ Devoluciones (Notas CrÃ©dito) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     df_nc = get_df(x_session_id, "notas_credito")
     df_nc = _apply_date_filter(df_nc, "Fecha", req_fecha_ini, req_fecha_fin) if df_nc is not None else None
     devoluciones_resumen = None
@@ -455,7 +455,7 @@ def resumen(
     }
 
 
-# ── Notas Crédito / Devoluciones ─────────────────────────────────────────────
+# â”€â”€ Notas CrÃ©dito / Devoluciones â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.get("/notas-credito")
 def endpoint_notas_credito(
@@ -655,7 +655,7 @@ def ventas(sede: str = "Todas", nivel: str = "Todos",
     }
 
 
-# ── Metas y Proyecciones ──────────────────────────────────────────────────────
+# â”€â”€ Metas y Proyecciones â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.get("/metas")
 def proyeccion_metas(
@@ -668,151 +668,100 @@ def proyeccion_metas(
     if df is None or len(df) == 0:
         raise HTTPException(404, "No hay datos de ventas")
 
-    # Mapeo de agresividad
     agresividad_map = {
         "conservador": 1.02,
         "normal": 1.05,
-        "agresivo": 1.10
+        "agresivo": 1.10,
     }
     factor_crecimiento = agresividad_map.get(agresividad, 1.05)
 
     if "Fecha" not in df.columns:
         raise HTTPException(400, "No hay columna Fecha para calcular metas")
+    if "Ingreso" not in df.columns:
+        raise HTTPException(400, "No hay columna Ingreso para calcular metas")
 
-    fecha_max_data = df["Fecha"].max()
-    year_max = fecha_max_data.year
-    month_max = fecha_max_data.month
-    
-    # Determinar el "último mes completo" (mes anterior al último mes en los datos)
-    if month_max == 1:
-        mes_ant = 12
-        year_ant = year_max - 1
-    else:
-        mes_ant = month_max - 1
-        year_ant = year_max
-        
-    df_mes_ant = df[(df["Fecha"].dt.year == year_ant) & (df["Fecha"].dt.month == mes_ant)]
-    
-    if not df_mes_ant.empty:
-        df_base = df_mes_ant
-        mes_base_nombre = f"{mes_ant:02d}/{year_ant}"
-    else:
-        df_base = df
-        mes_base_nombre = "todo el periodo cargado"
+    df = df.copy()
+    df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce")
+    df = df[df["Fecha"].notna()]
+    if df.empty:
+        raise HTTPException(400, "No hay fechas válidas en ventas")
 
-    df_base["Fecha_Date"] = df_base["Fecha"].dt.date
-    fechas_unicas = sorted(df_base["Fecha_Date"].dropna().unique())
-    if not fechas_unicas:
-        raise HTTPException(400, "No hay fechas válidas en ventas para el periodo base")
-        
-    mitad_idx = len(fechas_unicas) // 2
-    fechas_m1 = set(fechas_unicas[:mitad_idx])
-    fechas_m2 = set(fechas_unicas[mitad_idx:])
-
-    # Determinar el rango de proyección objetivo
-    
     if fecha_ini and fecha_fin:
         try:
             d_ini = datetime.strptime(fecha_ini, "%Y-%m-%d").date()
             d_fin = datetime.strptime(fecha_fin, "%Y-%m-%d").date()
-            dias_totales_proy = (d_fin - d_ini).days + 1
-            if dias_totales_proy <= 0:
-                raise ValueError("Rango inválido")
-            
-            # Calcular festivos y domingos en el rango dado
-            co_holidays = holidays.CO(years=[d_ini.year, d_fin.year])
-            domingos_festivos = 0
-            habiles = 0
-            curr_date = d_ini
-            while curr_date <= d_fin:
-                if curr_date.weekday() == 6 or curr_date in co_holidays:
-                    domingos_festivos += 1
-                else:
-                    habiles += 1
-                curr_date += timedelta(days=1)
-                
         except ValueError:
             raise HTTPException(400, "Formato de fecha inválido o rango erróneo")
+        if d_fin < d_ini:
+            raise HTTPException(400, "Formato de fecha inválido o rango erróneo")
+        y_obj, m_obj = d_ini.year, d_ini.month
+        dias_totales_proy = (d_fin - d_ini).days + 1
     else:
-        # Calcular exactitud del mes actual (mes objetivo) por defecto
-        _, dias_totales_proy = calendar.monthrange(year_max, month_max)
-        
-        # Calcular festivos y domingos en Colombia para este mes
-        co_holidays = holidays.CO(years=year_max)
-        domingos_festivos = 0
-        habiles = 0
-        for day in range(1, dias_totales_proy + 1):
-            dt = date(year_max, month_max, day)
-            if dt.weekday() == 6 or dt in co_holidays:
-                domingos_festivos += 1
-            else:
-                habiles += 1
+        hoy = date.today()
+        y_obj, m_obj = hoy.year, hoy.month
+        _, dias_totales_proy = calendar.monthrange(y_obj, m_obj)
 
-    col_sede = "Punto Venta" if "Punto Venta" in df_base.columns else None
-    col_vend = "Creada" if "Creada" in df_base.columns else None
-    
-    if not col_sede or not col_vend:
-        raise HTTPException(400, "Faltan columnas de Sede o Vendedor")
+    if m_obj == 1:
+        y_base, m_base = y_obj - 1, 12
+    else:
+        y_base, m_base = y_obj, m_obj - 1
+
+    y_hist = y_obj - 1
+    m_hist_obj = m_obj
+    m_hist_prev = m_base
+
+    habiles = dias_totales_proy
+    domingos_festivos = 0
+
+    col_sede = "Punto Venta" if "Punto Venta" in df.columns else None
+    col_vend = "Creada" if "Creada" in df.columns else None
+    if not col_sede:
+        raise HTTPException(400, "Falta columna de Sede (Punto Venta)")
+    if not col_vend:
+        df["Creada"] = "Sin Vendedor"
+        col_vend = "Creada"
 
     sedes_data = []
-    
-    for sede, df_sede in df_base.groupby(col_sede):
-        dias_sede = df_sede["Fecha_Date"].nunique()
-        if dias_sede == 0: continue
-        ingresos_sede = df_sede["Ingreso"].sum()
-        idp_sede = ingresos_sede / dias_sede
-        
-        # Tendencia
-        df_m1 = df_sede[df_sede["Fecha_Date"].isin(fechas_m1)]
-        df_m2 = df_sede[df_sede["Fecha_Date"].isin(fechas_m2)]
-        
-        idp_m1 = df_m1["Ingreso"].sum() / max(df_m1["Fecha_Date"].nunique(), 1)
-        idp_m2 = df_m2["Ingreso"].sum() / max(df_m2["Fecha_Date"].nunique(), 1)
-        
-        tendencia = idp_m2 / idp_m1 if idp_m1 > 0 else 1.0
-        tendencia_capeada = min(max(tendencia, 0.9), 1.15)
-        
-        # Proyección base a días objetivo
-        proyeccion_base = idp_sede * dias_totales_proy * tendencia_capeada
-        
-        # Asignación de meta según tendencia y agresividad
-        if tendencia > 1.05:
-            meta_sede = proyeccion_base * factor_crecimiento
-        elif tendencia < 0.95:
-            # Meta de recuperación
-            meta_sede = (idp_sede * dias_totales_proy) * (factor_crecimiento + 0.02)
-        else:
-            meta_sede = proyeccion_base * factor_crecimiento
-            
-        ticket_sede = ingresos_sede / max(df_sede["Factura"].nunique(), 1)
-        
+
+    for sede, df_sede_all in df.groupby(col_sede):
+        df_base = df_sede_all[(df_sede_all["Fecha"].dt.year == y_base) & (df_sede_all["Fecha"].dt.month == m_base)].copy()
+        if df_base.empty:
+            continue
+
+        ventas_mes_anterior = float(df_base["Ingreso"].sum())
+        dias_mes_anterior = calendar.monthrange(y_base, m_base)[1]
+        idp_sede = ventas_mes_anterior / max(dias_mes_anterior, 1)
+        proyeccion_base = idp_sede * dias_totales_proy
+
+        df_hist_obj = df_sede_all[(df_sede_all["Fecha"].dt.year == y_hist) & (df_sede_all["Fecha"].dt.month == m_hist_obj)]
+        df_hist_prev = df_sede_all[(df_sede_all["Fecha"].dt.year == y_hist) & (df_sede_all["Fecha"].dt.month == m_hist_prev)]
+        venta_hist_obj = float(df_hist_obj["Ingreso"].sum())
+        venta_hist_prev = float(df_hist_prev["Ingreso"].sum())
+
+        incremento_hist = (venta_hist_obj / venta_hist_prev - 1.0) if venta_hist_prev > 0 else 0.0
+        incremento_hist = max(min(incremento_hist, 0.35), -0.20)
+        incremento_aplicado = incremento_hist + (factor_crecimiento - 1.0)
+
+        meta_sede = max(proyeccion_base * (1.0 + incremento_aplicado), 0.0)
+
         vendedores = []
         vends_raw = []
-        
-        for vend, df_v in df_sede.groupby(col_vend):
-            ingreso_v = df_v["Ingreso"].sum()
-            aporte_v = ingreso_v / ingresos_sede if ingresos_sede > 0 else 0
-            dias_v = df_v["Fecha_Date"].nunique()
-            
-            # Filtro para excluir reemplazos temporales:
-            # Si un vendedor aporta menos del 5% del total de la sede, se considera temporal/reemplazo
-            # y no se le asigna meta individual.
+        for vend, df_v in df_base.groupby(col_vend):
+            ingreso_v = float(df_v["Ingreso"].sum())
+            aporte_v = ingreso_v / ventas_mes_anterior if ventas_mes_anterior > 0 else 0
             if aporte_v < 0.05:
                 continue
-                
-            ticket_v = ingreso_v / max(df_v["Factura"].nunique(), 1)
-            
+            ticket_v = ingreso_v / max(df_v["Factura"].nunique(), 1) if "Factura" in df_v.columns else 0.0
             vends_raw.append({
                 "nombre": vend,
-                "ingreso_actual": float(ingreso_v),
+                "ingreso_actual": ingreso_v,
                 "ticket_promedio": float(ticket_v),
                 "aporte": round(aporte_v * 100, 1)
             })
-            
-        # Distribución equitativa: peso igual para todos los vendedores fijos
+
         num_vendedores = len(vends_raw)
         peso_igual = 1.0 / num_vendedores if num_vendedores > 0 else 0
-        
+
         for v in vends_raw:
             meta_v = meta_sede * peso_igual
             vendedores.append({
@@ -823,21 +772,25 @@ def proyeccion_metas(
                 "peso_distribucion": round(peso_igual * 100, 1),
                 "meta": float(meta_v)
             })
-            
+
         vendedores.sort(key=lambda x: x["meta"], reverse=True)
-        
+
         sedes_data.append({
             "sede": sede,
-            "ingreso_actual": float(ingresos_sede),
+            "ingreso_actual": float(ventas_mes_anterior),
             "idp": float(idp_sede),
-            "tendencia": round(tendencia, 2),
+            "tendencia": round(1.0 + incremento_hist, 2),
             "proyeccion_base": float(proyeccion_base),
             "meta_sugerida": float(meta_sede),
+            "incremento_hist_pct": round(incremento_hist * 100, 2),
+            "incremento_aplicado_pct": round(incremento_aplicado * 100, 2),
+            "ventas_hist_mismo_mes": float(venta_hist_obj),
+            "ventas_hist_mes_anterior": float(venta_hist_prev),
             "vendedores": vendedores
         })
-        
+
     sedes_data.sort(key=lambda x: x["meta_sugerida"], reverse=True)
-    
+
     return {
         "resumen": {
             "ingreso_actual_total": sum(s["ingreso_actual"] for s in sedes_data),
@@ -846,13 +799,16 @@ def proyeccion_metas(
             "dias_mes": dias_totales_proy,
             "dias_habiles": habiles,
             "dias_festivos": domingos_festivos,
-            "mes_base_usado": mes_base_nombre
+            "mes_base_usado": f"{m_base:02d}/{y_base}",
+            "mes_objetivo": f"{m_obj:02d}/{y_obj}",
+            "comparativo_historico": f"{m_hist_prev:02d}-{m_hist_obj:02d}/{y_hist}",
+            "regla_dias": "Domingo a domingo; festivos cuentan normal"
         },
         "sedes": sedes_data
     }
 
 
-# ── Rentabilidad ──────────────────────────────────────────────────────────────
+# â”€â”€ Rentabilidad â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.get("/rentabilidad")
 def rentabilidad(
@@ -960,7 +916,7 @@ def rentabilidad(
     }
 
 
-# ── Inventario ────────────────────────────────────────────────────────────────
+# â”€â”€ Inventario â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.get("/inventario")
 def inventario(
@@ -977,7 +933,7 @@ def inventario(
     if df_i is None:
         raise HTTPException(404, "No hay datos de inventario")
     if inv_min_dias <= 0 or inv_max_dias <= inv_min_dias or quieto_dias <= 0:
-        raise HTTPException(400, "Umbrales inválidos: usa mínimo > 0, máximo > mínimo y quieto > 0")
+        raise HTTPException(400, "Umbrales invÃ¡lidos: usa mÃ­nimo > 0, mÃ¡ximo > mÃ­nimo y quieto > 0")
 
     df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin) if df_v is not None else None
 
@@ -1002,7 +958,7 @@ def inventario(
         max_fecha = df_v_filtered["Fecha"].max()
         min_fecha = df_v_filtered["Fecha"].min()
 
-        # Forecasting (Tendencia 15 días)
+        # Forecasting (Tendencia 15 dÃ­as)
         from datetime import timedelta
         import numpy as np
         if pd.notna(max_fecha):
@@ -1041,7 +997,7 @@ def inventario(
 
         df_a  = df_a.merge(v_agr, on="Referencia", how="left")
         df_a["uds_vendidas"] = df_a["uds_vendidas"].fillna(0)
-        df_a["clasificacion_abc"] = df_a["clasificacion_abc"].fillna("C") # Si no se vendió, es C
+        df_a["clasificacion_abc"] = df_a["clasificacion_abc"].fillna("C") # Si no se vendiÃ³, es C
         df_a["factor_tendencia"] = df_a.get("factor_tendencia", 1.0).fillna(1.0)
         
         if pd.notna(max_fecha) and pd.notna(min_fecha):
@@ -1071,15 +1027,15 @@ def inventario(
     df_a["dias_sin_venta"] = df_a["dias_sin_venta"].fillna(9999)
     df_a["cobertura_dias"] = df_a["cobertura_dias"].fillna(9999)
 
-    # 1. Bajo Stock: Cobertura por debajo del mínimo saludable configurado.
+    # 1. Bajo Stock: Cobertura por debajo del mÃ­nimo saludable configurado.
     bajo = df_a[(df_a["cobertura_dias"] < inv_min_dias) & (df_a["rotacion_proyectada"] > 0)].copy()
     
-    # Calcular déficit real en unidades para llegar a la cobertura mínima.
+    # Calcular dÃ©ficit real en unidades para llegar a la cobertura mÃ­nima.
     bajo["stock_ideal"] = bajo["rotacion_proyectada"] * inv_min_dias
     bajo["deficit"] = bajo["stock_ideal"] - bajo["Total"]
     bajo["deficit"] = bajo["deficit"].apply(lambda x: max(1, round(x)))
 
-    # 2. Sobrestock: Cobertura por encima del máximo saludable configurado.
+    # 2. Sobrestock: Cobertura por encima del mÃ¡ximo saludable configurado.
     sobre = df_a[(df_a["cobertura_dias"] > inv_max_dias) & (df_a["cobertura_dias"] < 9999) & (df_a["rotacion_proyectada"] > 0)].copy()
     if "Precio Compra" in sobre.columns:
         sobre["capital_exceso"] = (sobre["Total"] - (sobre["rotacion_proyectada"] * inv_max_dias)) * sobre["Precio Compra"]
@@ -1115,7 +1071,7 @@ def inventario(
         if s in df_i.columns:
             stock_sede[s] = int(df_i[s].sum())
 
-    # Obtener sedes dinámicamente para el selector del frontend
+    # Obtener sedes dinÃ¡micamente para el selector del frontend
     excluir_selector = ["Referencia", "Descripcion", "Laboratorio", "Nivel", "Precio Compra", "Precio Venta", "Comision", "Utilidad", "Stock Maximo", "Stock Minimo", "Total", "IVA", "Codigo"]
     sedes_finales = [c for c in df_i.columns if c not in excluir_selector and pd.api.types.is_numeric_dtype(df_i[c])]
 
@@ -1143,7 +1099,7 @@ def inventario(
     }
 
 
-# ── Compras vs Ventas ─────────────────────────────────────────────────────────
+# â”€â”€ Compras vs Ventas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.get("/compras")
 def compras(
@@ -1160,9 +1116,9 @@ def compras(
     df_v = get_df(x_session_id, "ventas")
     df_i = get_df(x_session_id, "inventario")
     if df_c is None or df_v is None or df_i is None:
-        raise HTTPException(404, "Se requieren Compras, Ventas e Inventario para la conciliación.")
+        raise HTTPException(404, "Se requieren Compras, Ventas e Inventario para la conciliaciÃ³n.")
     if inv_min_dias <= 0 or inv_max_dias <= inv_min_dias:
-        raise HTTPException(400, "Umbrales inválidos: usa mínimo > 0 y máximo > mínimo")
+        raise HTTPException(400, "Umbrales invÃ¡lidos: usa mÃ­nimo > 0 y mÃ¡ximo > mÃ­nimo")
 
     df_c = _apply_date_filter(df_c, "FECHA", fecha_ini, fecha_fin)
     df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin)
@@ -1178,7 +1134,7 @@ def compras(
     comp = df_i_total[["Referencia", "Descripcion", "Total"]].copy()
     comp = comp.rename(columns={"Total": "inv_actual"})
     
-    # Intentar obtener Categoría/Nivel para diferenciar perecederos
+    # Intentar obtener CategorÃ­a/Nivel para diferenciar perecederos
     if "Nivel" in df_i.columns:
         nivel_df = df_i[["Referencia", "Nivel"]].drop_duplicates("Referencia")
         comp = comp.merge(nivel_df, on="Referencia", how="left")
@@ -1197,13 +1153,13 @@ def compras(
     comp["uds_compradas"] = comp["uds_compradas"].fillna(0)
     comp["uds_vendidas"] = comp["uds_vendidas"].fillna(0)
     
-    # 4. INGENIERÍA INVERSA: Inventario Inicial
+    # 4. INGENIERÃA INVERSA: Inventario Inicial
     comp["inv_inicial"] = comp["inv_actual"] - comp["uds_compradas"] + comp["uds_vendidas"]
     
     # Filtrar productos inactivos (todo en 0)
     comp = comp[(comp["inv_actual"] > 0) | (comp["uds_compradas"] > 0) | (comp["uds_vendidas"] > 0)]
     
-    # 5. Días del Periodo
+    # 5. DÃ­as del Periodo
     dias_periodo = 30
     if "Fecha" in df_v.columns and df_v["Fecha"].notna().any():
         dias_periodo = _inclusive_days(df_v["Fecha"].min(), df_v["Fecha"].max(), default=30)
@@ -1211,7 +1167,7 @@ def compras(
     comp["venta_diaria"] = comp["uds_vendidas"] / dias_periodo
     comp["cobertura_dias"] = comp.apply(lambda x: (x["inv_actual"] / x["venta_diaria"]) if x["venta_diaria"] > 0 else 9999, axis=1)
 
-    # 6. Estado (Basado en Cobertura 25-40 días)
+    # 6. Estado (Basado en Cobertura 25-40 dÃ­as)
     def calcular_estado_flujo(row):
         if row["cobertura_dias"] < inv_min_dias:
             return "desabastecimiento" # Falta
@@ -1264,7 +1220,7 @@ def compras(
     }
 
 
-# ── Sedes ─────────────────────────────────────────────────────────────────────
+# â”€â”€ Sedes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.get("/sedes")
 def sedes(

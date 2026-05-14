@@ -9,10 +9,20 @@ from config import EXCLUDED_INVENTORY_COLUMNS
 
 def procesar_ventas(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    df["Cant"]        = pd.to_numeric(df.get("Cant"),        errors="coerce").fillna(0)
+    if "Cant" not in df.columns and "CANT" in df.columns:
+        df = df.rename(columns={"CANT": "Cant"})
+    if "Precio Venta" not in df.columns and "Precio" in df.columns:
+        df = df.rename(columns={"Precio": "Precio Venta"})
+    if "Punto Venta" not in df.columns and "SEDE" in df.columns:
+        df = df.rename(columns={"SEDE": "Punto Venta"})
+
+    df["Cant"] = pd.to_numeric(df.get("Cant"), errors="coerce").fillna(0)
     df["Precio Venta"] = pd.to_numeric(df.get("Precio Venta"), errors="coerce").fillna(0)
-    df["Fecha"]       = pd.to_datetime(df.get("Fecha"),      errors="coerce")
-    df["Ingreso"]     = df["Cant"] * df["Precio Venta"]
+    df["Fecha"] = pd.to_datetime(df.get("Fecha"), errors="coerce")
+
+    ingreso_origen = pd.to_numeric(df.get("Ingreso"), errors="coerce") if "Ingreso" in df.columns else None
+    ingreso_calc = df["Cant"] * df["Precio Venta"]
+    df["Ingreso"] = ingreso_origen.fillna(ingreso_calc) if ingreso_origen is not None else ingreso_calc
     return df
 
 
