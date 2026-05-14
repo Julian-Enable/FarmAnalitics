@@ -82,6 +82,9 @@
               <th @click="sortByMargen('precio_venta')" style="cursor: pointer;">
                 Venta prom. <span style="opacity: 0.5; font-size: 10px;">{{ sortMarker('precio_venta') }}</span>
               </th>
+              <th @click="sortByMargen('precio_compra')" style="cursor: pointer;">
+                Compra <span style="opacity: 0.5; font-size: 10px;">{{ sortMarker('precio_compra') }}</span>
+              </th>
               <th @click="sortByMargen('utilidad_unit')" style="cursor: pointer;">
                 Util/unit <span style="opacity: 0.5; font-size: 10px;">{{ sortMarker('utilidad_unit') }}</span>
               </th>
@@ -96,6 +99,7 @@
               <td>{{ store.fmtN(row.cant_vend) }}</td>
               <td>{{ Number(row.rotacion_diaria || 0).toFixed(2) }}</td>
               <td>{{ store.fmt(row.precio_venta) }}</td>
+              <td>{{ store.fmt(row.precio_compra) }}</td>
               <td>{{ store.fmt(row.utilidad_unit) }}</td>
               <td><span class="badge badge-red">{{ row.margen_pct }}%</span></td>
             </tr>
