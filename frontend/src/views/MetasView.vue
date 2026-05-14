@@ -3,7 +3,7 @@
     <div class="page-header">
       <div style="display: flex; align-items: center; gap: 12px;">
         <Target size="32" color="var(--accent)" />
-        <h2 style="margin: 0;">ProyecciÃ³n y Metas Sugeridas</h2>
+        <h2 style="margin: 0;">Proyección y Metas Sugeridas</h2>
       </div>
       <p style="margin-top: 8px;">Cálculo por mes anterior, comparativo histórico anual e incremento objetivo por sede.</p>
       <div class="accent-bar"></div>
@@ -51,12 +51,12 @@
     </div>
     
     <div v-else-if="data" class="kpi-grid kpi-grid-3">
-      <KpiCard :icon="DollarSign" label="Ingreso Base (HistÃ³rico)" :value="store.fmt(data.resumen.ingreso_actual_total)" />
-      <KpiCard :icon="TrendingUp" :label="'ProyecciÃ³n Mes (' + data.resumen.dias_mes + 'd)'" :value="store.fmt(data.resumen.proyeccion_total)">
+      <KpiCard :icon="DollarSign" label="Ingreso Base (Histórico)" :value="store.fmt(data.resumen.ingreso_actual_total)" />
+      <KpiCard :icon="TrendingUp" :label="'Proyección Mes (' + data.resumen.dias_mes + 'd)'" :value="store.fmt(data.resumen.proyeccion_total)">
         <template #sub>
           <div style="font-size: 11px; color: var(--fg-muted); display: flex; flex-direction: column; gap: 2px; margin-top: 2px;">
-            <span>{{ data.resumen.dias_habiles }} hÃ¡biles, {{ data.resumen.dias_festivos }} festivos</span>
-            <span><strong>Base histÃ³rica:</strong> {{ data.resumen.mes_base_usado }}</span>
+            <span>{{ data.resumen.dias_habiles }} hábiles, {{ data.resumen.dias_festivos }} festivos</span>
+            <span><strong>Base histórica:</strong> {{ data.resumen.mes_base_usado }}</span>
           </div>
         </template>
       </KpiCard>
@@ -67,7 +67,7 @@
         <div class="cmd-kpi-body">
           <span class="cmd-kpi-label" style="color: var(--accent);">Meta Global Sugerida</span>
           <span class="cmd-kpi-value" style="color: var(--accent);">{{ store.fmt(data.resumen.meta_total) }}</span>
-          <span class="cmd-kpi-sub">+{{ ((data.resumen.meta_total / data.resumen.proyeccion_total - 1) * 100).toFixed(1) }}% vs ProyecciÃ³n Base</span>
+          <span class="cmd-kpi-sub">+{{ ((data.resumen.meta_total / data.resumen.proyeccion_total - 1) * 100).toFixed(1) }}% vs Proyección Base</span>
         </div>
       </div>
     </div>
@@ -263,3 +263,4 @@ function clearWeight(sedeName, vendName) {
   border-color: var(--accent);
 }
 </style>
+
