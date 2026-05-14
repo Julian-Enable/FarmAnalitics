@@ -1,20 +1,23 @@
-<template>
+﻿<template>
   <div>
     <div class="page-header">
       <div style="display: flex; align-items: center; gap: 12px;">
         <Target size="32" color="var(--accent)" />
-        <h2 style="margin: 0;">Proyección y Metas Sugeridas</h2>
+        <h2 style="margin: 0;">ProyecciÃ³n y Metas Sugeridas</h2>
       </div>
-      <p style="margin-top: 8px;">Cálculo inteligente de cuotas por sede y vendedor (Run Rate, Momentum y Eficiencia)</p>
+      <p style="margin-top: 8px;">Cálculo por mes anterior, comparativo histórico anual e incremento objetivo por sede.</p>
       <div class="accent-bar"></div>
     </div>
 
     <ModuleInfo>
-      <p><strong>¿Cómo se calcula esto?</strong></p>
+      <p><strong>¿Cómo se calcula ahora Proyección y Metas?</strong></p>
       <ul style="margin-left: 20px; margin-top: 8px;">
-        <li><strong>Proyección Base:</strong> Ritmo de venta actual proyectado a 30 días, ajustado por la tendencia (si la sede aceleró o frenó en la segunda quincena).</li>
-        <li><strong>Meta Sugerida:</strong> La proyección base multiplicada por un factor de agresividad, garantizando un piso de crecimiento para sedes que vienen en caída.</li>
-        <li><strong>Distribución a Vendedores:</strong> Se reparte la meta global de la sede en partes exactamente iguales entre todos los vendedores fijos. Se excluyen automáticamente los reemplazos o cuentas temporales (aquellos con menos del 5% de aporte histórico).</li>
+        <li><strong>1. Base mensual real:</strong> Se toma la venta bruta del mes anterior por sede y se calcula su promedio diario con los días calendario del mes (operación domingo a domingo, festivos incluidos).</li>
+        <li><strong>2. Proyección del periodo objetivo:</strong> Ese promedio diario se proyecta al mes o rango seleccionado para obtener la <strong>Proyección Base</strong>.</li>
+        <li><strong>3. Contexto histórico anual:</strong> Se compara el mismo par de meses del año anterior (mes objetivo y su mes previo) para estimar el incremento histórico de referencia.</li>
+        <li><strong>4. Meta sugerida:</strong> La meta se calcula aplicando a la proyección base el incremento histórico y el nivel de exigencia (Conservador, Normal o Agresivo).</li>
+        <li><strong>5. Distribución por vendedores:</strong> La meta de sede se reparte en partes iguales entre vendedores fijos (se excluyen aportes menores al 5%).</li>
+        <li><strong>6. Fallback automático de periodo:</strong> Si el mes actual no tiene base en datos, el sistema proyecta con el último mes disponible y avanza al mes siguiente para evitar metas en cero.</li>
       </ul>
     </ModuleInfo>
 
@@ -48,12 +51,12 @@
     </div>
     
     <div v-else-if="data" class="kpi-grid kpi-grid-3">
-      <KpiCard :icon="DollarSign" label="Ingreso Base (Histórico)" :value="store.fmt(data.resumen.ingreso_actual_total)" />
-      <KpiCard :icon="TrendingUp" :label="'Proyección Mes (' + data.resumen.dias_mes + 'd)'" :value="store.fmt(data.resumen.proyeccion_total)">
+      <KpiCard :icon="DollarSign" label="Ingreso Base (HistÃ³rico)" :value="store.fmt(data.resumen.ingreso_actual_total)" />
+      <KpiCard :icon="TrendingUp" :label="'ProyecciÃ³n Mes (' + data.resumen.dias_mes + 'd)'" :value="store.fmt(data.resumen.proyeccion_total)">
         <template #sub>
           <div style="font-size: 11px; color: var(--fg-muted); display: flex; flex-direction: column; gap: 2px; margin-top: 2px;">
-            <span>{{ data.resumen.dias_habiles }} hábiles, {{ data.resumen.dias_festivos }} festivos</span>
-            <span><strong>Base histórica:</strong> {{ data.resumen.mes_base_usado }}</span>
+            <span>{{ data.resumen.dias_habiles }} hÃ¡biles, {{ data.resumen.dias_festivos }} festivos</span>
+            <span><strong>Base histÃ³rica:</strong> {{ data.resumen.mes_base_usado }}</span>
           </div>
         </template>
       </KpiCard>
@@ -64,7 +67,7 @@
         <div class="cmd-kpi-body">
           <span class="cmd-kpi-label" style="color: var(--accent);">Meta Global Sugerida</span>
           <span class="cmd-kpi-value" style="color: var(--accent);">{{ store.fmt(data.resumen.meta_total) }}</span>
-          <span class="cmd-kpi-sub">+{{ ((data.resumen.meta_total / data.resumen.proyeccion_total - 1) * 100).toFixed(1) }}% vs Proyección Base</span>
+          <span class="cmd-kpi-sub">+{{ ((data.resumen.meta_total / data.resumen.proyeccion_total - 1) * 100).toFixed(1) }}% vs ProyecciÃ³n Base</span>
         </div>
       </div>
     </div>
@@ -84,7 +87,7 @@
             </h3>
             <div style="font-size: 12px; color: var(--fg-muted); margin-top: 4px; display: flex; gap: 16px;">
               <span><strong>IDP (Promedio Diario):</strong> {{ store.fmt(sede.idp) }}</span>
-              <span><strong>Momentum:</strong> <span :style="{color: sede.tendencia >= 1 ? 'var(--green)' : 'var(--red)'}">{{ sede.tendencia >= 1 ? '▲' : '▼' }} {{ sede.tendencia }}x</span></span>
+              <span><strong>Momentum:</strong> <span :style="{color: sede.tendencia >= 1 ? 'var(--green)' : 'var(--red)'}">{{ sede.tendencia >= 1 ? 'â–²' : 'â–¼' }} {{ sede.tendencia }}x</span></span>
             </div>
           </div>
           <div style="text-align: right;">
