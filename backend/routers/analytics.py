@@ -9,7 +9,7 @@ import calendar
 import holidays
 from datetime import datetime, timedelta, date
 
-from backend.services.data_store import get_df, set_df, get_status, clear_all
+from backend.services.data_store import get_df, set_df, get_status, clear_all, get_default_ventas
 from backend.services.processing import (
     leer_bytes, procesar_ventas, procesar_compras, procesar_inventario, procesar_notas_credito,
 )
@@ -665,6 +665,8 @@ def proyeccion_metas(
     x_session_id: str = Header(default="default-session")
 ):
     df = get_df(x_session_id, "ventas")
+    if df is None or len(df) == 0:
+        df = get_default_ventas()
     if df is None or len(df) == 0:
         raise HTTPException(404, "No hay datos de ventas")
 

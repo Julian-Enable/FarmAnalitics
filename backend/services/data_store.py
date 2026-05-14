@@ -54,6 +54,12 @@ def _ensure_default_ventas(session_id: str) -> None:
         if df_default is not None:
             _sessions[session_id]["data"]["ventas"] = df_default.copy()
 
+
+def get_default_ventas() -> pd.DataFrame | None:
+    """Retorna el histórico de ventas por defecto (si existe), sin inyectarlo en sesión."""
+    df = _load_default_ventas()
+    return None if df is None else df.copy()
+
 def _init_session(session_id: str):
     if session_id not in _sessions:
         _sessions[session_id] = {
@@ -84,15 +90,12 @@ def set_df(session_id: str, key: str, df: pd.DataFrame) -> None:
 
 def get_df(session_id: str, key: str) -> pd.DataFrame | None:
     _cleanup_old_sessions()
-    if key == "ventas":
-        _ensure_default_ventas(session_id)
     if session_id not in _sessions:
         return None
     _sessions[session_id]["last_accessed"] = time.time()
     return _sessions[session_id]["data"].get(key)
 
 def get_status(session_id: str) -> dict:
-    _ensure_default_ventas(session_id)
     if session_id not in _sessions:
         return {"ventas": False, "compras": False, "inventario": False, "notas_credito": False}
     _sessions[session_id]["last_accessed"] = time.time()
