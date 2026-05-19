@@ -233,7 +233,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   async function fetchMetas(agresividad = 'normal', fecha_ini = null, fecha_fin = null) {
-    if (!status.ventas) return
     loading.metas = true
     clearModuleError('metas')
     try {

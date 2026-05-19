@@ -9,12 +9,19 @@ from config import EXCLUDED_INVENTORY_COLUMNS
 
 def procesar_ventas(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    if "Cant" not in df.columns and "CANT" in df.columns:
-        df = df.rename(columns={"CANT": "Cant"})
-    if "Precio Venta" not in df.columns and "Precio" in df.columns:
-        df = df.rename(columns={"Precio": "Precio Venta"})
-    if "Punto Venta" not in df.columns and "SEDE" in df.columns:
-        df = df.rename(columns={"SEDE": "Punto Venta"})
+    aliases = {
+        "REFERENCIA": "Referencia",
+        "DESCRIPCION": "Descripcion",
+        "CANT": "Cant",
+        "PRECIO": "Precio Venta",
+        "Precio": "Precio Venta",
+        "LABORATORIO": "Laboratorio",
+        "NIVEL": "Nivel",
+        "FACTURA": "Factura",
+        "FECHA": "Fecha",
+        "SEDE": "Punto Venta",
+    }
+    df = df.rename(columns={src: dst for src, dst in aliases.items() if src in df.columns and dst not in df.columns})
 
     df["Cant"] = pd.to_numeric(df.get("Cant"), errors="coerce").fillna(0)
     df["Precio Venta"] = pd.to_numeric(df.get("Precio Venta"), errors="coerce").fillna(0)

@@ -47,14 +47,6 @@ def _load_default_ventas() -> pd.DataFrame | None:
     return None
 
 
-def _ensure_default_ventas(session_id: str) -> None:
-    _init_session(session_id)
-    if _sessions[session_id]["data"].get("ventas") is None:
-        df_default = _load_default_ventas()
-        if df_default is not None:
-            _sessions[session_id]["data"]["ventas"] = df_default.copy()
-
-
 def get_default_ventas() -> pd.DataFrame | None:
     """Retorna el histórico de ventas por defecto (si existe), sin inyectarlo en sesión."""
     df = _load_default_ventas()

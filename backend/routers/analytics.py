@@ -121,9 +121,20 @@ def _column_diagnostic(kind: str, df: pd.DataFrame) -> dict:
     required = REQUIRED_COLUMNS[kind]
     columns = [str(c) for c in df.columns]
     missing = [c for c in required if c not in columns]
-    # Compatibilidad: en ventas aceptamos "Precio" como equivalente de "Precio Venta".
-    if kind == "ventas" and "Precio Venta" in missing and "Precio" in columns:
-        missing.remove("Precio Venta")
+    if kind == "ventas":
+        aliases = {
+            "Referencia": {"REFERENCIA"},
+            "Descripcion": {"DESCRIPCION"},
+            "Cant": {"CANT"},
+            "Precio Venta": {"Precio", "PRECIO"},
+            "Laboratorio": {"LABORATORIO"},
+            "Fecha": {"FECHA"},
+            "Punto Venta": {"SEDE"},
+        }
+        missing = [
+            col for col in missing
+            if not aliases.get(col, set()).intersection(columns)
+        ]
     return {
         "tipo": kind,
         "filas": int(len(df)),

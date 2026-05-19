@@ -67,7 +67,7 @@
         <div class="cmd-kpi-body">
           <span class="cmd-kpi-label" style="color: var(--accent);">Meta Global Sugerida</span>
           <span class="cmd-kpi-value" style="color: var(--accent);">{{ store.fmt(data.resumen.meta_total) }}</span>
-          <span class="cmd-kpi-sub">+{{ ((data.resumen.meta_total / data.resumen.proyeccion_total - 1) * 100).toFixed(1) }}% vs Proyección Base</span>
+          <span class="cmd-kpi-sub">{{ metaVsProjectionLabel }}</span>
         </div>
       </div>
     </div>
@@ -87,7 +87,7 @@
             </h3>
             <div style="font-size: 12px; color: var(--fg-muted); margin-top: 4px; display: flex; gap: 16px;">
               <span><strong>IDP (Promedio Diario):</strong> {{ store.fmt(sede.idp) }}</span>
-              <span><strong>Momentum:</strong> <span :style="{color: sede.tendencia >= 1 ? 'var(--green)' : 'var(--red)'}">{{ sede.tendencia >= 1 ? 'â–²' : 'â–¼' }} {{ sede.tendencia }}x</span></span>
+              <span><strong>Momentum:</strong> <span :style="{color: sede.tendencia >= 1 ? 'var(--green)' : 'var(--red)'}">{{ sede.tendencia >= 1 ? '▲' : '▼' }} {{ sede.tendencia }}x</span></span>
             </div>
           </div>
           <div style="text-align: right;">
@@ -158,6 +158,14 @@ const weightError = ref('')
 const loading = computed(() => store.loading.metas)
 const data = computed(() => store.data.metas)
 
+const metaVsProjectionLabel = computed(() => {
+  const resumen = data.value?.resumen
+  if (!resumen?.proyeccion_total) return 'Sin proyección base'
+  const pct = ((resumen.meta_total / resumen.proyeccion_total - 1) * 100)
+  if (!Number.isFinite(pct)) return 'Sin proyección base'
+  return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% vs Proyección Base`
+})
+
 // Computed property que inyecta las asignaciones personalizadas de peso
 const processedSedes = computed(() => {
   if (!data.value || !data.value.sedes) return []
@@ -201,7 +209,7 @@ const processedSedes = computed(() => {
 })
 
 onMounted(async () => {
-  if (store.status.ventas && !data.value) {
+  if (!data.value) {
     await store.fetchMetas(agresividad.value, fechaIni.value || null, fechaFin.value || null)
   }
 })

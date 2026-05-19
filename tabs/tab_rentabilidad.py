@@ -21,7 +21,7 @@ def render(df_v, df_c, df_i):
         st.warning("El inventario no tiene la columna **Precio Compra**.")
         return
 
-    # ── Cruzar ventas con precios del inventario ─────────────────────────
+    # ── Cruzar ventas con precios del inventario ─────────────────────────────
     v_agg = df_v.groupby("Referencia", as_index=False).agg(
         Cant_Vend=("Cant", "sum"), Descripcion=("Descripcion", "first"),
         Laboratorio=("Laboratorio", "first"), Ingreso_Total=("Ingreso", "sum"),
@@ -52,20 +52,20 @@ def render(df_v, df_c, df_i):
     ing_total = rent["Ingreso_Total"].sum()
     margen_global = (util_total / ing_total * 100) if ing_total > 0 else 0
 
-    # ── KPIs ─────────────────────────────────────────────────────────────
+    # ── KPIs ─────────────────────────────────────────────────────────────────
     render_kpi_row([
-        {"icon": "💰", "value": fmt_cop(util_total), "label": "Utilidad Bruta Total"},
-        {"icon": "📊", "value": f"{margen_global:.1f}%", "label": "Margen Global"},
-        {"icon": "📈", "value": fmt_cop(ing_total), "label": "Ingreso Total"},
-        {"icon": "🔢", "value": f"{len(rent):,}", "label": "Productos Cruzados"},
+        {"icon": "$", "value": fmt_cop(util_total), "label": "Utilidad Bruta Total"},
+        {"icon": "%", "value": f"{margen_global:.1f}%", "label": "Margen Global"},
+        {"icon": "$", "value": fmt_cop(ing_total), "label": "Ingreso Total"},
+        {"icon": "#", "value": f"{len(rent):,}", "label": "Productos Cruzados"},
     ])
     render_divider()
 
-    # ── Gráficos ─────────────────────────────────────────────────────────
+    # ── Gráficos ─────────────────────────────────────────────────────────────
     r1, r2 = st.columns(2)
 
     with r1:
-        render_section_header("🥇", "Top 15 Productos Más Rentables")
+        render_section_header("", "Top 15 Productos Más Rentables")
         top_r = rent.nlargest(15, "Utilidad_Total").sort_values("Utilidad_Total", ascending=True)
         top_r["Nombre"] = top_r["Descripcion"].str[:30]
         fig = px.bar(top_r, x="Utilidad_Total", y="Nombre", orientation="h",
@@ -76,7 +76,7 @@ def render(df_v, df_c, df_i):
         st.plotly_chart(fig, width="stretch")
 
     with r2:
-        render_section_header("⚠️", "Top 15 Menor Margen %")
+        render_section_header("!", "Top 15 Menor Margen %")
         bajo = rent[
             (rent["Margen_Pct"] < LOW_MARGIN_PCT)
             & (rent["Cant_Vend"] >= alta_rotacion_min)
@@ -86,9 +86,9 @@ def render(df_v, df_c, df_i):
             ascending=[True, False, False],
         ).head(15)
         bajo["Nombre"] = bajo["Descripcion"].str[:30]
-        st.caption(f"Alta rotaciÃ³n: >= {alta_rotacion_min:.0f} unidades vendidas en {dias_periodo} dÃ­as.")
+        st.caption(f"Alta rotación: >= {alta_rotacion_min:.0f} unidades vendidas en {dias_periodo} días.")
         if bajo.empty:
-            st.info("No hay productos que cumplan margen menor al 5% y alta rotaciÃ³n.")
+            st.info("No hay productos que cumplan margen menor al 5% y alta rotación.")
         else:
             fig = px.bar(bajo.sort_values("Margen_Pct", ascending=False), x="Margen_Pct", y="Nombre", orientation="h",
                          color="Margen_Pct", color_continuous_scale="RdYlGn",
@@ -100,7 +100,7 @@ def render(df_v, df_c, df_i):
     r3, r4 = st.columns(2)
 
     with r3:
-        render_section_header("📂", "Utilidad por Categoría")
+        render_section_header("", "Utilidad por Categoría")
         cat_u = (rent.groupby("Nivel", as_index=False)["Utilidad_Total"]
                  .sum().sort_values("Utilidad_Total", ascending=True))
         fig = px.bar(cat_u, x="Utilidad_Total", y="Nivel", orientation="h",
@@ -109,7 +109,7 @@ def render(df_v, df_c, df_i):
         st.plotly_chart(fig, width="stretch")
 
     with r4:
-        render_section_header("🏭", "Utilidad por Laboratorio (Top 10)")
+        render_section_header("", "Utilidad por Laboratorio (Top 10)")
         lab_u = (rent.groupby("Laboratorio", as_index=False)["Utilidad_Total"]
                  .sum().nlargest(10, "Utilidad_Total")
                  .sort_values("Utilidad_Total", ascending=True))
