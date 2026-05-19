@@ -1,10 +1,15 @@
+![FarmAnalítics Dashboard](assets/banner.png)
+
+<h1 align="center">FarmAnalítics</h1>
+
 <p align="center">
-  <h1 align="center">FarmAnalítics</h1>
-  <p align="center">Analytics platform for pharmaceutical retail chains · FastAPI + Vue 3 · In-memory session architecture</p>
+  Carga tus archivos. Ve tus números. Toma decisiones.
 </p>
 
 <p align="center">
-  <a href="https://farm-analitics.vercel.app"><img src="https://img.shields.io/badge/demo-live-4ade80?style=flat-square&labelColor=0f172a" /></a>
+  <a href="https://farm-analitics.vercel.app">
+    <img src="https://img.shields.io/badge/demo-live-22c55e?style=flat-square&labelColor=0f172a" />
+  </a>
   <img src="https://img.shields.io/badge/python-3.11-3b82f6?style=flat-square&labelColor=0f172a" />
   <img src="https://img.shields.io/badge/fastapi-0.110-06b6d4?style=flat-square&labelColor=0f172a" />
   <img src="https://img.shields.io/badge/vue-3.5-42d392?style=flat-square&labelColor=0f172a" />
@@ -13,551 +18,302 @@
 
 ---
 
-## Architecture Overview
+Antes de FarmAnalítics, sacar métricas de una cadena de farmacias significaba exportar desde el POS, abrir Excel, cruzar tablas manualmente y rezar para que los datos del mes anterior todavía sirvieran. **FarmAnalítics reemplaza ese proceso completo**: sube tus archivos CSV o Excel de ventas, compras, inventario y notas de crédito, y en segundos tienes KPIs, alertas de stock, análisis de rentabilidad por producto, proyecciones de metas y un análisis completo de devoluciones — sin instalar nada, sin base de datos, sin configuración.
+
+**Stack:** FastAPI · Pandas · Vue 3 · Pinia · ApexCharts · Railway · Vercel  
+**Producción:** https://farm-analitics.vercel.app · API: https://farmanalitics-production.up.railway.app/docs
+
+---
+
+## Cómo está construido
+
+Sin base de datos. Sin persistencia. Todo vive en RAM indexado por `session_id`. El frontend genera un UUID en el primer acceso, lo guarda en `localStorage` y lo envía como header en cada request. El backend mantiene un dict global de sesiones con TTL de 24h y limpieza automática.
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  BROWSER                                                            │
-│                                                                     │
-│  Vue 3 SPA (Vite)  ─── Pinia Store ─── Vue Router (8 routes)       │
-│       │                    │                                        │
-│   AppSidebar           dashboard.js                                 │
-│  (file upload)        fetchResumen()                                │
-│                       fetchVentas()  ...                            │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │  HTTPS · multipart/form-data · JSON
-                             │  Header: X-Session-Id: <uuid-v4>
-                             │
-┌────────────────────────────▼────────────────────────────────────────┐
-│  FASTAPI  (Uvicorn ASGI)                                            │
-│                                                                     │
-│  main.py                                                            │
-│  ├── CORSMiddleware (origins: vercel.app, railway.app, :5173)       │
-│  └── router  →  backend/routers/analytics.py  (/api/*)             │
-│                      │                                              │
-│            ┌─────────┴──────────┐                                  │
-│            ▼                    ▼                                   │
-│     services/processing.py   services/data_store.py                │
-│     ┌──────────────────┐     ┌──────────────────────────┐          │
-│     │ leer_bytes()     │     │ _sessions: dict           │          │
-│     │ procesar_ventas()│     │  { session_id: {          │          │
-│     │ procesar_compras()│    │    data: {                │          │
-│     │ procesar_inv()   │     │      ventas:    DataFrame │          │
-│     │ procesar_nc()    │     │      compras:   DataFrame │          │
-│     └──────────────────┘     │      inventario:DataFrame │          │
-│                              │      notas_credito: DF    │          │
-│                              │    },                     │          │
-│                              │    last_accessed: float   │          │
-│                              │  }                        │          │
-│                              │  TTL: 24h · auto-cleanup  │          │
-│                              └──────────────────────────┘          │
-└─────────────────────────────────────────────────────────────────────┘
+Browser                          FastAPI (Railway)
+  │                                     │
+  │  POST /api/upload                   │
+  │  X-Session-Id: <uuid>               │
+  │  multipart: ventas[], inventario?   │
+  ├────────────────────────────────────►│
+  │                                     ├─► _read_upload()
+  │                                     │     valida extensión + tamaño (≤50MB)
+  │                                     │
+  │                                     ├─► leer_bytes()
+  │                                     │     xlsx: detecta hojas con col REFERENCIA
+  │                                     │     excluye hojas "reporte"/"reportes"
+  │                                     │     concat si hay múltiples archivos
+  │                                     │
+  │                                     ├─► procesar_ventas()
+  │                                     │     normaliza aliases de columnas
+  │                                     │     tipado: Cant, Precio → numeric
+  │                                     │     Fecha → datetime
+  │                                     │     Ingreso = origen ?? Cant × Precio
+  │                                     │
+  │                                     ├─► _ensure_required_columns()
+  │                                     │     HTTP 400 si faltan columnas clave
+  │                                     │
+  │                                     └─► set_df(session_id, "ventas", df)
+  │                                               _sessions[id]["data"]["ventas"] = df
+  │◄────────────────────────────────────│         last_accessed = time.time()
+  │  {ok: true, filas: {ventas: 45230}} │
+  │                                     │
+  │  GET /api/resumen?fecha_ini=...      │
+  ├────────────────────────────────────►│
+  │                                     ├─► get_df(session_id, "ventas")
+  │                                     ├─► _apply_date_filter(df, "Fecha", ...)
+  │                                     ├─► KPIs: sum, nunique, mean
+  │                                     ├─► variación: divide período en 2 mitades
+  │                                     ├─► si hay inventario:
+  │                                     │     _sales_profit_frame() → margen %
+  │                                     │     cobertura_dias = Total / rot_diaria
+  │                                     │     capital_quieto = stock × costo (>60d)
+  │                                     ├─► tendencia: resample("W")["Ingreso"].sum()
+  │                                     └─► top 5 productos, vendedores, labs
+  │◄────────────────────────────────────│
+  │  JSON → Pinia store → ApexCharts   │
 ```
 
 ---
 
-## Data Flow
+## Módulos
 
-### Upload Pipeline
-
-```mermaid
-sequenceDiagram
-    participant B as Browser
-    participant A as FastAPI /api/upload
-    participant P as processing.py
-    participant S as data_store.py
-
-    B->>A: POST multipart/form-data<br/>X-Session-Id: abc123<br/>files: ventas[], compras?, inventario?, notas_credito?
-
-    loop cada archivo de ventas
-        A->>A: _read_upload(file)<br/>└ valida extensión {.csv,.xlsx,.xls}<br/>└ valida tamaño ≤ 50 MB
-        A->>P: leer_bytes(content, filename)
-        P->>P: xlsx → pd.read_excel(sheet_name=None)<br/>└ filtra hojas con columna REFERENCIA<br/>└ ignora hojas "reporte"/"reportes"
-        P-->>A: raw DataFrame
-    end
-
-    A->>A: pd.concat(dfs, ignore_index=True)
-    A->>A: _ensure_required_columns("ventas", df)<br/>└ chequea COL_VENTAS con soporte de aliases
-    A->>P: procesar_ventas(df_raw)
-    P->>P: rename aliases (REFERENCIA→Referencia, SEDE→Punto Venta...)<br/>Cant = to_numeric()<br/>Precio Venta = to_numeric()<br/>Fecha = to_datetime()<br/>Ingreso = origen OR (Cant × Precio Venta)
-    P-->>A: df_ventas (processed)
-
-    A->>S: set_df("abc123", "ventas", df_ventas)
-    S->>S: _cleanup_old_sessions()  # TTL check
-    S->>S: _sessions["abc123"]["data"]["ventas"] = df
-    A-->>B: {ok: true, filas: {ventas: N}, diagnostico: {...}}
-```
-
-### Query Pipeline — `/api/resumen`
-
-```mermaid
-sequenceDiagram
-    participant B as Browser
-    participant A as FastAPI /api/resumen
-    participant S as data_store.py
-
-    B->>A: GET /api/resumen?fecha_ini=2024-01-01&fecha_fin=2024-03-31<br/>X-Session-Id: abc123
-
-    A->>S: get_df("abc123", "ventas")
-    S-->>A: df_ventas (pd.DataFrame)
-    A->>S: get_df("abc123", "inventario")
-    S-->>A: df_inventario | None
-
-    A->>A: _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin)
-
-    A->>A: KPIs base<br/>ing_total  = df_v["Ingreso"].sum()<br/>und_total  = df_v["Cant"].sum()<br/>n_fact     = df_v["Factura"].nunique()<br/>ticket     = ing_total / n_fact
-
-    A->>A: Variación 1a vs 2a mitad<br/>mid = min_fecha + Timedelta(dias // 2)<br/>variacion_ing = (ing2 - ing1) / ing1 * 100
-
-    alt df_inventario is not None
-        A->>A: _sales_profit_frame(df_v, df_i)<br/>└ groupby Referencia → cant_vend, ingreso_total<br/>└ merge con inv (Precio Compra)<br/>└ utilidad = ingreso - (Precio Compra × cant)<br/>└ margen_pct = utilidad / ingreso * 100
-
-        A->>A: Alertas de cobertura<br/>rotacion_diaria = uds_vendidas / dias_periodo<br/>cobertura_dias  = Total / rotacion_diaria<br/>criticos_7d  = cobertura ≤ INV_MIN_DIAS * 0.4<br/>atencion_15d = cobertura < INV_MIN_DIAS
-
-        A->>A: Capital quieto<br/>dias_sin_venta = (max_fecha - ultima_venta).days<br/>quieto = dias_sin_venta > QUIETO_DIAS_DEFAULT (60d)<br/>capital = (quieto.Total × quieto.Precio Compra).sum()
-    end
-
-    A->>A: Tendencia semanal<br/>df_v.set_index("Fecha").resample("W")["Ingreso"].sum()
-
-    A->>A: Top 5 productos, top 5 vendedores, top 5 labs<br/>groupby → sum → nlargest(5, "Ingreso")
-
-    A-->>B: JSON response (ver esquema abajo)
-```
-
-### Session Lifecycle
-
-```mermaid
-flowchart TD
-    A([Browser abre la app]) --> B{localStorage\nsession_id?}
-    B -- No --> C[genera uuid-v4\nguarda en localStorage]
-    B -- Sí --> D[reutiliza session_id existente]
-    C --> E
-    D --> E[Header X-Session-Id en cada request]
-
-    E --> F[FastAPI recibe request]
-    F --> G[_init_session → crea slot en _sessions]
-    F --> H[_cleanup_old_sessions]
-
-    H --> I{now - last_accessed\n> 24h?}
-    I -- Sí --> J[del _sessions\[sid\]]
-    I -- No --> K[mantiene datos]
-
-    G --> L[procesa request\nlee/escribe DataFrames]
-    L --> M[actualiza last_accessed = time.time\(\)]
-    M --> N([devuelve JSON])
-
-    style J fill:#ef4444,color:#fff
-    style C fill:#3b82f6,color:#fff
-    style N fill:#22c55e,color:#fff
-```
-
----
-
-## Module Map
-
-```mermaid
-graph LR
-    subgraph Frontend
-        MS[main.js] --> R[Vue Router]
-        MS --> P[Pinia]
-        P --> DS[dashboard.js store]
-        DS --> AX[Axios client]
-
-        R --> HV[HomeView]
-        R --> VV[VentasView]
-        R --> RV[RentabilidadView]
-        R --> IV[InventarioView]
-        R --> CV[ComprasView]
-        R --> SV[SedesView]
-        R --> DV[DevolucionesView]
-        R --> MV[MetasView]
-
-        HV & VV & RV & IV & CV & SV & DV & MV --> DS
-        DS --> AX --> PROXY[Vite Proxy :5173/api → :8000]
-    end
-
-    subgraph Backend
-        PROXY --> MAIN[main.py\nCORSMiddleware]
-        MAIN --> ROUTER[analytics.py\nAPIRouter /api]
-        ROUTER --> PROC[processing.py]
-        ROUTER --> STORE[data_store.py]
-        PROC --> STORE
-    end
-```
-
----
-
-## API Reference
-
-Todos los endpoints bajo prefijo `/api`. Autenticación de sesión por header `X-Session-Id` (default: `"default-session"`).
-
-### POST `/api/upload`
-
-Acepta archivos como `multipart/form-data`. Cada campo puede ser uno o varios archivos.
-
-| Campo | Tipo | Descripción |
+| Ruta | Requiere | Qué muestra |
 | :--- | :--- | :--- |
-| `ventas` | `UploadFile \| list[UploadFile]` | Archivos de ventas (uno o más) |
-| `compras` | `UploadFile \| list[UploadFile]` | Archivos de compras |
-| `inventario` | `UploadFile` | Inventario maestro (uno solo) |
-| `notas_credito` | `UploadFile` | Notas de crédito / devoluciones |
+| `/` | ventas | Health score, 7 KPIs con variación, alertas de stock, tendencia semanal, tops |
+| `/ventas` | ventas | Top productos/labs, rendimiento por vendedor, tendencia mensual, tabla detalle |
+| `/rentabilidad` | ventas + inventario | Margen % y utilidad bruta por producto, alto margen vs baja rotación |
+| `/inventario` | inventario (ventas opcional) | Cobertura en días, productos críticos, capital inmovilizado |
+| `/compras` | compras | Costo por proveedor y sede, comparativa vs ventas |
+| `/sedes` | ventas | Ingresos, ticket y facturas comparados entre puntos de venta |
+| `/devoluciones` | notas\_credito | Tasa de devolución, motivos clasificados automáticamente, productos más devueltos |
+| `/metas` | ventas | Proyección por sede y vendedor en 3 escenarios de crecimiento |
 
-```bash
-curl -X POST https://farmanalitics-production.up.railway.app/api/upload \
-  -H "X-Session-Id: mi-sesion-123" \
-  -F "ventas=@ventas_enero.xlsx" \
-  -F "ventas=@ventas_febrero.xlsx" \
-  -F "inventario=@inventario_maestro.csv"
-```
+### Health Score
 
-```json
-// 200 OK
-{
-  "ok": true,
-  "filas": { "ventas": 45230, "inventario": 3841 },
-  "diagnostico": {
-    "ventas": {
-      "tipo": "ventas",
-      "filas": 45230,
-      "columnas": ["Referencia", "Descripcion", "Cant", "Precio Venta", "Fecha", "Punto Venta", "Laboratorio"],
-      "requeridas": ["Referencia", "Descripcion", "Cant", "Precio Venta", "Laboratorio", "Fecha", "Punto Venta"],
-      "faltantes": [],
-      "ok": true
-    }
-  }
-}
-```
-
-**Errores posibles:**
-
-| HTTP | Causa |
-| :--- | :--- |
-| `400` | Extensión no permitida · Archivo vacío · Columnas requeridas faltantes |
-| `413` | Archivo supera 50 MB |
-
----
-
-### GET `/api/resumen`
-
-**Parámetros:** `fecha_ini` (YYYY-MM-DD), `fecha_fin` (YYYY-MM-DD)  
-**Requiere:** `ventas` cargado. `inventario` opcional — activa alertas y margen.
-
-```json
-{
-  "periodo": { "inicio": "2024-01-01", "fin": "2024-03-31", "dias": 91 },
-  "kpis": {
-    "ingresos": 284750000,
-    "unidades": 38241,
-    "facturas": 9103,
-    "ticket": 31281,
-    "utilidad": 71187500,
-    "margen_pct": 25.0,
-    "variacion_ing": 4.2,
-    "variacion_und": 2.8,
-    "variacion_ticket": 1.3
-  },
-  "alertas": {
-    "sin_stock": 12,
-    "criticos_7d": 34,
-    "atencion_15d": 87,
-    "capital_quieto": 48230000
-  },
-  "devoluciones": {
-    "total_devuelto": 3241000,
-    "n_notas": 142,
-    "tasa_pct": 1.14,
-    "ingresos_netos": 281509000
-  },
-  "tendencia": [
-    { "fecha": "2024-01-07", "ingreso": 9823000 }
-  ],
-  "sedes": [
-    { "sede": "PRINCIPAL", "ingresos": 141200000, "unidades": 18940, "pct": 49.6 }
-  ],
-  "top_productos": [
-    { "nombre": "METFORMINA 850MG X 30", "ingreso": 4120000, "pct": 100 }
-  ],
-  "top_vendedores": [...],
-  "top_laboratorios": [...]
-}
-```
-
----
-
-### GET `/api/ventas`
-
-| Parámetro | Default | Descripción |
-| :--- | :--- | :--- |
-| `sede` | `"Todas"` | Filtra por `Punto Venta` |
-| `nivel` | `"Todos"` | Filtra por columna `Nivel` si existe |
-| `laboratorio` | `"Todos"` | Filtra por `Laboratorio` |
-| `fecha_ini` | — | Inicio del rango (inclusive) |
-| `fecha_fin` | — | Fin del rango (inclusive) |
-
----
-
-### GET `/api/metas`
-
-| Parámetro | Valores | Default |
-| :--- | :--- | :--- |
-| `agresividad` | `conservador` · `normal` · `agresivo` | `normal` |
-| `fecha_ini` | YYYY-MM-DD | — |
-| `fecha_fin` | YYYY-MM-DD | — |
-
-**Algoritmo de proyección:**
+El Centro de Comando calcula un índice de salud del negocio (0–100) que se actualiza con cada carga:
 
 ```python
-# Por cada sede
-ventas_mes_anterior     = df_base["Ingreso"].sum()
-idp_sede                = ventas_mes_anterior / dias_mes_anterior
-proyeccion_base         = idp_sede * dias_totales_proy
-
-incremento_hist         = (venta_hist_obj / venta_hist_prev) - 1.0
-incremento_hist         = max(min(incremento_hist, 0.35), -0.20)  # clamp
-incremento_aplicado     = incremento_hist + (factor_crecimiento - 1.0)
-
-meta_sede               = max(proyeccion_base * (1.0 + incremento_aplicado), 0.0)
+score = 100
+score -= min(alertas.sin_stock,   20) * 2.0   # hasta -40  por quiebres de stock activos
+score -= min(alertas.criticos_7d, 10) * 1.5   # hasta -15  por cobertura < 7 días
+if kpis.variacion_ing < 0:  score -= 10        # tendencia negativa en el período
+if kpis.margen_pct    < 10: score -= 10        # margen bruto bajo umbral
+score = max(0, min(100, round(score)))
 ```
 
-Donde `factor_crecimiento` es `1.02` / `1.05` / `1.10` según agresividad.
+### Proyección de Metas
 
----
+Combina el rendimiento reciente con el comportamiento estacional del año anterior:
 
-### Endpoints restantes
+```python
+# Por sede
+idp               = ventas_mes_anterior / dias_mes_anterior        # ingreso diario promedio
+proyeccion_base   = idp * dias_totales_proy
 
-| Método | Endpoint | Requiere | Descripción |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/rentabilidad` | ventas + inventario | Margen y utilidad por producto |
-| `GET` | `/api/inventario` | inventario (ventas opcional) | Alertas de cobertura y stock quieto |
-| `GET` | `/api/compras` | compras | Análisis por proveedor y sede |
-| `GET` | `/api/sedes` | ventas | Comparativa entre puntos de venta |
-| `GET` | `/api/notas-credito` | notas_credito | Devoluciones con motivos clasificados |
-| `GET` | `/api/status` | — | Estado de la sesión |
-| `GET` | `/api/schema` | — | Columnas requeridas y umbrales |
-| `DELETE` | `/api/reset` | — | Limpia todos los datos de la sesión |
+inc_hist          = (venta_hist_obj / venta_hist_prev) - 1.0       # variación año anterior
+inc_hist          = max(min(inc_hist, 0.35), -0.20)                # clamp: evita outliers
+meta_sede         = proyeccion_base * (1 + inc_hist + (factor - 1))
 
-Swagger UI completo: `/docs`
-
----
-
-## Data Contracts
-
-### Esquema de columnas por tipo de archivo
-
-```
-ventas:
-  required: [Referencia, Descripcion, Cant, Precio Venta, Laboratorio, Fecha, Punto Venta]
-  aliases:  {REFERENCIA→Referencia, DESCRIPCION→Descripcion, CANT→Cant,
-             Precio|PRECIO→Precio Venta, LABORATORIO→Laboratorio,
-             FECHA→Fecha, SEDE→Punto Venta, FACTURA→Factura, NIVEL→Nivel}
-  computed: Ingreso = Ingreso_origen ?? (Cant × Precio Venta)
-
-compras:
-  required: [FECHA, PROVEEDOR, REFERENCIA, DESCRIPCION, LABORATORIO, PRECIO, CANT, SEDE]
-  computed: Costo Total = CANT × PRECIO
-
-inventario:
-  required: [Referencia, Descripcion, Laboratorio]
-  optional: [Precio Compra, Precio Venta, Total, Stock Minimo, Stock Maximo, Nivel]
-  computed: Total = sum(columnas numéricas excluidas de EXCLUDED_INVENTORY_COLUMNS)
-            si la columna Total no existe
-
-notas_credito:
-  required: [Fecha, NotaCredito, PuntoVenta, Total]
-  optional: [IVA, SubTotal, Saldo, Factura, Creada, Observaciones]
-  computed: Total Neto = Total − IVA
-            Motivo = classify(Observaciones)  # NLP por reglas
-            PuntoVenta → rename → Punto Venta
+# factor: conservador=1.02  normal=1.05  agresivo=1.10
+# vendedores con < 5% de aporte de la sede son excluidos de la distribución individual
 ```
 
-### Clasificador de motivos de devolución
+### Clasificador de Motivos (Devoluciones)
 
 ```python
 _MOTIVO_RULES = [
     ("Error de Facturación",  ["error de facturaci", "error factur"]),
     ("Error del Vendedor",    ["error del vendedor", "error vendedor"]),
-    ("Solicitud del Cliente", ["error del cliente", "cliente pide", "cliente no",
-                               "cliente realiza", "cliente hizo", "cliente quiere"]),
+    ("Solicitud del Cliente", ["error del cliente", "cliente pide",
+                               "cliente no", "cliente realiza", "cliente quiere"]),
     ("Cambio de Producto",    ["cambio", "cambi"]),
     ("Problema de Entrega",   ["domicilio", "entrega", "demora"]),
 ]
-# Fallback: "Otro" | "Sin observación" si obs está vacío
-```
-
-### Health Score — fórmula completa
-
-```python
-score = 100
-score -= min(alertas.sin_stock,   20) * 2.0   # max penalidad: -40 (quiebres de stock)
-score -= min(alertas.criticos_7d, 10) * 1.5   # max penalidad: -15 (cobertura crítica)
-if kpis.variacion_ing  < 0: score -= 10        # tendencia negativa de ingresos
-if kpis.margen_pct     < 10: score -= 10       # margen bruto bajo
-score = max(0, min(100, round(score)))
+# El valor de cada nota se distribuye proporcionalmente entre los ítems
+# de la factura original para identificar los productos más devueltos.
 ```
 
 ---
 
-## Configuration Reference
+## API
 
-`config.py` — fuente única de verdad para parámetros de negocio.
+Prefijo `/api`. Sesión por header `X-Session-Id` (default: `"default-session"`).
 
-| Constante | Tipo | Valor | Descripción |
-| :--- | :--- | :--- | :--- |
-| `MAX_UPLOAD_SIZE` | `int` | `52_428_800` | Límite por archivo en bytes (50 MB) |
-| `ALLOWED_EXTENSIONS` | `set` | `{".csv", ".xlsx", ".xls"}` | Formatos permitidos |
-| `INV_MIN_DIAS` | `int` | `25` | Cobertura mínima de inventario (días) |
-| `INV_MAX_DIAS` | `int` | `40` | Cobertura objetivo de inventario (días) |
-| `LOW_MARGIN_PCT` | `float` | `5.0` | Umbral de margen bajo (%) |
-| `HIGH_ROTATION_QUANTILE` | `float` | `0.80` | Percentil para clasificar alta rotación |
-| `HIGH_ROTATION_MIN_UNITS` | `int` | `5` | Mínimo de unidades para alta rotación |
-| `QUIETO_DIAS_DEFAULT` | `int` | `60` | Días sin movimiento → inventario quieto |
-| `SEDES_INVENTARIO` | `list` | `[PRINCIPAL, SUCURSAL, MORATO, VARDI, CEDI, OFICINA 805]` | Sedes reconocidas |
+### Upload
+
+```bash
+# Uno o varios archivos de ventas + inventario opcional
+curl -X POST https://farmanalitics-production.up.railway.app/api/upload \
+  -H "X-Session-Id: mi-sesion" \
+  -F "ventas=@ventas_enero.xlsx" \
+  -F "ventas=@ventas_febrero.xlsx" \
+  -F "inventario=@inventario.csv"
+```
+
+```json
+{
+  "ok": true,
+  "filas": { "ventas": 45230, "inventario": 3841 },
+  "diagnostico": {
+    "ventas": { "filas": 45230, "faltantes": [], "ok": true }
+  }
+}
+```
+
+**Errores:** `400` extensión inválida · archivo vacío · columnas faltantes — `413` supera 50 MB
+
+### Endpoints disponibles
+
+```
+POST   /api/upload                              Carga de archivos
+GET    /api/status                              Qué datos tiene la sesión activa
+GET    /api/schema                              Columnas requeridas y umbrales
+DELETE /api/reset                               Limpia la sesión
+
+GET    /api/resumen?fecha_ini&fecha_fin
+GET    /api/ventas?sede&nivel&laboratorio&fecha_ini&fecha_fin
+GET    /api/rentabilidad?fecha_ini&fecha_fin
+GET    /api/inventario?quieto_dias&min_dias&max_dias
+GET    /api/compras?fecha_ini&fecha_fin&sede
+GET    /api/sedes?fecha_ini&fecha_fin
+GET    /api/notas-credito?fecha_ini&fecha_fin
+GET    /api/metas?agresividad&fecha_ini&fecha_fin
+```
+
+Documentación interactiva completa: `/docs`
 
 ---
 
-## Project Structure
+## Esquema de archivos
+
+El sistema acepta `.csv`, `.xlsx` y `.xls` (máximo 50 MB por archivo). En Excel con múltiples hojas, se procesan automáticamente las que tienen columna `REFERENCIA`. Las hojas llamadas `"reporte"` o `"reportes"` se ignoran.
+
+<details>
+<summary>Ver columnas requeridas y aliases por tipo de archivo</summary>
+
+**Ventas**
+
+| Columna esperada | Alias aceptados | Calculada si falta |
+| :--- | :--- | :--- |
+| `Referencia` | `REFERENCIA` | |
+| `Descripcion` | `DESCRIPCION` | |
+| `Cant` | `CANT` | |
+| `Precio Venta` | `Precio`, `PRECIO` | |
+| `Laboratorio` | `LABORATORIO` | |
+| `Fecha` | `FECHA` | |
+| `Punto Venta` | `SEDE` | |
+| `Ingreso` | | `Cant × Precio Venta` |
+| `Factura` | `FACTURA` | opcional |
+| `Creada` | | opcional (vendedor) |
+| `Nivel` | `NIVEL` | opcional (categoría) |
+
+**Compras** — requeridas: `FECHA`, `PROVEEDOR`, `REFERENCIA`, `DESCRIPCION`, `LABORATORIO`, `PRECIO`, `CANT`, `SEDE`. Calculada: `Costo Total = CANT × PRECIO`.
+
+**Inventario** — requeridas: `Referencia`, `Descripcion`, `Laboratorio`. Si no hay columna `Total`, se suma el stock de todas las columnas numéricas que no estén en `EXCLUDED_INVENTORY_COLUMNS`.
+
+**Notas de Crédito** — requeridas: `Fecha`, `NotaCredito`, `PuntoVenta`, `Total`. Calculadas: `Total Neto = Total − IVA`, `Motivo = classify(Observaciones)`.
+
+</details>
+
+---
+
+## Configuración
+
+Todos los umbrales de negocio están centralizados en `config.py`:
+
+| Constante | Valor | Descripción |
+| :--- | :--- | :--- |
+| `MAX_UPLOAD_SIZE` | 50 MB | Límite por archivo |
+| `INV_MIN_DIAS` | 25 | Días de cobertura mínima (umbral de alerta) |
+| `INV_MAX_DIAS` | 40 | Días de cobertura objetivo |
+| `LOW_MARGIN_PCT` | 5.0 | Margen bajo el cual un producto se marca como crítico (%) |
+| `HIGH_ROTATION_QUANTILE` | 0.80 | Percentil para clasificar alta rotación |
+| `QUIETO_DIAS_DEFAULT` | 60 | Días sin movimiento → capital inmovilizado |
+| `SEDES_INVENTARIO` | `[PRINCIPAL, SUCURSAL, MORATO, VARDI, CEDI, OFICINA 805]` | Sedes reconocidas en inventario |
+
+---
+
+## Estructura
 
 ```
 .
-├── config.py                          # Global constants & business parameters
-├── requirements.txt
-├── Procfile                           # Railway: uvicorn backend.main:app
-├── .python-version                    # 3.11.8
+├── config.py                      # Constantes globales y parámetros de negocio
+├── requirements.txt               # Python deps
+├── Procfile                       # Railway: uvicorn backend.main:app
+├── assets/
+│   └── banner.png
 │
 ├── backend/
-│   ├── main.py                        # FastAPI app, CORS middleware, router include
+│   ├── main.py                    # FastAPI app + CORS middleware
 │   ├── routers/
-│   │   └── analytics.py              # All endpoints (~1300 LOC)
-│   │       ├── Helpers:  _safe(), _df_to_records(), _inclusive_days()
-│   │       ├── Helpers:  _apply_date_filter(), _inventory_with_total()
-│   │       ├── Helpers:  _sales_profit_frame(), _high_rotation_threshold()
-│   │       ├── Helpers:  _column_diagnostic(), _ensure_required_columns()
-│   │       └── Endpoints: upload, status, schema, reset, resumen, ventas,
-│   │                       rentabilidad, inventario, compras, sedes,
-│   │                       notas-credito, metas
+│   │   └── analytics.py          # Todos los endpoints /api/* (~1300 LOC)
 │   └── services/
-│       ├── processing.py              # ETL: parse, normalize, derive columns
-│       │   ├── procesar_ventas()
-│       │   ├── procesar_compras()
-│       │   ├── procesar_inventario()
-│       │   ├── procesar_notas_credito()
-│       │   ├── _categorizar_motivo()  # NLP rule-based classifier
-│       │   └── leer_bytes()           # xlsx multi-sheet parser
-│       └── data_store.py              # In-memory session store
-│           ├── _sessions: dict        # Global state
-│           ├── set_df()
-│           ├── get_df()
-│           ├── get_status()
-│           ├── clear_all()
-│           └── get_default_ventas()   # Demo data loader (env var path)
+│       ├── processing.py         # ETL: parse, normalize, derive
+│       └── data_store.py         # Session store in-memory (TTL 24h)
 │
-├── frontend/
-│   ├── vite.config.js                 # /api proxy → :8000
-│   └── src/
-│       ├── main.js                    # Bootstrap: createApp, Pinia, Router, ApexCharts
-│       ├── App.vue                    # Root layout + AppSidebar
-│       ├── style.css                  # CSS custom properties (design tokens)
-│       ├── stores/
-│       │   └── dashboard.js           # Pinia store (~400 LOC)
-│       │       ├── state: { data, loading, status, sessionId }
-│       │       ├── fetchResumen(), fetchVentas(), fetchRentabilidad()
-│       │       ├── fetchInventario(), fetchCompras(), fetchSedes()
-│       │       ├── fetchDevoluciones(), fetchMetas()
-│       │       ├── uploadFiles(), resetSession()
-│       │       └── fmt(), fmtN()      # Number formatters
-│       ├── views/
-│       │   ├── HomeView.vue           # Centro de Comando
-│       │   ├── VentasView.vue
-│       │   ├── RentabilidadView.vue
-│       │   ├── InventarioView.vue
-│       │   ├── ComprasView.vue
-│       │   ├── SedesView.vue
-│       │   ├── DevolucionesView.vue
-│       │   └── MetasView.vue
-│       └── components/
-│           ├── AppSidebar.vue         # File upload + navigation
-│           ├── charts/                # ApexCharts wrappers
-│           └── ui/                    # SectionTitle, etc.
-│
-└── tabs/                              # Streamlit legacy modules (no new features)
-    ├── tab_resumen.py
-    ├── tab_ventas.py
-    ├── tab_rentabilidad.py
-    ├── tab_inventario.py
-    ├── tab_compras.py
-    └── tab_sedes.py
+└── frontend/
+    ├── vite.config.js             # Dev proxy /api → :8000
+    └── src/
+        ├── main.js                # Bootstrap app
+        ├── stores/dashboard.js    # Pinia: estado global + fetchers
+        ├── views/                 # Una vista por módulo (8 total)
+        └── components/
+            ├── AppSidebar.vue     # Upload + navegación
+            ├── charts/            # Wrappers ApexCharts
+            └── ui/                # Componentes genéricos
 ```
 
 ---
 
-## Local Setup
-
-**Requirements:** Python 3.11+ · Node.js 18+
+## Setup local
 
 ```bash
 # Backend
-python -m venv .venv && .venv\Scripts\activate
+python -m venv .venv
+.venv\Scripts\activate       # Windows
 pip install -r requirements.txt
 uvicorn backend.main:app --reload --port 8000
+# → http://localhost:8000/docs
 
-# Frontend (new terminal)
-cd frontend && npm install && npm run dev
+# Frontend (otra terminal)
+cd frontend
+npm install
+npm run dev
+# → http://localhost:5173
 ```
-
-- API: http://localhost:8000 · Swagger: http://localhost:8000/docs
-- App: http://localhost:5173
-
-Vite proxy forwards `/api/*` → `:8000` automatically. No extra config needed.
 
 ---
 
-## Deployment
+## Deploy
 
-### Railway (backend)
+**Backend → Railway**
 
-```bash
-# Procfile
+```
 web: uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}
 ```
 
-| Env var | Required | Description |
-| :--- | :--- | :--- |
-| `PORT` | Auto (Railway) | Injected by Railway |
-| `DEFAULT_VENTAS_2025_PATH` | No | Path to a pre-loaded CSV for demo mode |
+Variable opcional `DEFAULT_VENTAS_2025_PATH`: ruta a un CSV preexistente para activar modo demo (el endpoint `/api/metas` puede usarlo sin que el usuario suba archivos).
 
-### Vercel (frontend)
+**Frontend → Vercel**
 
-| Setting | Value |
-| :--- | :--- |
-| Framework | Vite |
-| Root directory | `frontend` |
-| Build command | `npm run build` |
-| Output directory | `dist` |
-| `VITE_API_URL` | `https://<backend>.up.railway.app` |
-
-CORS origins configured in `backend/main.py`:
-```python
-allow_origins = [
-    "https://farm-analitics.vercel.app",
-    "https://farmanalitics-production.up.railway.app",
-    "http://localhost:5173",
-    "http://localhost:3000",
-    "http://127.0.0.1:5173",
-]
+```
+Root:    frontend/
+Build:   npm run build
+Output:  dist/
+Env:     VITE_API_URL=https://<tu-backend>.up.railway.app
 ```
 
 ---
 
-## Notes
+## Notas técnicas
 
-- `NaN`/`Inf` values from Pandas are serialized as `null` using `json.loads(df.to_json(orient="records"))` instead of `.to_dict()` to avoid JSON serialization errors.
-- Excel files with multiple sheets are parsed by detecting sheets that contain a `REFERENCIA` column. Sheets named `"reporte"` or `"reportes"` are explicitly excluded to avoid mixing summary tabs with transactional data.
-- The projection algorithm clamps historical growth to `[-20%, +35%]` to prevent distortion from atypical months.
-- Vendors contributing less than 5% of a branch's revenue are excluded from the individual quota distribution in the metas endpoint.
-- The `get_default_ventas()` function allows the metas endpoint to work without a user-uploaded file by falling back to a local CSV (useful for demo deployments).
+- Los valores `NaN` e `Inf` de Pandas se serializan como `null` usando `json.loads(df.to_json(...))` en lugar de `.to_dict()` — evita errores de serialización JSON estándar.
+- La sesión de demos (`get_default_ventas()`) carga el CSV una sola vez y lo cachea en `_default_ventas_cache` para no releer disco en cada llamada a `/api/metas`.
+- El cruce de notas de crédito con ventas para identificar productos devueltos asigna el valor de cada nota proporcionalmente al peso de cada ítem dentro de la factura original (`peso = ingreso_item / ingreso_factura`).
 
 ---
 
-## License
+## Licencia
 
 MIT
