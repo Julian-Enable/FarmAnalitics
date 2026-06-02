@@ -31,13 +31,21 @@
     </div>
 
     <div v-if="loading" class="kpi-grid kpi-grid-4">
-      <div v-for="i in 4" :key="i" class="card skeleton" style="height: 100px;"></div>
+      <div v-for="i in 8" :key="i" class="card skeleton" style="height: 100px;"></div>
     </div>
-    <div v-else-if="data" class="kpi-grid kpi-grid-4">
-      <KpiCard :icon="Gem" label="Utilidad Total" :value="store.fmt(data.kpis.utilidad_total)" />
-      <KpiCard :icon="TrendingUp" label="Ingreso Cruzado" :value="store.fmt(data.kpis.ingreso_total)" />
-      <KpiCard :icon="Percent" label="Margen Global" :value="data.kpis.margen_global + '%'" />
-      <KpiCard :icon="Package" label="Productos Analizados" :value="store.fmtN(data.kpis.productos)" />
+    <div v-else-if="data">
+      <div class="kpi-grid kpi-grid-4" style="margin-bottom: 12px;">
+        <KpiCard :icon="Gem" label="Utilidad Total" :value="store.fmt(data.kpis.utilidad_total)" />
+        <KpiCard :icon="TrendingUp" label="Ingreso Cruzado" :value="store.fmt(data.kpis.ingreso_total)" />
+        <KpiCard :icon="Percent" label="Margen Global" :value="data.kpis.margen_global + '%'" />
+        <KpiCard :icon="Package" label="Productos Analizados" :value="store.fmtN(data.kpis.productos)" />
+      </div>
+      <div class="kpi-grid kpi-grid-4">
+        <KpiCard :icon="AlertCircle" label="Alertas Bajo Margen" :value="store.fmtN(data.kpis.bajo_margen_count)" />
+        <KpiCard :icon="Percent" label="Umbral Critico" :value="data.kpis.bajo_margen_umbral_pct + '%'" />
+        <KpiCard :icon="Zap" label="Min. Alta Rotacion (uds)" :value="store.fmtN(Math.round(data.kpis.alta_rotacion_min_unidades))" />
+        <KpiCard :icon="Clock" label="Dias del Periodo" :value="store.fmtN(data.kpis.dias_periodo)" />
+      </div>
     </div>
     <div v-else class="empty-state">
       <div class="empty-icon"><BarChart2 size="48" color="var(--border)" /></div>
@@ -187,12 +195,15 @@ import {
   BarChart2,
   Trophy,
   AlertTriangle,
+  AlertCircle,
   Building2,
   Download,
   Crosshair,
   Rocket,
   AlertOctagon,
   Lightbulb,
+  Zap,
+  Clock,
 } from 'lucide-vue-next'
 
 const store = useDashboardStore()
