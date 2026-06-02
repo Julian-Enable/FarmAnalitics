@@ -54,10 +54,10 @@ def render(df_v, df_c, df_i):
 
     # ── KPIs ─────────────────────────────────────────────────────────────────
     render_kpi_row([
-        {"icon": "$", "value": fmt_cop(util_total), "label": "Utilidad Bruta Total"},
-        {"icon": "%", "value": f"{margen_global:.1f}%", "label": "Margen Global"},
-        {"icon": "$", "value": fmt_cop(ing_total), "label": "Ingreso Total"},
-        {"icon": "#", "value": f"{len(rent):,}", "label": "Productos Cruzados"},
+        {"icon": "💰", "value": fmt_cop(util_total), "label": "Utilidad Bruta Total"},
+        {"icon": "📊", "value": f"{margen_global:.1f}%", "label": "Margen Global"},
+        {"icon": "💵", "value": fmt_cop(ing_total), "label": "Ingreso Total"},
+        {"icon": "🔬", "value": f"{len(rent):,}", "label": "Productos Cruzados"},
     ])
     render_divider()
 
