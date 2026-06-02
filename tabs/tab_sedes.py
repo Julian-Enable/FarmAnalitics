@@ -4,7 +4,8 @@
 import streamlit as st
 import plotly.express as px
 from config import PLOTLY_LAYOUT, ACCENT, SEDE_PALETTE, SEDES_INVENTARIO
-from components import render_section_header, render_divider
+from components import render_kpi_row, render_section_header, render_divider
+from utils import fmt_cop
 
 
 def render(df_v, df_c, df_i):
@@ -23,6 +24,28 @@ def render(df_v, df_c, df_i):
     sede_comp["Ticket Prom."] = (sede_comp["Ingresos"] / sede_comp["Facturas"]).round(0)
     sede_comp["Uds/Factura"] = (sede_comp["Unidades"] / sede_comp["Facturas"]).round(1)
     sede_comp = sede_comp.sort_values("Ingresos", ascending=False)
+
+    # ── KPIs de sedes ────────────────────────────────────────────────
+    n_sedes      = len(sede_comp)
+    top_sede     = sede_comp.iloc[0]["Punto Venta"] if n_sedes > 0 else "—"
+    top_sede_ing = sede_comp.iloc[0]["Ingresos"]    if n_sedes > 0 else 0
+    top_ticket   = sede_comp["Ticket Prom."].max()  if n_sedes > 0 else 0
+    top_ticket_sede = (
+        sede_comp.loc[sede_comp["Ticket Prom."].idxmax(), "Punto Venta"]
+        if n_sedes > 0 else "—"
+    )
+    total_uds    = int(sede_comp["Unidades"].sum())
+    total_ing    = sede_comp["Ingresos"].sum()
+
+    render_kpi_row([
+        {"icon": "🏪", "value": f"{n_sedes}",                  "label": "Puntos de Venta"},
+        {"icon": "🏆", "value": str(top_sede)[:18],          "label": "Top Sede (Ingresos)"},
+        {"icon": "💵", "value": fmt_cop(top_sede_ing),         "label": "Ingresos Top Sede"},
+        {"icon": "🎫", "value": fmt_cop(top_ticket),          "label": f"Mejor Ticket ({str(top_ticket_sede)[:12]})"},
+        {"icon": "📦", "value": f"{total_uds:,}",             "label": "Unidades Totales"},
+        {"icon": "📊", "value": fmt_cop(total_ing),            "label": "Ingresos Totales"},
+    ])
+    render_divider()
 
     st.dataframe(sede_comp, width="stretch", hide_index=True,
                  column_config={

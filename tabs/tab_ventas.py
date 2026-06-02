@@ -4,7 +4,8 @@
 import streamlit as st
 import plotly.express as px
 from config import PLOTLY_LAYOUT, ACCENT, CYAN
-from components import render_section_header, render_divider
+from components import render_kpi_row, render_section_header, render_divider
+from utils import fmt_cop
 
 
 def render(df_v, df_c, df_i):
@@ -41,6 +42,25 @@ def render(df_v, df_c, df_i):
         dff = dff[(dff["Fecha"].dt.date >= rango[0]) & (dff["Fecha"].dt.date <= rango[1])]
 
     st.caption(f"Mostrando **{len(dff):,}** registros filtrados")
+
+    # ── KPIs filtrados ───────────────────────────────────────────────────
+    ing_total  = dff["Ingreso"].sum()
+    uds_total  = int(dff["Cant"].sum())
+    n_fact_v   = dff["Factura"].nunique() if "Factura" in dff.columns else 0
+    ticket_v   = ing_total / n_fact_v if n_fact_v > 0 else 0
+    n_prod     = dff["Referencia"].nunique()
+    top_lab    = (
+        dff.groupby("Laboratorio")["Ingreso"].sum().idxmax()
+        if "Laboratorio" in dff.columns and not dff.empty else "—"
+    )
+    render_kpi_row([
+        {"icon": "💵", "value": fmt_cop(ing_total),   "label": "Ingresos (filtrado)"},
+        {"icon": "📦", "value": f"{uds_total:,}",     "label": "Unidades Vendidas"},
+        {"icon": "🧾", "value": f"{n_fact_v:,}",      "label": "Facturas"},
+        {"icon": "🎫", "value": fmt_cop(ticket_v),    "label": "Ticket Promedio"},
+        {"icon": "🔬", "value": f"{n_prod:,}",        "label": "Productos Únicos"},
+        {"icon": "🏭", "value": str(top_lab)[:20],    "label": "Top Laboratorio"},
+    ])
     render_divider()
 
     # ── Gráficos principales ─────────────────────────────────────────────
