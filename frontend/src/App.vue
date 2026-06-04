@@ -5,7 +5,7 @@
       <div v-if="store.lastError" class="app-error-banner">
         {{ store.lastError }}
       </div>
-      <router-view v-slot="{ Component }">
+      <router-view v-if="isStatusLoaded" v-slot="{ Component }">
         <transition name="fade" mode="out-in">
           <component :is="Component" />
         </transition>
@@ -15,10 +15,14 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import AppSidebar from './components/AppSidebar.vue'
 import { useDashboardStore } from './stores/dashboard'
 
 const store = useDashboardStore()
-onMounted(() => store.checkStatus())
+const isStatusLoaded = ref(false)
+onMounted(async () => {
+  await store.checkStatus()
+  isStatusLoaded.value = true
+})
 </script>

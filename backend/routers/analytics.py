@@ -1,18 +1,51 @@
 ﻿# =============================================================================
-# backend/routers/analytics.py  — Todos los endpoints de análisis
+# backend/routers/analytics.py  â€” Todos los endpoints de anÃ¡lisis
+# =============================================================================
+from fastapi import APIRouter, UploadFile, File, HTTPException, Header
+from typing import Optional, Union
+# =============================================================================
+# backend/routers/analytics.py  â€” Todos los endpoints de anÃ¡lisis
 # =============================================================================
 from fastapi import APIRouter, UploadFile, File, HTTPException, Header
 from typing import Optional, Union
 import pandas as pd
+import numpy as np
 import json
 import calendar
 import holidays
 from datetime import datetime, timedelta, date
 
-from backend.services.data_store import get_df, set_df, get_status, clear_all, get_default_ventas
+from backend.services.data_store import get_df as _store_get_df, set_df, get_status as _store_get_status, clear_all, get_default_ventas
 from backend.services.processing import (
     leer_bytes, procesar_ventas, procesar_compras, procesar_inventario, procesar_notas_credito,
 )
+from backend.services.db_config import is_db_configured
+from backend.services.db_service import get_db_service
+
+def get_df(session_id, key, fecha_ini=None, fecha_fin=None, sede=None, limit=None):
+    if is_db_configured():
+        db = get_db_service()
+        if db:
+            if key == "ventas":
+                return db.get_ventas(fecha_ini, fecha_fin, sede, limit)
+            elif key == "compras":
+                return db.get_compras(fecha_ini, fecha_fin)
+            elif key == "inventario":
+                return db.get_inventario()
+            elif key == "notas_credito":
+                return db.get_notas_credito(fecha_ini, fecha_fin)
+    return _store_get_df(session_id, key)
+
+def get_status(session_id):
+    if is_db_configured():
+        db = get_db_service()
+        if db:
+            try:
+                db._ensure_lookups()
+                return {"ventas": True, "compras": True, "inventario": True, "notas_credito": True}
+            except Exception:
+                pass
+    return _store_get_status(session_id)
 from config import (
     SEDES_INVENTARIO, MAX_UPLOAD_SIZE, ALLOWED_EXTENSIONS, EXCLUDED_INVENTORY_COLUMNS,
     REQUIRED_COLUMNS, INV_MIN_DIAS, INV_MAX_DIAS, LOW_MARGIN_PCT,
@@ -23,7 +56,7 @@ router = APIRouter(prefix="/api")
 
 SEDES = SEDES_INVENTARIO
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _safe(val):
     """Convierte NaN/Inf a None para JSON."""
@@ -60,7 +93,11 @@ def _apply_date_filter(
     if fecha_ini:
         filtered = filtered[filtered[date_col] >= pd.Timestamp(fecha_ini)]
     if fecha_fin:
-        filtered = filtered[filtered[date_col] <= pd.Timestamp(fecha_fin)]
+        end = pd.Timestamp(fecha_fin)
+        if isinstance(fecha_fin, str) and len(fecha_fin) == 10:
+            filtered = filtered[filtered[date_col] < end + pd.Timedelta(days=1)]
+        else:
+            filtered = filtered[filtered[date_col] <= end]
     return filtered
 
 
@@ -154,7 +191,7 @@ def _ensure_required_columns(kind: str, df: pd.DataFrame) -> dict:
 
 
 async def _read_upload(file: UploadFile) -> bytes:
-    """Valida extensión y tamaño antes de leer el archivo en memoria."""
+    """Valida extensiÃ³n y tamaÃ±o antes de leer el archivo en memoria."""
     from pathlib import Path
 
     suffix = Path(file.filename or "").suffix.lower()
@@ -163,15 +200,15 @@ async def _read_upload(file: UploadFile) -> bytes:
 
     content = await file.read()
     if not content:
-        raise HTTPException(400, f"Archivo vacío: {file.filename}")
+        raise HTTPException(400, f"Archivo vacÃ­o: {file.filename}")
     if len(content) > MAX_UPLOAD_SIZE:
         max_mb = MAX_UPLOAD_SIZE // (1024 * 1024)
-        raise HTTPException(413, f"Archivo demasiado grande: {file.filename}. Máximo {max_mb} MB")
+        raise HTTPException(413, f"Archivo demasiado grande: {file.filename}. MÃ¡ximo {max_mb} MB")
 
     return content
 
 
-# ── Upload ────────────────────────────────────────────────────────────────────
+# â”€â”€ Upload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.post("/upload")
 async def upload_files(
@@ -192,7 +229,7 @@ async def upload_files(
     if compras and not isinstance(compras, list):
         compras = [compras]
 
-    # Ventas (puede ser múltiples archivos)
+    # Ventas (puede ser mÃºltiples archivos)
     if ventas:
         dfs = []
         for f in ventas:
@@ -201,7 +238,7 @@ async def upload_files(
             if not df.empty:
                 dfs.append(df)
         if not dfs:
-            raise HTTPException(400, "No se encontraron datos válidos en los archivos de ventas")
+            raise HTTPException(400, "No se encontraron datos vÃ¡lidos en los archivos de ventas")
         df_raw = pd.concat(dfs, ignore_index=True)
         diagnostico["ventas"] = _ensure_required_columns("ventas", df_raw)
         df_v = procesar_ventas(df_raw)
@@ -217,7 +254,7 @@ async def upload_files(
             if not df.empty:
                 dfs.append(df)
         if not dfs:
-            raise HTTPException(400, "No se encontraron datos válidos en los archivos de compras")
+            raise HTTPException(400, "No se encontraron datos vÃ¡lidos en los archivos de compras")
         df_raw = pd.concat(dfs, ignore_index=True)
         diagnostico["compras"] = _ensure_required_columns("compras", df_raw)
         df_c = procesar_compras(df_raw)
@@ -229,21 +266,21 @@ async def upload_files(
         content = await _read_upload(inventario)
         df_i = procesar_inventario(leer_bytes(content, inventario.filename))
         if df_i.empty:
-            raise HTTPException(400, "No se encontraron datos válidos en el archivo de inventario")
+            raise HTTPException(400, "No se encontraron datos vÃ¡lidos en el archivo de inventario")
         diagnostico["inventario"] = _ensure_required_columns("inventario", df_i)
         pending_data["inventario"] = df_i
         resultados["inventario"] = len(df_i)
 
-    # Notas Crédito
+    # Notas CrÃ©dito
     if notas_credito:
         content = await _read_upload(notas_credito)
         df_nc = leer_bytes(content, notas_credito.filename, tipo="notas_credito")
         if df_nc.empty:
-            raise HTTPException(400, "No se encontraron datos válidos en el archivo de notas crédito")
+            raise HTTPException(400, "No se encontraron datos vÃ¡lidos en el archivo de notas crÃ©dito")
         diagnostico["notas_credito"] = _column_diagnostic("notas_credito", df_nc)
         if diagnostico["notas_credito"]["faltantes"]:
             missing = ", ".join(diagnostico["notas_credito"]["faltantes"])
-            raise HTTPException(400, f"Notas crédito sin columnas requeridas: {missing}")
+            raise HTTPException(400, f"Notas crÃ©dito sin columnas requeridas: {missing}")
         df_nc = procesar_notas_credito(df_nc)
         pending_data["notas_credito"] = df_nc
         resultados["notas_credito"] = len(df_nc)
@@ -256,7 +293,9 @@ async def upload_files(
 
 @router.get("/status")
 def status(x_session_id: str = Header(default="default-session")):
-    return get_status(x_session_id)
+    s = get_status(x_session_id)
+    s["db_connected"] = is_db_configured()
+    return s
 
 
 @router.get("/schema")
@@ -277,7 +316,38 @@ def reset(x_session_id: str = Header(default="default-session")):
     return {"ok": True}
 
 
-# ── Resumen General ───────────────────────────────────────────────────────────
+# â”€â”€ ExploraciÃ³n de Base de Datos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+@router.get("/db/status")
+def db_status():
+    if not is_db_configured():
+        return {"connected": False, "message": "DB no configurada en .env"}
+    db = get_db_service()
+    return db.test_connection() if db else {"connected": False, "message": "No se pudo crear DB service"}
+
+@router.get("/db/tables")
+def db_tables():
+    if not is_db_configured():
+        return []
+    db = get_db_service()
+    return db.get_tables_info() if db else []
+
+@router.get("/db/columns/{table_name}")
+def db_columns(table_name: str):
+    if not is_db_configured():
+        return []
+    db = get_db_service()
+    return db.get_table_columns(table_name) if db else []
+
+@router.get("/db/preview/{table_name}")
+def db_preview(table_name: str):
+    if not is_db_configured():
+        return []
+    db = get_db_service()
+    return db.get_table_preview(table_name) if db else []
+
+
+# â”€â”€ Resumen General â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.get("/resumen")
 def resumen(
@@ -285,174 +355,131 @@ def resumen(
     fecha_fin: str = None,
     x_session_id: str = Header(default="default-session")
 ):
-    req_fecha_ini = fecha_ini
-    req_fecha_fin = fecha_fin
+    db = get_db_service()
+    if not db:
+        raise HTTPException(500, "Base de datos no conectada")
 
-    df_v = get_df(x_session_id, "ventas")
-    df_i = get_df(x_session_id, "inventario")
-    if df_v is None:
-        raise HTTPException(404, "No hay datos de ventas cargados")
-    df_v = _apply_date_filter(df_v, "Fecha", req_fecha_ini, req_fecha_fin)
+    # Definir un unico rango efectivo para que todos los KPIs usen el mismo periodo.
+    import datetime
+    from dateutil.relativedelta import relativedelta
+    f_fin = datetime.datetime.strptime(fecha_fin, "%Y-%m-%d").date() if fecha_fin else datetime.date.today()
+    f_ini = datetime.datetime.strptime(fecha_ini, "%Y-%m-%d").date() if fecha_ini else datetime.date(f_fin.year, 1, 1)
+    fecha_ini_eff = f_ini.strftime("%Y-%m-%d")
+    fecha_fin_eff = f_fin.strftime("%Y-%m-%d")
+    dias_periodo = max((f_fin - f_ini).days + 1, 1)
 
-    ing_total  = float(df_v["Ingreso"].sum())
-    und_total  = int(df_v["Cant"].sum())
-    n_fact     = int(df_v["Factura"].nunique()) if "Factura" in df_v.columns else 0
-    ticket     = ing_total / n_fact if n_fact > 0 else 0
+    # 1. KPIs principales
+    kpis = db.get_resumen_kpis(fecha_ini_eff, fecha_fin_eff)
+    ing_total = kpis.get("ingresos", 0)
+    und_total = kpis.get("unidades", 0)
+    n_fact = kpis.get("facturas", 0)
+    ticket = ing_total / n_fact if n_fact > 0 else 0
 
-    # Período analizado
-    periodo_ini = str(df_v["Fecha"].min().date()) if df_v["Fecha"].notna().any() else None
-    periodo_fin = str(df_v["Fecha"].max().date()) if df_v["Fecha"].notna().any() else None
-    max_fecha = df_v["Fecha"].max()
-    min_fecha = df_v["Fecha"].min()
-    dias_periodo = _inclusive_days(min_fecha, max_fecha)
+    # 2. Utilidad y Costos
+    costos = db.get_resumen_costo_utilidad(fecha_ini_eff, fecha_fin_eff)
+    costo_total = costos.get("costo_total")
+    util_bruta = None
+    margen_pct = None
+    if costo_total is not None:
+        util_bruta = ing_total - costo_total
+        margen_pct = round((util_bruta / ing_total * 100), 1) if ing_total > 0 else 0
 
-    # Comparación primera mitad vs segunda mitad del período
-    variacion_ing = variacion_und = variacion_ticket = None
-    if pd.notna(max_fecha) and pd.notna(min_fecha) and dias_periodo > 2:
-        mid_fecha = min_fecha + pd.Timedelta(days=dias_periodo // 2)
-        df_primera = df_v[df_v["Fecha"] <= mid_fecha]
-        df_segunda = df_v[df_v["Fecha"] > mid_fecha]
-        ing1 = float(df_primera["Ingreso"].sum())
-        ing2 = float(df_segunda["Ingreso"].sum())
-        und1 = float(df_primera["Cant"].sum())
-        und2 = float(df_segunda["Cant"].sum())
-        fact1 = int(df_primera["Factura"].nunique()) if "Factura" in df_primera.columns else 1
-        fact2 = int(df_segunda["Factura"].nunique()) if "Factura" in df_segunda.columns else 1
-        tick1 = ing1 / fact1 if fact1 > 0 else 0
-        tick2 = ing2 / fact2 if fact2 > 0 else 0
-        if ing1 > 0:
-            variacion_ing = round((ing2 - ing1) / ing1 * 100, 1)
-        if und1 > 0:
-            variacion_und = round((und2 - und1) / und1 * 100, 1)
-        if tick1 > 0:
-            variacion_ticket = round((tick2 - tick1) / tick1 * 100, 1)
+    # 3. Tendencia
+    tend = db.get_resumen_tendencia(fecha_ini_eff, fecha_fin_eff)
 
-    # Utilidad bruta
-    util_bruta = margen_pct = None
-    if df_i is not None and "Precio Compra" in df_i.columns:
-        m = _sales_profit_frame(df_v, df_i)
-        util_bruta = float(m["utilidad_total"].sum())
-        margen_pct = round(util_bruta / ing_total * 100, 1) if ing_total else 0
+    # 4. Rankings (Top 5)
+    top_productos_raw = db.get_resumen_ranking("producto", fecha_ini_eff, fecha_fin_eff, limit=5)
+    top_sedes_raw = db.get_resumen_ranking("sede", fecha_ini_eff, fecha_fin_eff, limit=100)
+    top_vendedores_raw = db.get_resumen_ranking("vendedor", fecha_ini_eff, fecha_fin_eff, limit=5)
+    top_labs_raw = db.get_resumen_ranking("laboratorio", fecha_ini_eff, fecha_fin_eff, limit=5)
 
-    # Tendencia semanal
-    tend = []
-    if df_v["Fecha"].notna().any():
-        s = df_v.set_index("Fecha").resample("W")["Ingreso"].sum().reset_index()
-        tend = [{"fecha": str(r["Fecha"].date()), "ingreso": round(r["Ingreso"], 0)}
-                for _, r in s.iterrows()]
+    def format_ranking(raw_list, name_key, max_ingreso=None):
+        if not raw_list: return []
+        m_ing = max_ingreso or max(r["ingreso"] for r in raw_list)
+        if m_ing <= 0: m_ing = 1
+        return [
+            {name_key: str(r.get("nombre") or r.get("sede") or r.get("vendedor") or r.get("laboratorio"))[:32],
+             "ingreso": round(r["ingreso"], 0),
+             "pct": round(r["ingreso"] / m_ing * 100, 0)}
+            for r in raw_list
+        ]
 
-    # Por sede (con % participación)
-    sedes_df = (df_v.groupby("Punto Venta", as_index=False)
-             .agg(ingresos=("Ingreso","sum"), unidades=("Cant","sum"))
-             .sort_values("ingresos", ascending=False)
-             .rename(columns={"Punto Venta":"sede"}))
-    total_sedes = float(sedes_df["ingresos"].sum())
-    sedes_df["pct"] = (sedes_df["ingresos"] / total_sedes * 100).round(1) if total_sedes > 0 else 0
-    sedes = json.loads(sedes_df.to_json(orient="records"))
+    ing_max_prod = max([r["ingreso"] for r in top_productos_raw], default=1)
+    top_productos = format_ranking(top_productos_raw, "nombre", ing_max_prod)
 
-    # ── Signos vitales cruzados (requieren inventario + ventas) ──
-    capital_quieto = 0.0
-    productos_sin_stock = 0
-    productos_criticos_7d = 0   # se agotan en < 7 días
-    productos_atencion_15d = 0  # se agotan en < 15 días
+    ing_max_vend = max([r["ingreso"] for r in top_vendedores_raw], default=1)
+    top_vendedores = format_ranking(top_vendedores_raw, "vendedor", ing_max_vend)
 
-    if df_i is not None:
-        import numpy as np
-        df_a = _inventory_with_total(df_i)
-        if "Total" not in df_a.columns:
-            # Detección dinámica de sedes: columnas numéricas que no sean de precio/referencia
-            excluir = ["Referencia", "Descripcion", "Laboratorio", "Nivel", "Precio Compra", "Precio Venta", "Comision", "Utilidad", "Stock Maximo", "Stock Minimo", "Total", "IVA", "Codigo"]
-            posibles_sedes = [c for c in df_a.columns if c not in excluir and pd.api.types.is_numeric_dtype(df_a[c])]
-            df_a["Total"] = df_a[posibles_sedes].sum(axis=1) if posibles_sedes else 0
-        else:
-            # Si ya tiene una columna Total, nos aseguramos que sea numérica
-            df_a["Total"] = pd.to_numeric(df_a["Total"], errors="coerce").fillna(0)
+    ing_max_lab = max([r["ingreso"] for r in top_labs_raw], default=1)
+    top_laboratorios = format_ranking(top_labs_raw, "laboratorio", ing_max_lab)
 
-        v_agr = df_v.groupby("Referencia", as_index=False).agg(
-            uds_vendidas=("Cant", "sum"),
-            ultima_venta=("Fecha", "max")
-        )
-        df_a = df_a.merge(v_agr, on="Referencia", how="left")
-        df_a["uds_vendidas"] = df_a["uds_vendidas"].fillna(0)
+    total_sedes = sum(r["ingreso"] for r in top_sedes_raw)
+    sedes = []
+    for r in top_sedes_raw:
+        sedes.append({
+            "sede": r["sede"],
+            "ingresos": r["ingreso"],
+            "pct": round((r["ingreso"] / total_sedes * 100), 1) if total_sedes > 0 else 0
+        })
 
-        if pd.notna(max_fecha):
-            df_a["dias_sin_venta"] = (max_fecha - df_a["ultima_venta"]).dt.days.fillna(9999)
-        else:
-            df_a["dias_sin_venta"] = 9999
-
-        quieto = df_a[(df_a["Total"] > 0) & (df_a["dias_sin_venta"] > QUIETO_DIAS_DEFAULT)]
-        if "Precio Compra" in quieto.columns:
-            capital_quieto = float((quieto["Total"] * quieto["Precio Compra"]).sum())
-
-        if pd.notna(max_fecha) and pd.notna(min_fecha):
-            df_a["rotacion_diaria"] = df_a["uds_vendidas"] / dias_periodo
-            productos_sin_stock = int(len(df_a[(df_a["rotacion_diaria"] > 0) & (df_a["Total"] <= 0)]))
-            df_a["cobertura_dias"] = np.where(
-                df_a["rotacion_diaria"] > 0,
-                df_a["Total"] / df_a["rotacion_diaria"],
-                9999
-            )
-            # Alertas con regla 25-40 días
-            productos_criticos_7d = int(len(df_a[(df_a["cobertura_dias"] <= INV_MIN_DIAS * 0.4) & (df_a["rotacion_diaria"] > 0)]))
-            productos_atencion_15d = int(len(df_a[(df_a["cobertura_dias"] > INV_MIN_DIAS * 0.4) & (df_a["cobertura_dias"] < INV_MIN_DIAS) & (df_a["rotacion_diaria"] > 0)]))
-
-    # Top 5 productos por ingreso
-    top_prod_df = (df_v.groupby(["Referencia", "Descripcion"], as_index=False)["Ingreso"]
-                   .sum().nlargest(5, "Ingreso"))
-    ing_max_prod = float(top_prod_df["Ingreso"].max()) if len(top_prod_df) > 0 else 1
-    top_productos = [{"nombre": r["Descripcion"][:32], "ingreso": round(r["Ingreso"], 0),
-                      "pct": round(r["Ingreso"] / ing_max_prod * 100, 0)}
-                     for _, r in top_prod_df.iterrows()]
-
-    # Top 5 vendedores (busca varias columnas posibles)
-    top_vendedores = []
-    vend_col = next((c for c in ["Creada", "Vendedor", "Asesor", "Usuario", "Cajero", "Nombre Vendedor"] if c in df_v.columns), None)
-    if vend_col:
-        top_vend_df = (df_v.groupby(vend_col, as_index=False)["Ingreso"]
-                       .sum().nlargest(5, "Ingreso"))
-        ing_max_vend = float(top_vend_df["Ingreso"].max()) if len(top_vend_df) > 0 else 1
-        top_vendedores = [{"vendedor": str(r[vend_col])[:25], "ingreso": round(r["Ingreso"], 0),
-                           "pct": round(r["Ingreso"] / ing_max_vend * 100, 0)}
-                          for _, r in top_vend_df.iterrows()]
-
-    # Top 5 laboratorios por ingreso (siempre disponible como alternativa)
-    top_laboratorios = []
-    if "Laboratorio" in df_v.columns:
-        top_lab_df = (df_v.groupby("Laboratorio", as_index=False)["Ingreso"]
-                      .sum().nlargest(5, "Ingreso"))
-        ing_max_lab = float(top_lab_df["Ingreso"].max()) if len(top_lab_df) > 0 else 1
-        top_laboratorios = [{"laboratorio": str(r["Laboratorio"])[:28], "ingreso": round(r["Ingreso"], 0),
-                             "pct": round(r["Ingreso"] / ing_max_lab * 100, 0)}
-                            for _, r in top_lab_df.iterrows()]
-
-    # ── Devoluciones (Notas Crédito) ─────────────────────────────────────────
-    df_nc = get_df(x_session_id, "notas_credito")
-    df_nc = _apply_date_filter(df_nc, "Fecha", req_fecha_ini, req_fecha_fin) if df_nc is not None else None
+    # 5. Notas CrÃ©dito
+    df_nc = db.get_notas_credito(fecha_ini_eff, fecha_fin_eff)
     devoluciones_resumen = None
-    if df_nc is not None and len(df_nc) > 0:
+    if df_nc is not None and not df_nc.empty:
         total_devuelto = float(df_nc["Total Neto"].sum())
-        n_notas = int(len(df_nc))
+        n_notas = len(df_nc)
         tasa_devolucion = round(total_devuelto / ing_total * 100, 2) if ing_total > 0 else 0
         ingresos_netos = round(ing_total - total_devuelto, 0)
         devoluciones_resumen = {
             "total_devuelto": round(total_devuelto, 0),
-            "n_notas":        n_notas,
-            "tasa_pct":       tasa_devolucion,
+            "n_notas": n_notas,
+            "tasa_pct": tasa_devolucion,
             "ingresos_netos": ingresos_netos,
         }
 
+    # 6. Alertas de inventario (Optimizadas con get_resumen_alertas_df)
+    capital_quieto = 0.0
+    productos_sin_stock = 0
+    productos_criticos_7d = 0
+    productos_atencion_15d = 0
+
+    df_a = db.get_resumen_alertas_df(fecha_ini_eff, fecha_fin_eff)
+    if df_a is not None and not df_a.empty:
+        import numpy as np
+        # df_a tiene: Referencia, Total, cant_vend, ultima_venta, PrecioCompra
+
+        # Calcular dias_sin_venta
+        max_fecha = pd.to_datetime(f_fin)
+        df_a["ultima_venta"] = pd.to_datetime(df_a["ultima_venta"])
+        df_a["dias_sin_venta"] = (max_fecha - df_a["ultima_venta"]).dt.days.fillna(9999)
+
+        quieto = df_a[(df_a["Total"] > 0) & (df_a["dias_sin_venta"] > QUIETO_DIAS_DEFAULT)]
+        if "PrecioCompra" in quieto.columns:
+            capital_quieto = float((quieto["Total"] * pd.to_numeric(quieto["PrecioCompra"], errors="coerce").fillna(0)).sum())
+
+        df_a["rotacion_diaria"] = df_a["cant_vend"] / max(dias_periodo, 1)
+        productos_sin_stock = int(len(df_a[(df_a["rotacion_diaria"] > 0) & (df_a["Total"] <= 0)]))
+        df_a["cobertura_dias"] = np.where(
+            df_a["rotacion_diaria"] > 0,
+            df_a["Total"] / df_a["rotacion_diaria"],
+            9999
+        )
+        productos_criticos_7d = int(len(df_a[(df_a["cobertura_dias"] <= INV_MIN_DIAS * 0.4) & (df_a["rotacion_diaria"] > 0)]))
+        productos_atencion_15d = int(len(df_a[(df_a["cobertura_dias"] > INV_MIN_DIAS * 0.4) & (df_a["cobertura_dias"] < INV_MIN_DIAS) & (df_a["rotacion_diaria"] > 0)]))
+
     return {
-        "periodo": {"inicio": periodo_ini, "fin": periodo_fin, "dias": dias_periodo},
+        "periodo": {"inicio": str(f_ini), "fin": str(f_fin), "dias": dias_periodo},
         "kpis": {
             "ingresos":        round(ing_total, 0),
             "unidades":        und_total,
             "facturas":        n_fact,
             "ticket":          round(ticket, 0),
-            "utilidad":        round(util_bruta, 0) if util_bruta else None,
+            "utilidad":        round(util_bruta, 0) if util_bruta is not None else None,
             "margen_pct":      margen_pct,
-            "variacion_ing":   variacion_ing,
-            "variacion_und":   variacion_und,
-            "variacion_ticket": variacion_ticket,
+            # variacion se desactiva temporalmente en la PoC para hacerlo mÃ¡s rÃ¡pido
+            "variacion_ing":   None,
+            "variacion_und":   None,
+            "variacion_ticket": None,
         },
         "alertas": {
             "sin_stock":           productos_sin_stock,
@@ -469,7 +496,231 @@ def resumen(
     }
 
 
-# ── Notas Crédito / Devoluciones ─────────────────────────────────────────────
+# â”€â”€ Rentabilidad â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+@router.get("/rentabilidad")
+def rentabilidad(fecha_ini: str = None, fecha_fin: str = None, x_session_id: str = Header(default="default-session")):
+    from backend.services.db_config import is_db_configured
+    from backend.services.db_service import get_db_service
+
+    if is_db_configured():
+        db = get_db_service()
+        if db:
+            res = db.get_analisis_rentabilidad_sql(fecha_ini=fecha_ini, fecha_fin=fecha_fin)
+            if res:
+                return res
+
+    # Fallback si no hay BD o no hay resultados
+    df_v = get_df(x_session_id, "ventas", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
+    df_i = get_df(x_session_id, "inventario")
+    if df_v is None or df_i is None:
+        raise HTTPException(404, "Faltan datos para rentabilidad")
+
+    df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin)
+
+    # Este fallback estÃ¡ muy limitado ya que la vista requiere kpis, top_rentables, etc.
+    # Solo devolvemos la matriz para compatibilidad.
+    from backend.services.processing import _sales_profit_frame
+    r = _sales_profit_frame(df_v, df_i)
+    r = r.sort_values("utilidad_total", ascending=False)
+
+    r["cum_util"] = r["utilidad_total"].cumsum()
+    total_util = r["utilidad_total"].sum()
+    if total_util > 0:
+        r["pct_cum"] = r["cum_util"] / total_util
+        import numpy as np
+        r["matriz_abc"] = np.where(r["pct_cum"] <= 0.8, "A", np.where(r["pct_cum"] <= 0.95, "B", "C"))
+    else:
+        r["matriz_abc"] = "C"
+
+    return {
+        "kpis": {
+            "utilidad_total": 0, "ingreso_total": 0, "margen_global": 0, "productos": 0,
+            "bajo_margen_count": 0, "bajo_margen_umbral_pct": 5, "alta_rotacion_min_unidades": 0, "dias_periodo": 1
+        },
+        "top_rentables": [],
+        "bajo_margen": [],
+        "matriz_abc": json.loads(r.to_json(orient="records")),
+        "por_laboratorio": []
+    }
+
+
+# â”€â”€ Inventario â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+@router.get("/inventario")
+def inventario(inv_min_dias: int = INV_MIN_DIAS, inv_max_dias: int = INV_MAX_DIAS, quieto_dias: int = QUIETO_DIAS_DEFAULT, x_session_id: str = Header(default="default-session")):
+    df_i = get_df(x_session_id, "inventario")
+    df_v = get_df(x_session_id, "ventas")
+    if df_i is None or df_v is None:
+        raise HTTPException(404, "Faltan datos")
+
+    df_a = _inventory_with_total(df_i)
+    v_agr = df_v.groupby("Referencia", as_index=False).agg(uds_vendidas=("Cant", "sum"), ultima_venta=("Fecha", "max"))
+    df_a = df_a.merge(v_agr, on="Referencia", how="left")
+    df_a["uds_vendidas"] = df_a["uds_vendidas"].fillna(0)
+
+    max_fecha = df_v["Fecha"].max()
+    min_fecha = df_v["Fecha"].min()
+    dias = max((max_fecha - min_fecha).days + 1, 1) if pd.notna(max_fecha) and pd.notna(min_fecha) else 1
+
+    if pd.notna(max_fecha):
+        df_a["dias_sin_venta"] = (max_fecha - df_a["ultima_venta"]).dt.days.fillna(9999)
+    else:
+        df_a["dias_sin_venta"] = 9999
+
+    df_a["rotacion_diaria"] = df_a["uds_vendidas"] / dias
+    df_a["rotacion_proyectada"] = df_a["rotacion_diaria"]
+    df_a["factor_tendencia"] = 1.0
+
+    import numpy as np
+    df_a["cobertura_dias"] = np.where(df_a["rotacion_diaria"] > 0, df_a["Total"] / df_a["rotacion_diaria"], 9999)
+
+    bajo = df_a[(df_a["cobertura_dias"] < inv_min_dias) & (df_a["rotacion_diaria"] > 0)].copy()
+    bajo["deficit"] = (inv_min_dias * bajo["rotacion_diaria"]) - bajo["Total"]
+    bajo["deficit"] = bajo["deficit"].clip(lower=1).round()
+    bajo["clasificacion_abc"] = "B"
+    bajo_stock_tabla = json.loads(bajo.sort_values("deficit", ascending=False).to_json(orient="records"))
+
+    quieto = df_a[(df_a["Total"] > 0) & (df_a["dias_sin_venta"] >= quieto_dias)].copy()
+    if "Precio Compra" in quieto.columns:
+        quieto["capital_inmovilizado"] = quieto["Total"] * pd.to_numeric(quieto["Precio Compra"], errors="coerce").fillna(0)
+    else:
+        quieto["capital_inmovilizado"] = 0
+
+    inventario_quieto_tabla = json.loads(quieto.sort_values("capital_inmovilizado", ascending=False).to_json(orient="records"))
+
+    top_deficit = json.loads(
+        bajo.nlargest(15, "deficit")
+        .assign(nombre=lambda x: x["Descripcion"].astype(str).str[:30])
+        .to_json(orient="records")
+    ) if not bajo.empty else []
+    top_quieto = json.loads(
+        quieto.nlargest(15, "capital_inmovilizado")
+        .assign(nombre=lambda x: x["Descripcion"].astype(str).str[:30])
+        .to_json(orient="records")
+    ) if not quieto.empty else []
+
+    excluir_selector = [
+        "Referencia", "Descripcion", "Laboratorio", "Nivel", "Precio Compra", "Precio Venta",
+        "Comision", "Utilidad", "Stock Maximo", "Stock Minimo", "Total", "IVA", "Codigo",
+    ]
+    sedes_disponibles = [
+        c for c in df_i.columns
+        if c not in excluir_selector and pd.api.types.is_numeric_dtype(df_i[c])
+    ]
+
+    # Calculate KPIs for frontend
+    kpis = {
+        "bajo_stock": int(len(bajo)),
+        "sin_stock": int(len(bajo[bajo["Total"] <= 0])),
+        "sobre_stock": int(len(df_a[(df_a["cobertura_dias"] > inv_max_dias) & (df_a["rotacion_diaria"] > 0)])),
+        "inventario_quieto": int(len(quieto)),
+        "capital_quieto": float(quieto["capital_inmovilizado"].sum()),
+        "capital_exceso": 0.0,
+        "inv_min_dias": int(inv_min_dias),
+        "inv_max_dias": int(inv_max_dias),
+        "quieto_dias": int(quieto_dias),
+    }
+
+    return {
+        "kpis": kpis,
+        "bajo_stock_tabla": bajo_stock_tabla,
+        "inventario_quieto_tabla": inventario_quieto_tabla,
+        "top_deficit": top_deficit,
+        "top_quieto": top_quieto,
+        "top_sobre": [],
+        "sobre_stock_tabla": [],
+        "stock_por_sede": {},
+        "sedes_disponibles": sedes_disponibles,
+    }
+
+
+# â”€â”€ Compras â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+@router.get("/compras")
+def compras(
+    fecha_ini: str = None,
+    fecha_fin: str = None,
+    proveedor: str = "Todos",
+    estado: str = "Todos",
+    buscar: str = "",
+    inv_min_dias: int = INV_MIN_DIAS,
+    inv_max_dias: int = INV_MAX_DIAS,
+    x_session_id: str = Header(default="default-session"),
+):
+    df_c = get_df(x_session_id, "compras", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
+    df_v = get_df(x_session_id, "ventas", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
+    df_i = get_df(x_session_id, "inventario")
+    if df_c is None or df_v is None:
+        raise HTTPException(404, "Faltan datos")
+
+    c = (
+        df_c.groupby(["REFERENCIA", "DESCRIPCION"], as_index=False)
+        .agg(uds_compradas=("CANT", "sum"), proveedor=("PROVEEDOR", "first"))
+        .rename(columns={"REFERENCIA": "Referencia", "DESCRIPCION": "Descripcion"})
+    )
+    v = df_v.groupby("Referencia", as_index=False).agg(uds_vendidas=("Cant", "sum"))
+
+    comp = c.merge(v, on="Referencia", how="outer").fillna({"uds_compradas": 0, "uds_vendidas": 0})
+    if df_i is not None:
+        inv_cols = [c for c in ["Referencia", "Descripcion", "Total", "Nivel"] if c in df_i.columns]
+        inv = _inventory_with_total(df_i)[inv_cols].rename(columns={"Total": "inv_actual"})
+        comp = comp.merge(inv, on="Referencia", how="left").fillna({"inv_actual": 0})
+        comp["Descripcion"] = comp["Descripcion_x"].fillna(comp.get("Descripcion_y")) if "Descripcion_x" in comp.columns else comp.get("Descripcion")
+        comp = comp.drop(columns=[c for c in ["Descripcion_x", "Descripcion_y"] if c in comp.columns])
+    else:
+        comp["inv_actual"] = 0
+        comp["Descripcion"] = comp["Descripcion"].fillna("")
+
+    comp["inv_inicial"] = comp["inv_actual"] + comp["uds_vendidas"] - comp["uds_compradas"]
+    dias_periodo = 30
+    if "Fecha" in df_v.columns and df_v["Fecha"].notna().any():
+        dias_periodo = _inclusive_days(df_v["Fecha"].min(), df_v["Fecha"].max(), default=30)
+
+    comp["venta_diaria"] = comp["uds_vendidas"] / max(dias_periodo, 1)
+    comp["cobertura_dias"] = np.where(comp["venta_diaria"] > 0, comp["inv_actual"] / comp["venta_diaria"], 9999)
+    comp["estado"] = np.select(
+        [comp["cobertura_dias"] < inv_min_dias, comp["cobertura_dias"] > inv_max_dias],
+        ["desabastecimiento", "sobre_compra"],
+        default="equilibrio",
+    )
+
+    filtered = comp.copy()
+    if proveedor != "Todos":
+        filtered = filtered[filtered["proveedor"] == proveedor]
+    if estado != "Todos":
+        filtered = filtered[filtered["estado"] == estado]
+    if buscar:
+        mask = (
+            filtered["Referencia"].astype(str).str.contains(buscar, case=False, na=False)
+            | filtered["Descripcion"].astype(str).str.contains(buscar, case=False, na=False)
+        )
+        filtered = filtered[mask]
+
+    top_prov = (
+        df_c.groupby("PROVEEDOR", as_index=False)
+        .agg(unidades=("CANT", "sum"), costo_total=("Costo Total", "sum"))
+        .nlargest(10, "unidades")
+        .rename(columns={"PROVEEDOR": "proveedor"})
+    )
+
+    return {
+        "kpis": {
+            "total_comprado": int(comp["uds_compradas"].sum()),
+            "total_vendido": int(comp["uds_vendidas"].sum()),
+            "n_sobre_compra": int(len(comp[comp["estado"] == "sobre_compra"])),
+            "n_desabastecimiento": int(len(comp[comp["estado"] == "desabastecimiento"])),
+            "dias_periodo": int(dias_periodo),
+            "inv_min_dias": inv_min_dias,
+            "inv_max_dias": inv_max_dias,
+        },
+        "comparativo": json.loads(filtered.sort_values("uds_compradas", ascending=False).to_json(orient="records")),
+        "top_proveedores": json.loads(top_prov.to_json(orient="records")),
+        "filtros": {
+            "proveedores": sorted(df_c["PROVEEDOR"].dropna().unique().tolist()),
+            "estados": ["sobre_compra", "desabastecimiento", "equilibrio"],
+        },
+    }
+
+
+# â”€â”€ Notas CrÃ©dito / Devoluciones â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.get("/notas-credito")
 def endpoint_notas_credito(
@@ -477,8 +728,8 @@ def endpoint_notas_credito(
     fecha_fin: str = None,
     x_session_id: str = Header(default="default-session")
 ):
-    df_nc = get_df(x_session_id, "notas_credito")
-    df_v  = get_df(x_session_id, "ventas")
+    df_nc = get_df(x_session_id, "notas_credito", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
+    df_v  = get_df(x_session_id, "ventas", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
     if df_nc is None:
         raise HTTPException(404, "No hay datos de notas credito cargados")
 
@@ -591,7 +842,23 @@ def ventas(sede: str = "Todas", nivel: str = "Todos",
            laboratorio: str = "Todos",
            fecha_ini: str = None, fecha_fin: str = None,
            x_session_id: str = Header(default="default-session")):
-    df = get_df(x_session_id, "ventas")
+
+    from backend.services.db_config import is_db_configured
+    from backend.services.db_service import get_db_service
+
+    if is_db_configured():
+        db = get_db_service()
+        if db:
+            return db.get_analisis_ventas_sql(
+                fecha_ini=fecha_ini,
+                fecha_fin=fecha_fin,
+                sede=sede,
+                nivel=nivel,
+                laboratorio=laboratorio
+            )
+
+    # Fallback si no hay BD (Mantener cÃ³digo original como backup de memoria)
+    df = get_df(x_session_id, "ventas", fecha_ini=fecha_ini, fecha_fin=fecha_fin, sede=sede)
     if df is None:
         raise HTTPException(404, "No hay datos de ventas")
 
@@ -602,6 +869,7 @@ def ventas(sede: str = "Todas", nivel: str = "Todos",
         df = df[df["Nivel"] == nivel]
     if laboratorio != "Todos" and "Laboratorio" in df.columns:
         df = df[df["Laboratorio"] == laboratorio]
+
     ing_total = float(df["Ingreso"].sum())
     dias_periodo = 1
     if df["Fecha"].notna().any():
@@ -669,7 +937,7 @@ def ventas(sede: str = "Todas", nivel: str = "Todos",
     }
 
 
-# ── Metas y Proyecciones ──────────────────────────────────────────────────────
+# â”€â”€ Metas y Proyecciones â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.get("/metas")
 def proyeccion_metas(
@@ -700,23 +968,23 @@ def proyeccion_metas(
     df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce")
     df = df[df["Fecha"].notna()]
     if df.empty:
-        raise HTTPException(400, "No hay fechas válidas en ventas")
+        raise HTTPException(400, "No hay fechas vÃ¡lidas en ventas")
 
     if fecha_ini and fecha_fin:
         try:
             d_ini = datetime.strptime(fecha_ini, "%Y-%m-%d").date()
             d_fin = datetime.strptime(fecha_fin, "%Y-%m-%d").date()
         except ValueError:
-            raise HTTPException(400, "Formato de fecha inválido o rango erróneo")
+            raise HTTPException(400, "Formato de fecha invÃ¡lido o rango errÃ³neo")
         if d_fin < d_ini:
-            raise HTTPException(400, "Formato de fecha inválido o rango erróneo")
+            raise HTTPException(400, "Formato de fecha invÃ¡lido o rango errÃ³neo")
         y_obj, m_obj = d_ini.year, d_ini.month
         dias_totales_proy = (d_fin - d_ini).days + 1
     else:
         hoy = date.today()
         y_obj, m_obj = hoy.year, hoy.month
 
-        # Si el mes objetivo actual no tiene base en datos, usar el último mes disponible + 1.
+        # Si el mes objetivo actual no tiene base en datos, usar el Ãºltimo mes disponible + 1.
         meses_disponibles = (
             df.assign(ym=df["Fecha"].dt.to_period("M"))
             .groupby("ym", as_index=False)
@@ -800,19 +1068,18 @@ def proyeccion_metas(
                     "ticket_promedio": float(ticket_v),
                     "aporte": round(aporte_v * 100, 1)
                 })
-
         num_vendedores = len(vends_raw)
         peso_igual = 1.0 / num_vendedores if num_vendedores > 0 else 0
 
-        for v in vends_raw:
-            meta_v = meta_sede * peso_igual
+        for vendedor in vends_raw:
+            meta_vendedor = meta_sede * peso_igual
             vendedores.append({
-                "nombre": v["nombre"],
-                "ingreso_actual": v["ingreso_actual"],
-                "ticket_promedio": v["ticket_promedio"],
-                "aporte_historico": v["aporte"],
+                "nombre": vendedor["nombre"],
+                "ingreso_actual": vendedor["ingreso_actual"],
+                "ticket_promedio": vendedor["ticket_promedio"],
+                "aporte_historico": vendedor["aporte"],
                 "peso_distribucion": round(peso_igual * 100, 1),
-                "meta": float(meta_v)
+                "meta": float(meta_vendedor),
             })
 
         vendedores.sort(key=lambda x: x["meta"], reverse=True)
@@ -828,346 +1095,42 @@ def proyeccion_metas(
             "incremento_aplicado_pct": round(incremento_aplicado * 100, 2),
             "ventas_hist_mismo_mes": float(venta_hist_obj),
             "ventas_hist_mes_anterior": float(venta_hist_prev),
-            "vendedores": vendedores
+            "vendedores": vendedores,
         })
 
     sedes_data.sort(key=lambda x: x["meta_sugerida"], reverse=True)
+    ingreso_actual_total = sum(s["ingreso_actual"] for s in sedes_data)
+    proyeccion_total = sum(s["proyeccion_base"] for s in sedes_data)
+    meta_total = sum(s["meta_sugerida"] for s in sedes_data)
+
+    mes_base_usado = f"{y_base:04d}-{m_base:02d}"
+    periodo_objetivo = (
+        {"inicio": str(d_ini), "fin": str(d_fin)}
+        if fecha_ini and fecha_fin
+        else {"inicio": f"{y_obj:04d}-{m_obj:02d}-01", "fin": f"{y_obj:04d}-{m_obj:02d}-{dias_totales_proy:02d}"}
+    )
 
     return {
         "resumen": {
-            "ingreso_actual_total": sum(s["ingreso_actual"] for s in sedes_data),
-            "meta_total": sum(s["meta_sugerida"] for s in sedes_data),
-            "proyeccion_total": sum(s["proyeccion_base"] for s in sedes_data),
-            "dias_mes": dias_totales_proy,
-            "dias_habiles": habiles,
-            "dias_festivos": domingos_festivos,
-            "mes_base_usado": f"{m_base:02d}/{y_base}",
-            "mes_objetivo": f"{m_obj:02d}/{y_obj}",
-            "comparativo_historico": f"{m_hist_prev:02d}-{m_hist_obj:02d}/{y_hist}",
-            "regla_dias": "Domingo a domingo; festivos cuentan normal"
+            "ingreso_actual_total": round(ingreso_actual_total, 0),
+            "proyeccion_total": round(proyeccion_total, 0),
+            "meta_total": round(meta_total, 0),
+            "dias_mes": int(dias_totales_proy),
+            "dias_habiles": int(habiles),
+            "dias_festivos": int(domingos_festivos),
+            "mes_base_usado": mes_base_usado,
+            "agresividad": agresividad,
+            "periodo_objetivo": periodo_objetivo,
         },
-        "sedes": sedes_data
+        "sedes": sedes_data,
     }
-
-
-# ── Rentabilidad ──────────────────────────────────────────────────────────────
-
-@router.get("/rentabilidad")
-def rentabilidad(
-    fecha_ini: str = None,
-    fecha_fin: str = None,
-    x_session_id: str = Header(default="default-session")
-):
-    df_v = get_df(x_session_id, "ventas")
-    df_i = get_df(x_session_id, "inventario")
-    if df_v is None or df_i is None:
-        raise HTTPException(404, "Necesitas ventas e inventario")
-    if "Precio Compra" not in df_i.columns:
-        raise HTTPException(400, "Inventario sin columna Precio Compra")
-    df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin)
-
-    r = _sales_profit_frame(df_v, df_i)
-    max_fecha = df_v["Fecha"].max() if "Fecha" in df_v.columns else pd.NaT
-    min_fecha = df_v["Fecha"].min() if "Fecha" in df_v.columns else pd.NaT
-    dias_periodo = _inclusive_days(min_fecha, max_fecha)
-    r["rotacion_diaria"] = (r["cant_vend"] / dias_periodo).round(3)
-    r["utilidad_unit"] = r["margen_unit"].round(2)
-    r["precio_compra"] = r["Precio Compra"]
-
-    # --- ABC CRUZADO ---
-    # ABC Ventas (Ingreso)
-    r = r.sort_values("ingreso_total", ascending=False)
-    total_ingreso = r["ingreso_total"].sum()
-    r["acum_ingreso"] = r["ingreso_total"].cumsum()
-    def abc_ingreso(acum):
-        if total_ingreso == 0: return "C"
-        pct = acum / total_ingreso
-        if pct <= 0.80: return "A"
-        elif pct <= 0.95: return "B"
-        else: return "C"
-    r["abc_ventas"] = r["acum_ingreso"].apply(abc_ingreso)
-
-    # ABC Margen (Utilidad)
-    r = r.sort_values("utilidad_total", ascending=False)
-    total_utilidad = r[r["utilidad_total"] > 0]["utilidad_total"].sum()
-    r["acum_utilidad"] = r["utilidad_total"].clip(lower=0).cumsum()
-    def abc_utilidad(acum):
-        if total_utilidad == 0: return "C"
-        pct = acum / total_utilidad
-        if pct <= 0.80: return "A"
-        elif pct <= 0.95: return "B"
-        else: return "C"
-    r["abc_margen"] = r["acum_utilidad"].apply(abc_utilidad)
-
-    r["matriz_abc"] = r["abc_ventas"] + "-" + r["abc_margen"]
-
-    matriz = r[["Referencia", "descripcion", "laboratorio", "cant_vend", "ingreso_total", "utilidad_total", "margen_pct", "abc_ventas", "abc_margen", "matriz_abc"]].copy()
-    matriz["nombre"] = matriz["descripcion"].str[:40]
-    matriz = json.loads(matriz.to_json(orient="records"))
-    # -------------------
-
-    top_r = (r.nlargest(15,"utilidad_total").sort_values("utilidad_total",ascending=True)
-              .assign(nombre=lambda x: x["descripcion"].str[:30]))
-    top_r = json.loads(top_r.to_json(orient="records"))
-
-    umbral_alta_rotacion = _high_rotation_threshold(r)
-    bajo_m = r[
-        (r["margen_pct"] < LOW_MARGIN_PCT)
-        & (r["cant_vend"] >= umbral_alta_rotacion)
-    ].copy()
-    bajo_m_total = len(bajo_m)
-    bajo_m = bajo_m.sort_values(
-        ["margen_pct", "cant_vend", "ingreso_total"],
-        ascending=[True, False, False],
-    ).head(50)
-    bajo_m["nombre"] = bajo_m["descripcion"].str[:30]
-    bajo_m["precio_venta"] = bajo_m["precio_venta_prom"]
-    bajo_m = json.loads(bajo_m.to_json(orient="records"))
-
-    por_cat = []
-    if "Nivel" in r.columns:
-        por_cat = (r.groupby("Nivel",as_index=False)["utilidad_total"]
-                   .sum().sort_values("utilidad_total",ascending=True))
-        por_cat = json.loads(por_cat.to_json(orient="records"))
-
-    por_lab = (r.groupby("laboratorio",as_index=False)["utilidad_total"]
-               .sum().nlargest(10,"utilidad_total")
-               .sort_values("utilidad_total",ascending=True)
-               .assign(lab=lambda x: x["laboratorio"].str[:25]))
-    por_lab = json.loads(por_lab.to_json(orient="records"))
-
-    util_total = float(r["utilidad_total"].sum())
-    ing_total  = float(r["ingreso_total"].sum())
-
-    return {
-        "kpis": {
-            "utilidad_total": round(util_total,0),
-            "margen_global":  round(util_total/ing_total*100,1) if ing_total else 0,
-            "ingreso_total":  round(ing_total,0),
-            "productos":      len(r),
-            "bajo_margen_count": bajo_m_total,
-            "bajo_margen_umbral_pct": LOW_MARGIN_PCT,
-            "alta_rotacion_min_unidades": round(umbral_alta_rotacion, 2),
-            "dias_periodo": dias_periodo,
-        },
-        "top_rentables": top_r,
-        "bajo_margen":   bajo_m,
-        "por_categoria": por_cat,
-        "por_laboratorio": por_lab,
-        "matriz_abc": matriz
-    }
-
-
-# ── Inventario ────────────────────────────────────────────────────────────────
-
-@router.get("/inventario")
-def inventario(
-    sede: str = "Todas",
-    inv_min_dias: int = INV_MIN_DIAS,
-    inv_max_dias: int = INV_MAX_DIAS,
-    quieto_dias: int = QUIETO_DIAS_DEFAULT,
-    fecha_ini: str = None,
-    fecha_fin: str = None,
-    x_session_id: str = Header(default="default-session")
-):
-    df_i = get_df(x_session_id, "inventario")
-    df_v = get_df(x_session_id, "ventas")
-    if df_i is None:
-        raise HTTPException(404, "No hay datos de inventario")
-    if inv_min_dias <= 0 or inv_max_dias <= inv_min_dias or quieto_dias <= 0:
-        raise HTTPException(400, "Umbrales inválidos: usa mínimo > 0, máximo > mínimo y quieto > 0")
-
-    df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin) if df_v is not None else None
-
-    if sede != "Todas" and sede in df_i.columns:
-        df_a = df_i.copy()
-        df_a["Total"] = pd.to_numeric(df_a[sede], errors="coerce").fillna(0)
-    else:
-        df_a = _inventory_with_total(df_i)
-
-    if df_v is not None and "Fecha" in df_v.columns:
-        if sede != "Todas":
-            df_v_filtered = df_v[df_v["Punto Venta"] == sede]
-        else:
-            df_v_filtered = df_v
-
-        v_agr = df_v_filtered.groupby("Referencia",as_index=False).agg(
-            uds_vendidas=("Cant","sum"),
-            ingreso_generado=("Ingreso", "sum"),
-            ultima_venta=("Fecha","max")
-        )
-        
-        max_fecha = df_v_filtered["Fecha"].max()
-        min_fecha = df_v_filtered["Fecha"].min()
-
-        # Forecasting (Tendencia 15 días)
-        from datetime import timedelta
-        import numpy as np
-        if pd.notna(max_fecha):
-            fecha_15_dias = max_fecha - timedelta(days=15)
-            fecha_30_dias = max_fecha - timedelta(days=30)
-            v_15d = df_v_filtered[df_v_filtered["Fecha"] > fecha_15_dias].groupby("Referencia", as_index=False)["Cant"].sum()
-            v_15d.rename(columns={"Cant": "cant_15d_reciente"}, inplace=True)
-            v_30d = df_v_filtered[(df_v_filtered["Fecha"] > fecha_30_dias) & (df_v_filtered["Fecha"] <= fecha_15_dias)].groupby("Referencia", as_index=False)["Cant"].sum()
-            v_30d.rename(columns={"Cant": "cant_15d_anterior"}, inplace=True)
-            
-            v_agr = v_agr.merge(v_15d, on="Referencia", how="left").merge(v_30d, on="Referencia", how="left")
-            v_agr["cant_15d_reciente"] = v_agr["cant_15d_reciente"].fillna(0)
-            v_agr["cant_15d_anterior"] = v_agr["cant_15d_anterior"].fillna(0)
-            
-            v_agr["factor_tendencia"] = np.where(
-                v_agr["cant_15d_anterior"] > 0,
-                (v_agr["cant_15d_reciente"] / v_agr["cant_15d_anterior"]).clip(0.5, 3.0),
-                np.where(v_agr["cant_15d_reciente"] > 0, 2.0, 1.0)
-            )
-        else:
-            v_agr["factor_tendencia"] = 1.0
-
-        # ABC Classification
-        v_agr = v_agr.sort_values("ingreso_generado", ascending=False)
-        v_agr["acumulado"] = v_agr["ingreso_generado"].cumsum()
-        total_ingreso = v_agr["ingreso_generado"].sum()
-        
-        def clasificar_abc(acum):
-            if total_ingreso == 0: return "C"
-            pct = acum / total_ingreso
-            if pct <= 0.80: return "A"
-            elif pct <= 0.95: return "B"
-            else: return "C"
-            
-        v_agr["clasificacion_abc"] = v_agr["acumulado"].apply(clasificar_abc)
-
-        df_a  = df_a.merge(v_agr, on="Referencia", how="left")
-        df_a["uds_vendidas"] = df_a["uds_vendidas"].fillna(0)
-        df_a["clasificacion_abc"] = df_a["clasificacion_abc"].fillna("C") # Si no se vendió, es C
-        df_a["factor_tendencia"] = df_a.get("factor_tendencia", 1.0).fillna(1.0)
-        
-        if pd.notna(max_fecha) and pd.notna(min_fecha):
-            df_a["dias_sin_venta"] = (max_fecha - df_a["ultima_venta"]).dt.days
-            
-            dias_periodo = _inclusive_days(min_fecha, max_fecha)
-            df_a["rotacion_diaria"] = df_a["uds_vendidas"] / dias_periodo
-            df_a["rotacion_proyectada"] = df_a["rotacion_diaria"] * df_a["factor_tendencia"]
-            
-            import numpy as np
-            df_a["cobertura_dias"] = np.where(df_a["rotacion_proyectada"] > 0, df_a["Total"] / df_a["rotacion_proyectada"], 9999)
-            df_a["cobertura_dias"] = df_a["cobertura_dias"].round(1)
-        else:
-            df_a["dias_sin_venta"] = 9999
-            df_a["cobertura_dias"] = 9999
-            df_a["rotacion_diaria"] = 0
-            df_a["rotacion_proyectada"] = 0
-    else:
-        df_a["uds_vendidas"] = 0
-        df_a["dias_sin_venta"] = 9999
-        df_a["cobertura_dias"] = 9999
-        df_a["rotacion_diaria"] = 0
-        df_a["rotacion_proyectada"] = 0
-        df_a["factor_tendencia"] = 1.0
-        df_a["clasificacion_abc"] = "C"
-
-    df_a["dias_sin_venta"] = df_a["dias_sin_venta"].fillna(9999)
-    df_a["cobertura_dias"] = df_a["cobertura_dias"].fillna(9999)
-
-    # 1. Bajo Stock: Cobertura por debajo del mínimo saludable configurado.
-    bajo = df_a[(df_a["cobertura_dias"] < inv_min_dias) & (df_a["rotacion_proyectada"] > 0)].copy()
-    
-    # Calcular déficit real en unidades para llegar a la cobertura mínima.
-    bajo["stock_ideal"] = bajo["rotacion_proyectada"] * inv_min_dias
-    bajo["deficit"] = bajo["stock_ideal"] - bajo["Total"]
-    bajo["deficit"] = bajo["deficit"].apply(lambda x: max(1, round(x)))
-
-    # 2. Sobrestock: Cobertura por encima del máximo saludable configurado.
-    sobre = df_a[(df_a["cobertura_dias"] > inv_max_dias) & (df_a["cobertura_dias"] < 9999) & (df_a["rotacion_proyectada"] > 0)].copy()
-    if "Precio Compra" in sobre.columns:
-        sobre["capital_exceso"] = (sobre["Total"] - (sobre["rotacion_proyectada"] * inv_max_dias)) * sobre["Precio Compra"]
-    else:
-        sobre["capital_exceso"] = 0
-
-    sin_stock = df_a[(df_a["Total"]==0) & (df_a["rotacion_diaria"] > 0)]
-
-    # 3. Inventario Quieto: stock sin venta por encima del umbral configurado.
-    quieto = df_a[(df_a["Total"] > 0) & (df_a["dias_sin_venta"] > quieto_dias)].copy()
-    if "Precio Compra" in quieto.columns:
-        quieto["capital_inmovilizado"] = quieto["Total"] * quieto["Precio Compra"]
-    else:
-        quieto["capital_inmovilizado"] = 0
-
-    top_quieto = (quieto.nlargest(15, "capital_inmovilizado")
-                  .sort_values("capital_inmovilizado", ascending=True)
-                  .assign(nombre=lambda x: x["Descripcion"].str[:30]))
-    top_quieto = json.loads(top_quieto.to_json(orient="records"))
-
-    top_deficit = (bajo.nlargest(15,"deficit")
-                   .sort_values("deficit",ascending=True)
-                   .assign(nombre=lambda x: x["Descripcion"].str[:30]))
-    top_deficit = json.loads(top_deficit.to_json(orient="records"))
-
-    top_sobre = (sobre.nlargest(15, "capital_exceso")
-                  .sort_values("capital_exceso", ascending=True)
-                  .assign(nombre=lambda x: x["Descripcion"].str[:30]))
-    top_sobre = json.loads(top_sobre.to_json(orient="records"))
-
-    stock_sede = {}
-    for s in SEDES:
-        if s in df_i.columns:
-            stock_sede[s] = int(df_i[s].sum())
-
-    # Obtener sedes dinámicamente para el selector del frontend
-    excluir_selector = ["Referencia", "Descripcion", "Laboratorio", "Nivel", "Precio Compra", "Precio Venta", "Comision", "Utilidad", "Stock Maximo", "Stock Minimo", "Total", "IVA", "Codigo"]
-    sedes_finales = [c for c in df_i.columns if c not in excluir_selector and pd.api.types.is_numeric_dtype(df_i[c])]
-
-    return {
-        "kpis": {
-            "bajo_stock":      len(bajo),
-            "sin_stock":       len(sin_stock),
-            "sobre_stock":     len(sobre),
-            "stock_total":     int(df_a["Total"].sum()),
-            "inventario_quieto": len(quieto),
-            "capital_quieto":  float(quieto["capital_inmovilizado"].sum()) if len(quieto) > 0 else 0,
-            "capital_exceso":  float(sobre["capital_exceso"].sum()) if len(sobre) > 0 else 0,
-            "inv_min_dias":    inv_min_dias,
-            "inv_max_dias":    inv_max_dias,
-            "quieto_dias":     quieto_dias,
-        },
-        "bajo_stock_tabla":       _df_to_records(bajo.sort_values(["clasificacion_abc", "cobertura_dias"], ascending=[True, True])),
-        "sobre_stock_tabla":      _df_to_records(sobre.sort_values("cobertura_dias", ascending=False)),
-        "inventario_quieto_tabla": _df_to_records(quieto.sort_values("capital_inmovilizado", ascending=False)),
-        "top_deficit":            top_deficit,
-        "top_quieto":             top_quieto,
-        "top_sobre":              top_sobre,
-        "stock_por_sede":         stock_sede,
-        "sedes_disponibles":      sedes_finales
-    }
-
-
-# ── Compras vs Ventas ─────────────────────────────────────────────────────────
-
-@router.get("/compras")
-def compras(
-    proveedor: str = "Todos",
-    estado: str = "Todos",
-    buscar: str = "",
-    inv_min_dias: int = INV_MIN_DIAS,
-    inv_max_dias: int = INV_MAX_DIAS,
-    fecha_ini: str = None,
-    fecha_fin: str = None,
-    x_session_id: str = Header(default="default-session")
-):
-    df_c = get_df(x_session_id, "compras")
-    df_v = get_df(x_session_id, "ventas")
-    df_i = get_df(x_session_id, "inventario")
-    if df_c is None or df_v is None or df_i is None:
-        raise HTTPException(404, "Se requieren Compras, Ventas e Inventario para la conciliación.")
-    if inv_min_dias <= 0 or inv_max_dias <= inv_min_dias:
-        raise HTTPException(400, "Umbrales inválidos: usa mínimo > 0 y máximo > mínimo")
 
     df_c = _apply_date_filter(df_c, "FECHA", fecha_ini, fecha_fin)
     df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin)
 
     # 1. Agrupar Compras por Referencia
     c_agr = df_c.groupby("REFERENCIA", as_index=False)["CANT"].sum().rename(columns={"REFERENCIA": "Referencia", "CANT": "uds_compradas"})
-    
+
     # 2. Agrupar Ventas por Referencia
     v_agr = df_v.groupby("Referencia", as_index=False)["Cant"].sum().rename(columns={"Cant": "uds_vendidas"})
 
@@ -1175,8 +1138,8 @@ def compras(
     df_i_total = _inventory_with_total(df_i)
     comp = df_i_total[["Referencia", "Descripcion", "Total"]].copy()
     comp = comp.rename(columns={"Total": "inv_actual"})
-    
-    # Intentar obtener Categoría/Nivel para diferenciar perecederos
+
+    # Intentar obtener CategorÃ­a/Nivel para diferenciar perecederos
     if "Nivel" in df_i.columns:
         nivel_df = df_i[["Referencia", "Nivel"]].drop_duplicates("Referencia")
         comp = comp.merge(nivel_df, on="Referencia", how="left")
@@ -1185,31 +1148,31 @@ def compras(
         comp = comp.merge(nivel_df, on="Referencia", how="left")
     else:
         comp["Nivel"] = "Desconocida"
-        
+
     comp["Nivel"] = comp["Nivel"].fillna("Desconocida")
 
     comp = comp.merge(c_agr, on="Referencia", how="left")
     comp = comp.merge(v_agr, on="Referencia", how="left")
-    
+
     # Llenar ceros
     comp["uds_compradas"] = comp["uds_compradas"].fillna(0)
     comp["uds_vendidas"] = comp["uds_vendidas"].fillna(0)
-    
-    # 4. INGENIERÍA INVERSA: Inventario Inicial
+
+    # 4. INGENIERÃA INVERSA: Inventario Inicial
     comp["inv_inicial"] = comp["inv_actual"] - comp["uds_compradas"] + comp["uds_vendidas"]
-    
+
     # Filtrar productos inactivos (todo en 0)
     comp = comp[(comp["inv_actual"] > 0) | (comp["uds_compradas"] > 0) | (comp["uds_vendidas"] > 0)]
-    
-    # 5. Días del Periodo
+
+    # 5. DÃ­as del Periodo
     dias_periodo = 30
     if "Fecha" in df_v.columns and df_v["Fecha"].notna().any():
         dias_periodo = _inclusive_days(df_v["Fecha"].min(), df_v["Fecha"].max(), default=30)
-        
+
     comp["venta_diaria"] = comp["uds_vendidas"] / dias_periodo
     comp["cobertura_dias"] = comp.apply(lambda x: (x["inv_actual"] / x["venta_diaria"]) if x["venta_diaria"] > 0 else 9999, axis=1)
 
-    # 6. Estado (Basado en Cobertura 25-40 días)
+    # 6. Estado (Basado en Cobertura 25-40 dÃ­as)
     def calcular_estado_flujo(row):
         if row["cobertura_dias"] < inv_min_dias:
             return "desabastecimiento" # Falta
@@ -1217,7 +1180,7 @@ def compras(
             return "sobre_compra"      # Sobre / Exceso
         else:
             return "equilibrio"        # OK
-            
+
     comp["estado"] = comp.apply(calcular_estado_flujo, axis=1)
 
     # Aplicar filtros
@@ -1262,7 +1225,7 @@ def compras(
     }
 
 
-# ── Sedes ─────────────────────────────────────────────────────────────────────
+# â”€â”€ Sedes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.get("/sedes")
 def sedes(

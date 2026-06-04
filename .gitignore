@@ -5,8 +5,11 @@ __pycache__/
 *.xlsx
 *.xls
 *.log
+*.err
 .env
 .venv/
 dist/
 backend/scratch/
+data/historico/*.parquet
+data/historico/_backups/
 

@@ -6,9 +6,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // Redirige /api/* → FastAPI en :8000
+      // Redirige /api/* → FastAPI en :8002
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8002',
         changeOrigin: true,
       }
     }

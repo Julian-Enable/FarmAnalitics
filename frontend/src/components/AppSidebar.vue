@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <aside class="sidebar">
     <!-- Logo -->
     <div class="sidebar-logo">
@@ -6,12 +6,12 @@
         <Activity color="var(--accent)" size="28" />
         <h1 style="margin: 0; font-size: 1.5rem; letter-spacing: -0.5px;">Farma Analytics</h1>
       </div>
-      <p style="margin: 0; font-size: 0.85rem; color: var(--text);">Análisis de POS Farmacéutico</p>
+      <p style="margin: 0; font-size: 0.85rem; color: var(--text);">AnÃ¡lisis de POS FarmacÃ©utico</p>
     </div>
 
-    <!-- Navegación -->
+    <!-- NavegaciÃ³n -->
     <nav class="sidebar-nav">
-      <div class="nav-label">Análisis</div>
+      <div class="nav-label">AnÃ¡lisis</div>
       <router-link
         v-for="item in navItems" :key="item.to"
         :to="item.to" custom v-slot="{ isActive, navigate }"
@@ -23,37 +23,61 @@
       </router-link>
     </nav>
 
-    <!-- Upload de archivos -->
-    <div class="sidebar-upload">
+    <!-- Estado de Base de Datos -->
+    <div v-if="store.status.db_connected" class="sidebar-upload" style="background-color: var(--card-alt); border: 1px solid rgba(16, 185, 129, 0.2);">
+      <div class="upload-title" style="color: var(--green); display:flex; align-items:center; gap: 6px;">
+        <Database size="18" />
+        ConexiÃ³n en tiempo real
+      </div>
+      <div style="font-size: 0.8rem; color: var(--text); margin-top: 8px;">
+        Conectado a Azure SQL Server. <br/>(Usuario: SPD_FARMAZION)
+      </div>
+      <div style="font-size: 0.75rem; color: var(--green); margin-top: 6px; display: flex; align-items: center; gap: 4px;">
+        <span class="status-dot on"></span> Lectura segura activa
+      </div>
+
+      <button
+        class="btn-secondary"
+        style="margin-top: 12px;"
+        :disabled="store.exporting"
+        @click="store.exportFullReport"
+      >
+        <Download size="15" />
+        {{ store.exporting ? 'Exportando...' : 'Exportar reporte' }}
+      </button>
+    </div>
+
+    <!-- Upload de archivos (Oculto si hay BD conectada) -->
+    <div v-else class="sidebar-upload">
       <div class="upload-title">
-        <FileUp size="18" style="margin-right: 6px;" /> 
+        <FileUp size="18" style="margin-right: 6px;" />
         Cargar archivos
       </div>
 
       <label class="upload-zone" :class="{ uploaded: ventasFiles.length }">
         <input type="file" multiple accept=".csv,.xlsx,.xls" @change="onVentas" />
         <div style="display:flex;align-items:center;gap:6px;">
-          <span v-if="ventasFiles.length" class="check">✓</span>
+          <span v-if="ventasFiles.length" class="check">âœ“</span>
           <TrendingUp size="16" />
           <strong>Ventas</strong>
         </div>
-        <span>{{ ventasFiles.length ? `${ventasFiles.length} archivo(s) listos` : 'CSV / Excel — múltiples OK' }}</span>
+        <span>{{ ventasFiles.length ? `${ventasFiles.length} archivo(s) listos` : 'CSV / Excel â€” mÃºltiples OK' }}</span>
       </label>
 
       <label class="upload-zone" :class="{ uploaded: comprasFiles.length }">
         <input type="file" multiple accept=".csv,.xlsx,.xls" @change="onCompras" />
         <div style="display:flex;align-items:center;gap:6px;">
-          <span v-if="comprasFiles.length" class="check">✓</span>
+          <span v-if="comprasFiles.length" class="check">âœ“</span>
           <Store size="16" />
           <strong>Compras</strong>
         </div>
-        <span>{{ comprasFiles.length ? `${comprasFiles.length} archivo(s) listos` : 'CSV / Excel — múltiples OK' }}</span>
+        <span>{{ comprasFiles.length ? `${comprasFiles.length} archivo(s) listos` : 'CSV / Excel â€” mÃºltiples OK' }}</span>
       </label>
 
       <label class="upload-zone" :class="{ uploaded: inventarioFile }">
         <input type="file" accept=".csv,.xlsx,.xls" @change="onInventario" />
         <div style="display:flex;align-items:center;gap:6px;">
-          <span v-if="inventarioFile" class="check">✓</span>
+          <span v-if="inventarioFile" class="check">âœ“</span>
           <Database size="16" />
           <strong>Inventario</strong>
         </div>
@@ -63,11 +87,11 @@
       <label class="upload-zone" :class="{ uploaded: notasCreditoFile }">
         <input type="file" accept=".csv,.xlsx,.xls" @change="onNotasCredito" />
         <div style="display:flex;align-items:center;gap:6px;">
-          <span v-if="notasCreditoFile" class="check">✓</span>
+          <span v-if="notasCreditoFile" class="check">âœ“</span>
           <RotateCcw size="16" />
-          <strong>Notas Crédito</strong>
+          <strong>Notas CrÃ©dito</strong>
         </div>
-        <span>{{ notasCreditoFile ? notasCreditoFile.name : 'CSV / Excel — opcional' }}</span>
+        <span>{{ notasCreditoFile ? notasCreditoFile.name : 'CSV / Excel â€” opcional' }}</span>
       </label>
 
       <button
@@ -129,7 +153,7 @@
               {{ diag.ok ? 'OK' : 'Faltan columnas' }}
             </span>
           </div>
-          <div style="color:var(--fg-muted);margin-top:2px;">{{ store.fmtN(diag.filas) }} filas · {{ diag.columnas.length }} columnas</div>
+          <div style="color:var(--fg-muted);margin-top:2px;">{{ store.fmtN(diag.filas) }} filas Â· {{ diag.columnas.length }} columnas</div>
           <div v-if="diag.faltantes.length" style="color:var(--red);margin-top:2px;">
             Faltan: {{ diag.faltantes.join(', ') }}
           </div>
@@ -165,20 +189,20 @@ const diagnosticItems = computed(() =>
 
 const navItems = [
   { to: '/',             icon: shallowRef(LayoutDashboard), label: 'Resumen General'    },
-  { to: '/ventas',       icon: shallowRef(TrendingUp),      label: 'Análisis de Ventas' },
+  { to: '/ventas',       icon: shallowRef(TrendingUp),      label: 'AnÃ¡lisis de Ventas' },
   { to: '/rentabilidad', icon: shallowRef(DollarSign),      label: 'Rentabilidad'        },
   { to: '/inventario',   icon: shallowRef(AlertCircle),     label: 'Alertas Inventario'  },
   { to: '/compras',      icon: shallowRef(Scale),           label: 'Compras vs Ventas'   },
   { to: '/sedes',        icon: shallowRef(Store),           label: 'Rendimiento Sedes'   },
   { to: '/devoluciones', icon: shallowRef(RotateCcw),       label: 'Devoluciones'        },
-  { to: '/metas',        icon: shallowRef(Target),          label: 'Proyección y Metas'  },
+  { to: '/metas',        icon: shallowRef(Target),          label: 'ProyecciÃ³n y Metas'  },
 ]
 
 const dataLabels = {
   ventas:       'Ventas cargadas',
   compras:      'Compras cargadas',
   inventario:   'Inventario cargado',
-  notas_credito: 'Notas crédito cargadas',
+  notas_credito: 'Notas crÃ©dito cargadas',
 }
 const diagnosticLabels = {
   ventas: 'Ventas',
