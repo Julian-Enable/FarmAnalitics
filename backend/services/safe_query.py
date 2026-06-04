@@ -19,10 +19,17 @@ porque este usuario podría tener permisos más amplios en el servidor.
 """
 import re
 import logging
-import pyodbc
 import pandas as pd
 import warnings
 from typing import Optional
+
+try:
+    import pyodbc
+except ImportError as exc:
+    pyodbc = None
+    PYODBC_IMPORT_ERROR = exc
+else:
+    PYODBC_IMPORT_ERROR = None
 
 # Suprimir la advertencia de SQLAlchemy de pandas
 warnings.filterwarnings('ignore', message='.*pandas only supports SQLAlchemy.*')
@@ -137,8 +144,13 @@ class SafeQueryExecutor:
 
     # ── Ejecución ────────────────────────────────────────────────────────────
 
-    def _get_connection(self) -> pyodbc.Connection:
+    def _get_connection(self):
         """Obtiene una conexión a la base de datos."""
+        if pyodbc is None:
+            raise RuntimeError(
+                "pyodbc no pudo cargarse porque falta el driver/libreria ODBC del sistema "
+                f"({PYODBC_IMPORT_ERROR})."
+            )
         conn_str = get_connection_string()
         conn = pyodbc.connect(conn_str, timeout=30)
         conn.timeout = 60
@@ -192,7 +204,7 @@ class SafeQueryExecutor:
 
         except QuerySecurityError:
             raise
-        except pyodbc.Error as e:
+        except Exception as e:
             logger.error(f"Error de base de datos: {e}")
             raise RuntimeError(f"Error de base de datos: {str(e)}")
         finally:
