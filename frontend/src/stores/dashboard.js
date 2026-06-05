@@ -6,7 +6,8 @@ import { exportWorkbookAsExcel } from '../utils/export'
 const sessionId = localStorage.getItem('farm_session_id') || crypto.randomUUID()
 localStorage.setItem('farm_session_id', sessionId)
 
-axios.defaults.baseURL = import.meta.env.VITE_API_URL || ''
+const productionApiUrl = 'https://farmanalitics-production.up.railway.app'
+axios.defaults.baseURL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? productionApiUrl : '')
 axios.interceptors.request.use(config => {
   config.headers['x-session-id'] = sessionId
   return config
@@ -16,9 +17,11 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const status = reactive({ ventas: false, compras: false, inventario: false, notas_credito: false, metas: false })
   const uploading = ref(false)
   const exporting = ref(false)
+  const refreshingLive = ref(false)
   const uploadError = ref(null)
   const uploadDiagnostic = ref(null)
   const lastError = ref(null)
+  const historicalStatus = ref(null)
 
   const settings = reactive({
     inv_min_dias: 25,
@@ -93,6 +96,19 @@ export const useDashboardStore = defineStore('dashboard', () => {
     Object.keys(data).forEach(key => { data[key] = null })
   }
 
+  function formatDateTime(value) {
+    if (!value) return null
+    const date = new Date(String(value).replace(' ', 'T'))
+    if (Number.isNaN(date.getTime())) return value
+    return date.toLocaleString('es-CO', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
   function inventoryParams(extra = {}) {
     return {
       inv_min_dias: settings.inv_min_dias,
@@ -134,8 +150,38 @@ export const useDashboardStore = defineStore('dashboard', () => {
     try {
       const { data: s } = await axios.get('/api/status')
       Object.assign(status, s)
+      historicalStatus.value = s.historical || historicalStatus.value
     } catch (e) {
       lastError.value = errorMessage(e, 'No se pudo consultar el estado de la sesión')
+    }
+  }
+
+  async function fetchHistoricalStatus() {
+    try {
+      const { data: s } = await axios.get('/api/historico/status')
+      historicalStatus.value = s
+      return s
+    } catch (e) {
+      lastError.value = errorMessage(e, 'No se pudo consultar el historico local')
+      return null
+    }
+  }
+
+  async function refreshLiveInformation() {
+    refreshingLive.value = true
+    lastError.value = null
+    try {
+      const { data: result } = await axios.post('/api/historico/actualizar')
+      historicalStatus.value = result.status || historicalStatus.value
+      clearData()
+      await checkStatus()
+      if (status.ventas) await fetchResumen()
+      return result
+    } catch (e) {
+      lastError.value = errorMessage(e, 'No se pudo actualizar la informacion en vivo')
+      throw e
+    } finally {
+      refreshingLive.value = false
     }
   }
 
@@ -349,10 +395,12 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   return {
-    status, uploading, exporting, uploadError, uploadDiagnostic, lastError, files,
+    status, uploading, exporting, refreshingLive, uploadError, uploadDiagnostic, lastError, files,
+    historicalStatus,
     data, loading, errors, settings,
-    fmt, fmtN,
+    fmt, fmtN, formatDateTime,
     uploadFiles, checkStatus, resetSession, exportFullReport,
+    fetchHistoricalStatus, refreshLiveInformation,
     fetchResumen, fetchVentas, fetchRentabilidad,
     fetchInventario, fetchCompras, fetchSedes, fetchDevoluciones, fetchMetas,
   }

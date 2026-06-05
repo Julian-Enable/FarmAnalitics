@@ -35,10 +35,25 @@
       <div style="font-size: 0.75rem; color: var(--green); margin-top: 6px; display: flex; align-items: center; gap: 4px;">
         <span class="status-dot on"></span> Lectura segura activa
       </div>
+      <div v-if="lastHistoricalUpdate" style="font-size: 0.72rem; color: var(--fg-muted); margin-top: 6px;">
+        Ultima actualizacion: {{ lastHistoricalUpdate }}
+      </div>
+
+      <button
+        class="btn-upload"
+        style="margin-top: 12px;"
+        :disabled="store.refreshingLive"
+        @click="handleLiveRefresh"
+      >
+        <span style="display:flex; align-items:center; justify-content:center; gap: 6px;">
+          <RefreshCw size="15" :class="{ spinning: store.refreshingLive }" />
+          {{ store.refreshingLive ? 'Actualizando...' : 'Actualizar informacion en vivo' }}
+        </span>
+      </button>
 
       <button
         class="btn-secondary"
-        style="margin-top: 12px;"
+        style="margin-top: 8px;"
         :disabled="store.exporting"
         @click="store.exportFullReport"
       >
@@ -167,7 +182,7 @@
 import { ref, computed, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDashboardStore } from '../stores/dashboard'
-import { LayoutDashboard, TrendingUp, DollarSign, AlertCircle, Scale, Store, FileUp, Database, Activity, Download, Trash2, RotateCcw, Target } from 'lucide-vue-next'
+import { LayoutDashboard, TrendingUp, DollarSign, AlertCircle, Scale, Store, FileUp, Database, Activity, Download, Trash2, RotateCcw, Target, RefreshCw } from 'lucide-vue-next'
 
 const store  = useDashboardStore()
 const router = useRouter()
@@ -185,6 +200,9 @@ const hasLoadedData = computed(() =>
 )
 const diagnosticItems = computed(() =>
   store.uploadDiagnostic ? Object.values(store.uploadDiagnostic) : []
+)
+const lastHistoricalUpdate = computed(() =>
+  store.formatDateTime(store.historicalStatus?.datasets?.ventas?.max)
 )
 
 const navItems = [
@@ -235,4 +253,19 @@ async function handleReset() {
   await store.resetSession()
   router.push('/')
 }
+
+async function handleLiveRefresh() {
+  await store.refreshLiveInformation()
+  router.push('/')
+}
 </script>
+
+<style scoped>
+.spinning {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+</style>

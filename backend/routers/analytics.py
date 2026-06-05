@@ -21,6 +21,7 @@ from backend.services.processing import (
 )
 from backend.services.db_config import is_db_configured
 from backend.services.db_service import get_db_service
+from backend.services.historical_refresh import historical_status, refresh_from_last_update
 
 def get_df(session_id, key, fecha_ini=None, fecha_fin=None, sede=None, limit=None):
     if is_db_configured():
@@ -40,11 +41,21 @@ def get_status(session_id):
     if is_db_configured():
         db = get_db_service()
         if db:
+            historical = historical_status()
+            connected = False
             try:
-                db._ensure_lookups()
-                return {"ventas": True, "compras": True, "inventario": True, "notas_credito": True}
+                connected = bool(db.test_connection().get("connected"))
             except Exception:
-                pass
+                connected = False
+            if historical.get("available"):
+                return {
+                    "ventas": True,
+                    "compras": historical["datasets"].get("compras", {}).get("exists", False),
+                    "inventario": connected,
+                    "notas_credito": historical["datasets"].get("notas_credito", {}).get("exists", False),
+                }
+            if connected:
+                return {"ventas": True, "compras": True, "inventario": True, "notas_credito": True}
     return _store_get_status(session_id)
 from config import (
     SEDES_INVENTARIO, MAX_UPLOAD_SIZE, ALLOWED_EXTENSIONS, EXCLUDED_INVENTORY_COLUMNS,
@@ -294,8 +305,31 @@ async def upload_files(
 @router.get("/status")
 def status(x_session_id: str = Header(default="default-session")):
     s = get_status(x_session_id)
-    s["db_connected"] = is_db_configured()
+    db_connection = {"connected": False, "message": "DB no configurada"}
+    if is_db_configured():
+        db = get_db_service()
+        if db:
+            try:
+                db_connection = db.test_connection()
+            except Exception as exc:
+                db_connection = {"connected": False, "message": str(exc)}
+    s["db_connected"] = bool(db_connection.get("connected"))
+    s["db_message"] = db_connection.get("message")
+    s["historical"] = historical_status()
     return s
+
+
+@router.get("/historico/status")
+def historico_status():
+    return historical_status()
+
+
+@router.post("/historico/actualizar")
+def historico_actualizar():
+    try:
+        return refresh_from_last_update()
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
 
 
 @router.get("/schema")

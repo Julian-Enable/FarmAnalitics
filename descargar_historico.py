@@ -23,7 +23,7 @@ from backend.services.safe_query import get_executor
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-OUTPUT_DIR = ROOT_DIR / "data" / "historico"
+OUTPUT_DIR = Path(os.getenv("HISTORICAL_DATA_DIR", ROOT_DIR / "data" / "historico"))
 BACKUP_DIR = OUTPUT_DIR / "_backups"
 DEFAULT_YEARS_BACK = 2
 TARGET_ROWS_PER_CHUNK = 35_000
