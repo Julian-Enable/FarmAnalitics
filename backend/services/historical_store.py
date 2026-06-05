@@ -23,6 +23,9 @@ class HistoricalStore:
     def available(self) -> bool:
         return self._path("HISTORICO_VENTAS").exists()
 
+    def inventory_available(self) -> bool:
+        return self._path("INVENTARIO_ACTUAL").exists()
+
     def _path(self, name: str) -> Path:
         parquet_path = self.data_dir / f"{name}.parquet"
         if parquet_path.exists():
@@ -125,6 +128,37 @@ class HistoricalStore:
                 df["NotaCredito"] = df["NotaCreditoID"]
             return df
 
+        if name == "INVENTARIO_ACTUAL":
+            for col in [
+                "Total", "Precio Compra", "Precio Venta", "Stock Minimo",
+                "Stock Maximo", "Comision", "Utilidad",
+            ]:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+            sedes = self._lookup_map("LOOKUP_PUNTO_VENTA")
+            labs = self._lookup_map("LOOKUP_LABORATORIOS")
+            niveles = self._lookup_map("LOOKUP_NIVELES")
+
+            rename_dict = {col: sedes[col] for col in df.columns if col in sedes}
+            if rename_dict:
+                df = df.rename(columns=rename_dict)
+
+            if "ID_Laboratorio" in df.columns:
+                df["Laboratorio"] = df["ID_Laboratorio"].astype(str).str.strip().map(labs).fillna("Sin Laboratorio")
+            if "ID_Nivel" in df.columns:
+                df["Nivel"] = df["ID_Nivel"].astype(str).str.strip().map(niveles).fillna("Sin Nivel")
+
+            for col in df.columns:
+                if col not in {
+                    "Referencia", "Descripcion", "Laboratorio", "Nivel",
+                    "ID_Laboratorio", "ID_Nivel", "Codigo",
+                }:
+                    numeric = pd.to_numeric(df[col], errors="coerce")
+                    if numeric.notna().any():
+                        df[col] = numeric.fillna(0)
+            return df
+
         return df
 
     @staticmethod
@@ -158,6 +192,9 @@ class HistoricalStore:
 
     def get_notas_credito(self, fecha_ini=None, fecha_fin=None) -> pd.DataFrame:
         return self._filter_dates(self._read("HISTORICO_NOTAS_CREDITO"), "Fecha", fecha_ini, fecha_fin).copy()
+
+    def get_inventario(self) -> pd.DataFrame:
+        return self._read("INVENTARIO_ACTUAL").copy()
 
     def max_date(self, name: str, column: str) -> pd.Timestamp | None:
         df = self._read(name)

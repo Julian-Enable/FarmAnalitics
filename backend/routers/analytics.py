@@ -51,7 +51,7 @@ def get_status(session_id):
                 return {
                     "ventas": True,
                     "compras": historical["datasets"].get("compras", {}).get("exists", False),
-                    "inventario": connected,
+                    "inventario": historical["datasets"].get("inventario", {}).get("exists", False) or connected,
                     "notas_credito": historical["datasets"].get("notas_credito", {}).get("exists", False),
                 }
             if connected:

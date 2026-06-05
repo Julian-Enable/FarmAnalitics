@@ -186,6 +186,46 @@ LOOKUP_QUERIES = {
 }
 
 
+INVENTORY_SQL = """
+    SELECT
+        i.Referencia,
+        r.Descripcion1 AS Descripcion,
+        r.ID_Laboratorio,
+        i.Cantidad AS Total,
+        r.PrecioCompra AS [Precio Compra],
+        r.PrecioVenta AS [Precio Venta],
+        r.StockMinimo AS [Stock Minimo],
+        r.StockMaximo AS [Stock Maximo],
+        r.ID_Nivel,
+        r.Comision,
+        r.Utilidad,
+        r.Codigo,
+        i.PdeV0,
+        i.PdeV1,
+        i.PdeV2,
+        i.PdeV3,
+        i.PdeV4,
+        i.PdeV5,
+        i.PdeV6,
+        i.PdeV7,
+        i.PdeV8,
+        i.PdeV9,
+        i.PdeV10,
+        i.PdeV11,
+        i.PdeV12,
+        i.PdeV13,
+        i.PdeV14,
+        i.PdeV15,
+        i.PdeV16,
+        i.PdeV17,
+        i.PdeV18,
+        i.PdeV19
+    FROM INVENTARIO i
+    INNER JOIN REFERENCIAS r ON i.Referencia = r.Referencia
+    WHERE r.Enabled = 1
+"""
+
+
 def check_parquet_support() -> bool:
     try:
         import pyarrow  # noqa: F401
@@ -380,6 +420,27 @@ def download_lookups(executor) -> None:
         save_df(df, name)
 
 
+def download_inventory(executor) -> pd.DataFrame:
+    df = executor.execute_read(INVENTORY_SQL, max_rows=300_000)
+    if df.empty:
+        return df
+
+    lookup_path = output_path("LOOKUP_PUNTO_VENTA")
+    lookup = read_local(lookup_path)
+    rename_dict = {}
+    if not lookup.empty and {"ID", "Nombre"}.issubset(lookup.columns):
+        rename_dict = dict(zip(lookup["ID"].astype(str), lookup["Nombre"].astype(str)))
+
+    df = df.rename(columns={col: rename_dict[col] for col in df.columns if col in rename_dict})
+    for col in df.columns:
+        if col not in {"Referencia", "Descripcion", "ID_Laboratorio", "ID_Nivel", "Codigo"}:
+            numeric = pd.to_numeric(df[col], errors="coerce")
+            if numeric.notna().any():
+                df[col] = numeric.fillna(0)
+    save_df(df, "INVENTARIO_ACTUAL")
+    return df
+
+
 def local_summary() -> None:
     for config in DATASETS.values():
         path = output_path(config.name)
@@ -396,6 +457,13 @@ def local_summary() -> None:
             dates.max(),
             f"{dates.isna().sum():,}",
         )
+
+    inv_path = output_path("INVENTARIO_ACTUAL")
+    inv = read_local(inv_path)
+    if inv.empty:
+        logger.warning("INVENTARIO_ACTUAL: no existe o esta vacio")
+    else:
+        logger.info("INVENTARIO_ACTUAL local: %s filas", f"{len(inv):,}")
 
 
 def validate_against_sql(executor, start: pd.Timestamp, end: pd.Timestamp) -> None:
@@ -445,6 +513,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--validate-only", action="store_true", help="Solo valida local vs SQL, no descarga.")
     parser.add_argument("--local-summary", action="store_true", help="Muestra resumen local y termina.")
     parser.add_argument("--skip-lookups", action="store_true", help="No refresca lookups maestros.")
+    parser.add_argument("--include-inventory", action="store_true", help="Descarga inventario actual.")
     return parser.parse_args()
 
 
@@ -478,6 +547,9 @@ def main() -> None:
 
     if not args.skip_lookups:
         download_lookups(executor)
+
+    if args.include_inventory:
+        download_inventory(executor)
 
     selected = DATASETS.values() if args.dataset == "all" else [DATASETS[args.dataset]]
     for config in selected:

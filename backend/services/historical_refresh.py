@@ -58,6 +58,10 @@ def _dataset_status(config) -> dict:
 
 def historical_status() -> dict:
     datasets = {key: _dataset_status(config) for key, config in DATASETS.items()}
+    datasets["inventario"] = _dataset_status(type("InventoryConfig", (), {
+        "name": "INVENTARIO_ACTUAL",
+        "date_column": "FechaActualizacion",
+    })())
     return {
         "available": bool(datasets.get("ventas", {}).get("exists")),
         "data_dir": str(output_path("HISTORICO_VENTAS").parent),

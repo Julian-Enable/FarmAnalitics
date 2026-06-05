@@ -270,6 +270,9 @@ class DatabaseService:
         return self._get_cached(cache_key, _fetch)
 
     def get_inventario(self) -> pd.DataFrame:
+        if self._historical_store.inventory_available():
+            return self._historical_store.get_inventario()
+
         cache_key = "inventario"
 
         def _fetch():
