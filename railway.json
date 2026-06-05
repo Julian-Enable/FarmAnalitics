@@ -5,6 +5,7 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
+    "startCommand": "python -m backend.serve",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
