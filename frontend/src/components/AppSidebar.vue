@@ -24,16 +24,22 @@
     </nav>
 
     <!-- Estado de Base de Datos -->
-    <div v-if="store.status.db_connected" class="sidebar-upload" style="background-color: var(--card-alt); border: 1px solid rgba(16, 185, 129, 0.2);">
+    <div v-if="store.status.db_connected || store.historicalStatus?.available" class="sidebar-upload" style="background-color: var(--card-alt); border: 1px solid rgba(16, 185, 129, 0.2);">
       <div class="upload-title" style="color: var(--green); display:flex; align-items:center; gap: 6px;">
         <Database size="18" />
-        ConexiÃ³n en tiempo real
+        {{ store.status.db_connected ? 'Conexion en tiempo real' : 'Datos historicos cargados' }}
       </div>
       <div style="font-size: 0.8rem; color: var(--text); margin-top: 8px;">
-        Conectado a Azure SQL Server. <br/>(Usuario: SPD_FARMAZION)
+        <template v-if="store.status.db_connected">
+          Conectado a Azure SQL Server. <br/>(Usuario: SPD_FARMAZION)
+        </template>
+        <template v-else>
+          Usando historico local en Railway. SQL en vivo bloqueado por firewall de Azure.
+        </template>
       </div>
       <div style="font-size: 0.75rem; color: var(--green); margin-top: 6px; display: flex; align-items: center; gap: 4px;">
-        <span class="status-dot on"></span> Lectura segura activa
+        <span class="status-dot on"></span>
+        {{ store.status.db_connected ? 'Lectura segura activa' : 'Historico disponible' }}
       </div>
       <div v-if="lastHistoricalUpdate" style="font-size: 0.72rem; color: var(--fg-muted); margin-top: 6px;">
         Ultima actualizacion: {{ lastHistoricalUpdate }}
@@ -42,12 +48,12 @@
       <button
         class="btn-upload"
         style="margin-top: 12px;"
-        :disabled="store.refreshingLive"
+        :disabled="store.refreshingLive || !store.status.db_connected"
         @click="handleLiveRefresh"
       >
         <span style="display:flex; align-items:center; justify-content:center; gap: 6px;">
           <RefreshCw size="15" :class="{ spinning: store.refreshingLive }" />
-          {{ store.refreshingLive ? 'Actualizando...' : 'Actualizar informacion en vivo' }}
+          {{ liveRefreshLabel }}
         </span>
       </button>
 
@@ -204,6 +210,11 @@ const diagnosticItems = computed(() =>
 const lastHistoricalUpdate = computed(() =>
   store.formatDateTime(store.historicalStatus?.datasets?.ventas?.max)
 )
+const liveRefreshLabel = computed(() => {
+  if (store.refreshingLive) return 'Actualizando...'
+  if (!store.status.db_connected) return 'SQL en vivo bloqueado'
+  return 'Actualizar informacion en vivo'
+})
 
 const navItems = [
   { to: '/',             icon: shallowRef(LayoutDashboard), label: 'Resumen General'    },
