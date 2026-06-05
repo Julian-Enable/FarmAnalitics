@@ -53,16 +53,27 @@ def sync_local(recent_days: int, validate: bool) -> None:
     end = pd.Timestamp(datetime.now()) + pd.Timedelta(seconds=1)
     logger.info("Sincronizando SmartPOS desde %s hasta %s", start, end)
 
+    logger.info("Paso 1/4: descargando tablas de apoyo")
     download_lookups(executor)
+    logger.info("Paso 2/4: descargando inventario actual")
     download_inventory(executor)
 
+    total_datasets = len(DATASETS)
+    logger.info("Paso 3/4: actualizando historicos recientes (%s datasets)", total_datasets)
+    current_dataset = 0
     for config in DATASETS.values():
+        current_dataset += 1
+        logger.info("[%s/%s] Consultando %s", current_dataset, total_datasets, config.name)
         df = download_dataset(executor, config, start, end)
+        logger.info("[%s/%s] Mezclando %s con historico local", current_dataset, total_datasets, config.name)
         df = merge_local(config, df)
         save_df(df, config.name)
 
     if validate:
+        logger.info("Paso 4/4: validando conteos contra SQL")
         validate_against_sql(executor, start, end)
+    else:
+        logger.info("Paso 4/4: validacion omitida para acelerar la sincronizacion diaria")
 
 
 def upload_to_railway() -> None:
@@ -71,9 +82,11 @@ def upload_to_railway() -> None:
         raise RuntimeError("Railway CLI no esta instalado o no esta en PATH")
     if not DATA_DIR.exists():
         raise RuntimeError(f"No existe {DATA_DIR}")
-    for path in sorted(DATA_DIR.iterdir()):
-        if not path.is_file():
-            continue
+    files = [path for path in sorted(DATA_DIR.iterdir()) if path.is_file()]
+    logger.info("Subiendo %s archivos a Railway volume %s", len(files), RAILWAY_VOLUME)
+    for index, path in enumerate(files, start=1):
+        size_mb = path.stat().st_size / (1024 * 1024)
+        logger.info("[%s/%s] Subiendo %s (%.1f MB)", index, len(files), path.name, size_mb)
         _run([
             railway,
             "volume",
@@ -86,6 +99,8 @@ def upload_to_railway() -> None:
             "--overwrite",
             "--json",
         ])
+        logger.info("[%s/%s] Subida terminada: %s", index, len(files), path.name)
+    logger.info("Reiniciando servicio en Railway")
     _run([railway, "restart", "--yes"])
 
 

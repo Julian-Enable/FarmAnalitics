@@ -7,6 +7,8 @@ from typing import Callable
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 
+from backend.services.processing import _categorizar_motivo
+
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +113,10 @@ class HistoricalStore:
         if name == "HISTORICO_NOTAS_CREDITO":
             if "Fecha" in df.columns:
                 df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce")
-            for col in ["Cantidad", "PrecioVenta", "TotalProducto", "TotalNota"]:
+            for col in [
+                "Cantidad", "PrecioVenta", "IVAProducto", "TotalProducto",
+                "SubTotalNota", "IVANota", "TotalNota", "Saldo",
+            ]:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
@@ -126,6 +131,16 @@ class HistoricalStore:
                 df["Total Neto"] = df["TotalNota"]
             if "NotaCreditoID" in df.columns:
                 df["NotaCredito"] = df["NotaCreditoID"]
+            if "Observaciones" in df.columns:
+                df["Motivo"] = df["Observaciones"].apply(_categorizar_motivo)
+            else:
+                df["Motivo"] = "Sin observacion"
+            if "NotaCreditoID" in df.columns and "ID_PuntoVenta" in df.columns:
+                df["NotaCreditoKey"] = (
+                    df["ID_PuntoVenta"].astype(str).str.strip()
+                    + "-"
+                    + df["NotaCreditoID"].astype(str).str.strip()
+                )
             return df
 
         if name == "INVENTARIO_ACTUAL":

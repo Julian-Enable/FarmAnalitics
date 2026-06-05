@@ -138,6 +138,80 @@ def _inventory_price_lookup(df_i: pd.DataFrame, extra_cols: list[str] | None = N
     return inv.groupby("Referencia", as_index=False).agg(agg)
 
 
+def _notas_credito_key_cols(df: pd.DataFrame) -> list[str]:
+    if "NotaCreditoKey" in df.columns:
+        return ["NotaCreditoKey"]
+    if {"NotaCreditoID", "ID_PuntoVenta"}.issubset(df.columns):
+        return ["NotaCreditoID", "ID_PuntoVenta"]
+    if {"NotaCredito", "Punto Venta"}.issubset(df.columns):
+        return ["NotaCredito", "Punto Venta"]
+    if "NotaCredito" in df.columns:
+        return ["NotaCredito"]
+    return []
+
+
+def _notas_credito_note_frame(df_nc: pd.DataFrame) -> pd.DataFrame:
+    """Devuelve una fila por nota credito para no duplicar totales por producto."""
+    if df_nc is None or df_nc.empty:
+        return pd.DataFrame()
+
+    df = df_nc.copy()
+    if "Total Neto" not in df.columns and "TotalNota" in df.columns:
+        df["Total Neto"] = df["TotalNota"]
+    if "Total Neto" not in df.columns and "Total" in df.columns:
+        df["Total Neto"] = df["Total"]
+    if "NotaCredito" not in df.columns and "NotaCreditoID" in df.columns:
+        df["NotaCredito"] = df["NotaCreditoID"]
+    if "Motivo" not in df.columns:
+        if "Observaciones" in df.columns:
+            from backend.services.processing import _categorizar_motivo
+            df["Motivo"] = df["Observaciones"].apply(_categorizar_motivo)
+        else:
+            df["Motivo"] = "Sin observacion"
+
+    for col in ["Total Neto", "Saldo"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    if "Fecha" in df.columns:
+        df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce")
+
+    key_cols = _notas_credito_key_cols(df)
+    if not key_cols:
+        return df
+    return df.sort_values("Fecha").drop_duplicates(subset=key_cols, keep="last")
+
+
+def _notas_credito_product_frame(df_nc: pd.DataFrame) -> pd.DataFrame:
+    """Asigna el total de cada nota entre sus lineas para ranking de productos."""
+    if df_nc is None or df_nc.empty or "Referencia" not in df_nc.columns:
+        return pd.DataFrame()
+
+    df = df_nc.copy()
+    key_cols = _notas_credito_key_cols(df)
+    if not key_cols:
+        return pd.DataFrame()
+
+    if "Total Neto" not in df.columns and "TotalNota" in df.columns:
+        df["Total Neto"] = df["TotalNota"]
+    if "TotalProducto" not in df.columns:
+        return pd.DataFrame()
+
+    df["TotalProducto"] = pd.to_numeric(df["TotalProducto"], errors="coerce").fillna(0)
+    df["Total Neto"] = pd.to_numeric(df["Total Neto"], errors="coerce").fillna(0)
+    if "Cantidad" in df.columns:
+        df["Cantidad"] = pd.to_numeric(df["Cantidad"], errors="coerce").fillna(0)
+
+    note_totals = _notas_credito_note_frame(df)[key_cols + ["Total Neto"]].rename(columns={"Total Neto": "total_nota"})
+    line_sums = df.groupby(key_cols, as_index=False)["TotalProducto"].sum().rename(columns={"TotalProducto": "total_productos"})
+    lines = df.merge(note_totals, on=key_cols, how="left").merge(line_sums, on=key_cols, how="left")
+    lines["devuelto_asignado"] = np.where(
+        lines["total_productos"] > 0,
+        lines["total_nota"] * lines["TotalProducto"] / lines["total_productos"],
+        lines["TotalProducto"],
+    )
+    return lines
+
+
 def _sales_profit_frame(df_v: pd.DataFrame, df_i: pd.DataFrame) -> pd.DataFrame:
     """Rentabilidad por referencia usando ingreso real de ventas y costo de inventario."""
     v = df_v.groupby("Referencia", as_index=False).agg(
@@ -460,8 +534,9 @@ def resumen(
     df_nc = db.get_notas_credito(fecha_ini_eff, fecha_fin_eff)
     devoluciones_resumen = None
     if df_nc is not None and not df_nc.empty:
-        total_devuelto = float(df_nc["Total Neto"].sum())
-        n_notas = len(df_nc)
+        notas_unicas = _notas_credito_note_frame(df_nc)
+        total_devuelto = float(notas_unicas["Total Neto"].sum())
+        n_notas = len(notas_unicas)
         tasa_devolucion = round(total_devuelto / ing_total * 100, 2) if ing_total > 0 else 0
         ingresos_netos = round(ing_total - total_devuelto, 0)
         devoluciones_resumen = {
@@ -769,11 +844,13 @@ def endpoint_notas_credito(
 
     df_nc = _apply_date_filter(df_nc, "Fecha", fecha_ini, fecha_fin)
     df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin) if df_v is not None else None
+    notas_unicas = _notas_credito_note_frame(df_nc)
+    lineas_producto = _notas_credito_product_frame(df_nc)
 
-    total_devuelto = float(df_nc["Total Neto"].sum())
-    n_notas        = int(len(df_nc))
+    total_devuelto = float(notas_unicas["Total Neto"].sum())
+    n_notas        = int(len(notas_unicas))
     promedio_nota  = round(total_devuelto / n_notas, 0) if n_notas > 0 else 0
-    total_saldo    = float(df_nc["Saldo"].sum()) if "Saldo" in df_nc.columns else 0
+    total_saldo    = float(notas_unicas["Saldo"].sum()) if "Saldo" in notas_unicas.columns else 0
 
     ing_bruto      = float(df_v["Ingreso"].sum()) if df_v is not None else 0
     tasa_pct       = round(total_devuelto / ing_bruto * 100, 2) if ing_bruto > 0 else 0
@@ -781,16 +858,16 @@ def endpoint_notas_credito(
 
     # Tendencia semanal
     tendencia = []
-    if "Fecha" in df_nc.columns and df_nc["Fecha"].notna().any():
-        s = df_nc.set_index("Fecha").resample("W")["Total Neto"].sum().reset_index()
+    if "Fecha" in notas_unicas.columns and notas_unicas["Fecha"].notna().any():
+        s = notas_unicas.set_index("Fecha").resample("W")["Total Neto"].sum().reset_index()
         tendencia = [{"fecha": str(r["Fecha"].date()), "total": round(r["Total Neto"], 0)}
                      for _, r in s.iterrows()]
 
     # Por sede
-    col_sede = "Punto Venta" if "Punto Venta" in df_nc.columns else None
+    col_sede = "Punto Venta" if "Punto Venta" in notas_unicas.columns else None
     por_sede = []
     if col_sede:
-        sede_df = (df_nc.groupby(col_sede, as_index=False)
+        sede_df = (notas_unicas.groupby(col_sede, as_index=False)
                    .agg(total_devuelto=("Total Neto", "sum"), n_notas=("Total Neto", "count"))
                    .sort_values("total_devuelto", ascending=False)
                    .rename(columns={col_sede: "sede"}))
@@ -798,8 +875,8 @@ def endpoint_notas_credito(
 
     # Por vendedor
     por_vendedor = []
-    if "Creada" in df_nc.columns:
-        vend_df = (df_nc.groupby("Creada", as_index=False)
+    if "Creada" in notas_unicas.columns:
+        vend_df = (notas_unicas.groupby("Creada", as_index=False)
                    .agg(total_devuelto=("Total Neto", "sum"), n_notas=("Total Neto", "count"))
                    .sort_values("total_devuelto", ascending=False)
                    .rename(columns={"Creada": "vendedor"}))
@@ -807,48 +884,33 @@ def endpoint_notas_credito(
 
     # Por motivo
     por_motivo = []
-    if "Motivo" in df_nc.columns:
-        mot_df = (df_nc.groupby("Motivo", as_index=False)
+    if "Motivo" in notas_unicas.columns:
+        mot_df = (notas_unicas.groupby("Motivo", as_index=False)
                   .agg(total=("Total Neto", "sum"), n=("Total Neto", "count"))
                   .sort_values("total", ascending=False))
         por_motivo = json.loads(mot_df.to_json(orient="records"))
 
-    # Cruce con ventas: distribuir la devolucion de la factura entre sus productos
+    # Productos devueltos: usar las lineas reales de la nota credito.
     top_productos_devueltos = []
-    if df_v is not None and "Factura" in df_nc.columns and "Factura" in df_v.columns:
-        nc_facts = (df_nc.groupby("Factura", as_index=False)["Total Neto"]
-                    .sum()
-                    .rename(columns={"Total Neto": "devuelto"}))
-        ventas_factura = (df_v.groupby(["Factura", "Referencia", "Descripcion"], as_index=False)
-                          .agg(cant=("Cant", "sum"), ingreso=("Ingreso", "sum")))
-        ventas_totales_factura = (ventas_factura.groupby("Factura", as_index=False)
-                                  .agg(ingreso_factura=("ingreso", "sum"), lineas=("Referencia", "count")))
-        cruce = ventas_factura.merge(nc_facts, on="Factura", how="inner").merge(
-            ventas_totales_factura, on="Factura", how="left"
-        )
-        if len(cruce) > 0:
-            cruce["peso_dev"] = cruce.apply(
-                lambda row: (
-                    row["ingreso"] / row["ingreso_factura"]
-                    if row["ingreso_factura"] > 0
-                    else (1 / row["lineas"] if row["lineas"] else 0)
-                ),
-                axis=1,
-            )
-            cruce["devuelto_asignado"] = cruce["devuelto"] * cruce["peso_dev"]
-            prod_dev = (cruce.groupby(["Referencia", "Descripcion"], as_index=False)
-                        .agg(unidades_devueltas=("cant", "sum"),
-                             ingreso_devuelto=("devuelto_asignado", "sum"))
-                        .sort_values("ingreso_devuelto", ascending=False)
-                        .head(15))
-            prod_dev["nombre"] = prod_dev["Descripcion"].str[:35]
-            top_productos_devueltos = json.loads(prod_dev.to_json(orient="records"))
+    if not lineas_producto.empty:
+        cantidad_col = "Cantidad" if "Cantidad" in lineas_producto.columns else None
+        agg_map = {"ingreso_devuelto": ("devuelto_asignado", "sum")}
+        if cantidad_col:
+            agg_map["unidades_devueltas"] = (cantidad_col, "sum")
+        prod_dev = (lineas_producto.groupby(["Referencia", "Descripcion"], as_index=False)
+                    .agg(**agg_map)
+                    .sort_values("ingreso_devuelto", ascending=False)
+                    .head(15))
+        if "unidades_devueltas" not in prod_dev.columns:
+            prod_dev["unidades_devueltas"] = 0
+        prod_dev["nombre"] = prod_dev["Descripcion"].astype(str).str[:35]
+        top_productos_devueltos = json.loads(prod_dev.to_json(orient="records"))
 
     # Tabla detalle
     cols_tabla = [c for c in ["Fecha", "NotaCredito", "Punto Venta", "Total Neto",
                                "Creada", "Motivo", "Factura", "Observaciones", "Saldo"]
-                  if c in df_nc.columns]
-    tabla = _df_to_records(df_nc[cols_tabla].sort_values("Fecha", ascending=False), max_rows=300)
+                  if c in notas_unicas.columns]
+    tabla = _df_to_records(notas_unicas[cols_tabla].sort_values("Fecha", ascending=False), max_rows=300)
 
     return {
         "kpis": {

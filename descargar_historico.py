@@ -115,11 +115,13 @@ DATASETS = {
     "notas_credito": DatasetConfig(
         name="HISTORICO_NOTAS_CREDITO",
         date_column="Fecha",
-        dedupe_subset=("NotaCreditoID", "Referencia"),
+        dedupe_subset=("NotaCreditoID", "ID_PuntoVenta", "Referencia", "Cantidad", "PrecioVenta", "TotalProducto"),
         count_sql="""
             SELECT COUNT_BIG(*) AS filas
             FROM NOTAS_CREDITO nc
-            LEFT JOIN NOTAS_CREDITO_PRODUCTOS ncp ON nc.ID = ncp.ID_NotaCredito
+            LEFT JOIN NOTAS_CREDITO_PRODUCTOS ncp
+              ON nc.ID = ncp.ID_NotaCredito
+             AND nc.ID_PuntoVenta = ncp.ID_PuntoVenta
             WHERE nc.Enabled = 1
               AND nc.Fecha >= ?
               AND nc.Fecha < ?
@@ -130,15 +132,22 @@ DATASETS = {
                 nc.Fecha,
                 nc.ID_PuntoVenta,
                 nc.Creada,
+                nc.SubTotal AS SubTotalNota,
+                nc.IVA AS IVANota,
+                nc.Total AS TotalNota,
+                nc.Saldo,
+                nc.Observaciones,
                 ncp.Referencia,
                 r.Descripcion1 AS Descripcion,
                 r.ID_Laboratorio,
                 ncp.Cantidad,
                 ncp.PrecioVenta,
-                ncp.Total AS TotalProducto,
-                nc.Total AS TotalNota
+                ncp.IVA AS IVAProducto,
+                ncp.Total AS TotalProducto
             FROM NOTAS_CREDITO nc
-            LEFT JOIN NOTAS_CREDITO_PRODUCTOS ncp ON nc.ID = ncp.ID_NotaCredito
+            LEFT JOIN NOTAS_CREDITO_PRODUCTOS ncp
+              ON nc.ID = ncp.ID_NotaCredito
+             AND nc.ID_PuntoVenta = ncp.ID_PuntoVenta
             LEFT JOIN REFERENCIAS r ON ncp.Referencia = r.Referencia
             WHERE nc.Enabled = 1
               AND nc.Fecha >= ?
@@ -466,9 +475,10 @@ def local_summary() -> None:
         logger.info("INVENTARIO_ACTUAL local: %s filas", f"{len(inv):,}")
 
 
-def validate_against_sql(executor, start: pd.Timestamp, end: pd.Timestamp) -> None:
+def validate_against_sql(executor, start: pd.Timestamp, end: pd.Timestamp, dataset_names: list[str] | None = None) -> None:
     logger.info("=== VALIDACION SQL vs LOCAL ===")
-    for config in DATASETS.values():
+    selected = DATASETS.values() if not dataset_names else [DATASETS[name] for name in dataset_names]
+    for config in selected:
         path = output_path(config.name)
         local_df = read_local(path, config.date_column)
         local_count = 0
@@ -511,6 +521,7 @@ def parse_args() -> argparse.Namespace:
         help="Dataset a descargar.",
     )
     parser.add_argument("--validate-only", action="store_true", help="Solo valida local vs SQL, no descarga.")
+    parser.add_argument("--skip-validate", action="store_true", help="No valida conteos contra SQL al terminar.")
     parser.add_argument("--local-summary", action="store_true", help="Muestra resumen local y termina.")
     parser.add_argument("--skip-lookups", action="store_true", help="No refresca lookups maestros.")
     parser.add_argument("--include-inventory", action="store_true", help="Descarga inventario actual.")
@@ -542,7 +553,8 @@ def main() -> None:
     logger.info("Rango objetivo: %s -> %s", start, end)
 
     if args.validate_only:
-        validate_against_sql(executor, start, end)
+        selected_names = list(DATASETS.keys()) if args.dataset == "all" else [args.dataset]
+        validate_against_sql(executor, start, end, selected_names)
         return
 
     if not args.skip_lookups:
@@ -558,7 +570,9 @@ def main() -> None:
             df = merge_local(config, df)
         save_df(df, config.name)
 
-    validate_against_sql(executor, start, end)
+    if not args.skip_validate:
+        selected_names = list(DATASETS.keys()) if args.dataset == "all" else [args.dataset]
+        validate_against_sql(executor, start, end, selected_names)
     local_summary()
 
 
