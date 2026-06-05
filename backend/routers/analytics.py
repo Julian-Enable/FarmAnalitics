@@ -1269,7 +1269,13 @@ def sedes(
     x_session_id: str = Header(default="default-session")
 ):
     df_v = get_df(x_session_id, "ventas")
-    df_i = get_df(x_session_id, "inventario")
+    df_i = None
+    try:
+        df_i = get_df(x_session_id, "inventario")
+    except Exception:
+        # Sedes can be calculated from historical sales alone. Inventory is only
+        # used for the optional stock summary and may be blocked by Azure SQL.
+        df_i = None
     if df_v is None:
         raise HTTPException(404, "No hay datos de ventas")
     df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin)
