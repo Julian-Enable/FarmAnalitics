@@ -57,8 +57,8 @@
         </span>
       </button>
 
-      <div v-if="store.localAgentStatus?.running" style="font-size: 0.72rem; color: var(--fg-muted); margin-top: 8px;">
-        {{ store.localAgentStatus.last_message || 'Sincronizando desde este PC...' }}
+      <div v-if="liveRefreshStatus" style="font-size: 0.72rem; color: var(--fg-muted); margin-top: 8px; line-height: 1.35;">
+        {{ liveRefreshStatus }}
       </div>
 
       <button
@@ -219,6 +219,10 @@ const liveRefreshLabel = computed(() => {
   if (store.refreshingLive) return 'Sincronizando desde este PC...'
   if (!store.status.db_connected) return 'Actualizar desde este PC'
   return 'Actualizar informacion en vivo'
+})
+const liveRefreshStatus = computed(() => {
+  if (!store.refreshingLive) return ''
+  return store.localAgentStatus?.last_message || 'Preparando actualizacion...'
 })
 
 const navItems = [

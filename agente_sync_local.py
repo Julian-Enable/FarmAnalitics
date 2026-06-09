@@ -96,7 +96,48 @@ def _append_log(line: str) -> None:
     clean = line.rstrip()
     if clean:
         LOG_TAIL.append(clean)
-        _set_state(last_message=clean)
+        friendly = _friendly_message(clean)
+        if friendly:
+            _set_state(last_message=friendly)
+
+
+def _friendly_message(line: str) -> str | None:
+    text = line.lower()
+    if "iniciando sincronizacion local" in text:
+        return "Preparando actualizacion desde SmartPOS..."
+    if "sincronizando smartpos incremental" in text:
+        return "Buscando la ultima actualizacion local..."
+    if "sincronizando smartpos desde" in text:
+        return "Consultando ventas, compras y devoluciones recientes..."
+    if "descargando tablas de apoyo" in text:
+        return "Actualizando catalogos de sedes, productos y vendedores..."
+    if "descargando inventario actual" in text:
+        return "Actualizando inventario actual..."
+    if "actualizando historicos recientes" in text:
+        return "Actualizando historicos recientes..."
+    if "desde ultima fecha local" in text:
+        return "Consultando SmartPOS solo desde la ultima actualizacion..."
+    if "sin historico local" in text:
+        return "No hay historico local para una tabla; consultando ventana inicial..."
+    if "consultando historico_ventas" in text:
+        return "Consultando ventas recientes..."
+    if "consultando historico_compras" in text:
+        return "Consultando compras recientes..."
+    if "consultando historico_notas_credito" in text:
+        return "Consultando devoluciones recientes..."
+    if "mezclando" in text:
+        return "Guardando informacion en la base historica local..."
+    if "subiendo" in text and "railway" in text:
+        return "Subiendo informacion actualizada a Railway..."
+    if "subida terminada" in text:
+        return "Archivo subido, continuando con la sincronizacion..."
+    if "reiniciando servicio en railway" in text:
+        return "Reiniciando el backend para publicar los datos..."
+    if "sincronizacion completa" in text:
+        return "Actualizacion completa. Refrescando datos..."
+    if "fallo" in text or "error" in text:
+        return "La actualizacion fallo. Revisa el detalle del agente local."
+    return None
 
 
 def _run_sync(req: SyncRequest) -> None:

@@ -147,6 +147,27 @@ def _apply_date_filter(
     return filtered
 
 
+def _preferred_vendedor_series(df: pd.DataFrame) -> pd.Series | None:
+    """Nombre comercial del vendedor; usa Creada solo como respaldo."""
+    if df is None or df.empty:
+        return None
+    if "NombreVendedor" not in df.columns and "Creada" not in df.columns:
+        return None
+
+    nombre = (
+        df["NombreVendedor"].astype(str).str.strip()
+        if "NombreVendedor" in df.columns
+        else pd.Series("", index=df.index)
+    )
+    creada = (
+        df["Creada"].astype(str).str.strip()
+        if "Creada" in df.columns
+        else pd.Series("", index=df.index)
+    )
+    invalid = {"", "nan", "none", "nombrevendedor", "creada"}
+    return nombre.where(~nombre.str.lower().isin(invalid), creada).str.strip()
+
+
 def _inventory_with_total(df_i: pd.DataFrame) -> pd.DataFrame:
     """Devuelve inventario con Total numerico; si falta, suma columnas numericas de sedes."""
     df = df_i.copy()
@@ -870,6 +891,7 @@ def endpoint_notas_credito(
     fecha_fin: str = None,
     x_session_id: str = Header(default="default-session")
 ):
+    fecha_ini, fecha_fin = _normalize_optional_date_range(fecha_ini, fecha_fin)
     df_nc = get_df(x_session_id, "notas_credito", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
     df_v  = get_df(x_session_id, "ventas", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
     if df_nc is None:
@@ -879,6 +901,35 @@ def endpoint_notas_credito(
     df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin) if df_v is not None else None
     notas_unicas = _notas_credito_note_frame(df_nc)
     lineas_producto = _notas_credito_product_frame(df_nc)
+    dias_periodo = 1
+    if fecha_ini and fecha_fin:
+        dias_periodo = max((datetime.strptime(fecha_fin, "%Y-%m-%d").date() - datetime.strptime(fecha_ini, "%Y-%m-%d").date()).days + 1, 1)
+    elif not notas_unicas.empty and "Fecha" in notas_unicas.columns and notas_unicas["Fecha"].notna().any():
+        dias_periodo = _inclusive_days(notas_unicas["Fecha"].min(), notas_unicas["Fecha"].max())
+
+    if notas_unicas.empty:
+        return {
+            "kpis": {
+                "total_devuelto": 0,
+                "n_notas": 0,
+                "promedio_nota": 0,
+                "tasa_pct": 0,
+                "ingresos_brutos": float(df_v["Ingreso"].sum()) if df_v is not None and "Ingreso" in df_v.columns else 0,
+                "ingresos_netos": float(df_v["Ingreso"].sum()) if df_v is not None and "Ingreso" in df_v.columns else 0,
+                "saldo_pendiente": 0,
+                "dias_periodo": int(dias_periodo),
+            },
+            "tendencia": [],
+            "por_sede": [],
+            "por_vendedor": [],
+            "por_motivo": [],
+            "top_productos_devueltos": [],
+            "tabla": [],
+        }
+
+    vendedor_series = _preferred_vendedor_series(notas_unicas)
+    if vendedor_series is not None:
+        notas_unicas["Vendedor"] = vendedor_series
 
     total_devuelto = float(notas_unicas["Total Neto"].sum())
     n_notas        = int(len(notas_unicas))
@@ -908,11 +959,11 @@ def endpoint_notas_credito(
 
     # Por vendedor
     por_vendedor = []
-    if "Creada" in notas_unicas.columns:
-        vend_df = (notas_unicas.groupby("Creada", as_index=False)
+    if "Vendedor" in notas_unicas.columns:
+        vend_df = (notas_unicas.groupby("Vendedor", as_index=False)
                    .agg(total_devuelto=("Total Neto", "sum"), n_notas=("Total Neto", "count"))
                    .sort_values("total_devuelto", ascending=False)
-                   .rename(columns={"Creada": "vendedor"}))
+                   .rename(columns={"Vendedor": "vendedor"}))
         por_vendedor = json.loads(vend_df.to_json(orient="records"))
 
     # Por motivo
@@ -941,7 +992,7 @@ def endpoint_notas_credito(
 
     # Tabla detalle
     cols_tabla = [c for c in ["Fecha", "NotaCredito", "Punto Venta", "Total Neto",
-                               "Creada", "Motivo", "Factura", "Observaciones", "Saldo"]
+                               "Vendedor", "Creada", "Motivo", "Factura", "Observaciones", "Saldo"]
                   if c in notas_unicas.columns]
     tabla = _df_to_records(notas_unicas[cols_tabla].sort_values("Fecha", ascending=False), max_rows=300)
 
@@ -954,6 +1005,7 @@ def endpoint_notas_credito(
             "ingresos_brutos": round(ing_bruto, 0),
             "ingresos_netos":  ingresos_netos,
             "saldo_pendiente": round(total_saldo, 0),
+            "dias_periodo":    int(dias_periodo),
         },
         "tendencia":               tendencia,
         "por_sede":                por_sede,
@@ -1022,16 +1074,18 @@ def ventas(sede: str = "Todas", nivel: str = "Todos",
         por_cat = json.loads(por_cat.to_json(orient="records"))
 
     vendedores = []
-    if "Creada" in df.columns:
+    vendedor_series = _preferred_vendedor_series(df)
+    if vendedor_series is not None:
+        df["__VendedorVenta"] = vendedor_series
         agg_map = {
             "unidades": ("Cant", "sum"),
             "ingresos": ("Ingreso", "sum"),
         }
         agg_map["facturas"] = ("Factura", "nunique") if "Factura" in df.columns else ("Referencia", "count")
-        vendedores = (df.groupby("Creada", as_index=False)
+        vendedores = (df.groupby("__VendedorVenta", as_index=False)
                       .agg(**agg_map)
                       .sort_values("ingresos", ascending=False)
-                      .rename(columns={"Creada":"vendedor"}))
+                      .rename(columns={"__VendedorVenta":"vendedor"}))
         vendedores = json.loads(vendedores.to_json(orient="records"))
 
     # Tendencia mensual
@@ -1152,22 +1206,9 @@ def proyeccion_metas(
 
     col_sede = "Punto Venta" if "Punto Venta" in df.columns else None
     col_vend = None
-    if "NombreVendedor" in df.columns or "Creada" in df.columns:
-        nombre_vendedor = (
-            df["NombreVendedor"].astype(str).str.strip()
-            if "NombreVendedor" in df.columns
-            else pd.Series("", index=df.index)
-        )
-        creada = (
-            df["Creada"].astype(str).str.strip()
-            if "Creada" in df.columns
-            else pd.Series("", index=df.index)
-        )
-        invalid_names = {"", "nan", "none", "NombreVendedor", "Creada"}
-        df["__VendedorMeta"] = nombre_vendedor.where(
-            ~nombre_vendedor.str.lower().isin({v.lower() for v in invalid_names}),
-            creada,
-        ).str.strip()
+    vendedor_series = _preferred_vendedor_series(df)
+    if vendedor_series is not None:
+        df["__VendedorMeta"] = vendedor_series
         col_vend = "__VendedorMeta"
     if not col_sede:
         raise HTTPException(400, "Falta columna de Sede (Punto Venta)")

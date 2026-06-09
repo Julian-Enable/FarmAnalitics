@@ -35,13 +35,14 @@
     </div>
 
     <div v-if="loading" class="kpi-grid kpi-grid-4">
-      <div v-for="i in 4" :key="i" class="card skeleton" style="height: 100px;"></div>
+      <div v-for="i in 5" :key="i" class="card skeleton" style="height: 100px;"></div>
     </div>
     <div v-else-if="data" class="kpi-grid kpi-grid-4">
       <KpiCard :icon="RotateCcw" label="Total Devuelto" :value="store.fmt(data.kpis.total_devuelto)" />
       <KpiCard :icon="Activity" label="Tasa de Devolución" :value="data.kpis.tasa_pct + '%'" />
       <KpiCard :icon="Receipt" label="Notas Emitidas" :value="store.fmtN(data.kpis.n_notas)" />
       <KpiCard :icon="DollarSign" label="Ingreso Neto Real" :value="store.fmt(data.kpis.ingresos_netos)" />
+      <KpiCard :icon="Calendar" label="Dias del Periodo" :value="(data.kpis.dias_periodo || 1) + ' dias'" />
     </div>
     <div v-else class="empty-state">
       <div class="empty-icon"><RotateCcw size="48" color="var(--border)" /></div>
@@ -110,8 +111,8 @@
                 <th @click="sortBy('Punto Venta')" style="cursor: pointer;">
                   Sede <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Punto Venta' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
-                <th @click="sortBy('Creada')" style="cursor: pointer;">
-                  Vendedor <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Creada' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
+                <th @click="sortBy('Vendedor')" style="cursor: pointer;">
+                  Vendedor <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Vendedor' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
                 <th @click="sortBy('Factura')" style="cursor: pointer;">
                   Factura Orig. <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Factura' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
@@ -129,7 +130,7 @@
                   <span class="badge" :class="getMotivoClass(row.Motivo)">{{ row.Motivo }}</span>
                 </td>
                 <td>{{ row['Punto Venta'] || 'N/A' }}</td>
-                <td>{{ row.Creada?.substring(0, 20) || 'N/A' }}</td>
+                <td>{{ (row.Vendedor || row.Creada || 'N/A').substring(0, 24) }}</td>
                 <td>{{ row.Factura || 'N/A' }}</td>
                 <td style="font-weight: 600; color: var(--red);">{{ store.fmt(row['Total Neto']) }}</td>
               </tr>
@@ -158,7 +159,7 @@ import DonutChart from '../components/charts/DonutChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
 import Paginator from '../components/ui/Paginator.vue'
 import { exportToCSV } from '../utils/export'
-import { RotateCcw, Activity, Receipt, DollarSign, TrendingUp, PieChart as PieChartIcon, Users, Store, AlertTriangle, ClipboardList, Download } from 'lucide-vue-next'
+import { RotateCcw, Activity, Receipt, DollarSign, TrendingUp, PieChart as PieChartIcon, Users, Store, AlertTriangle, ClipboardList, Download, Calendar } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.devoluciones)
@@ -241,7 +242,7 @@ function exportTable() {
     { key: 'NotaCredito', label: 'Nota' },
     { key: 'Motivo', label: 'Motivo' },
     { key: 'Punto Venta', label: 'Sede' },
-    { key: 'Creada', label: 'Vendedor' },
+    { key: 'Vendedor', label: 'Vendedor' },
     { key: 'Factura', label: 'Factura Original' },
     { key: 'Total Neto', label: 'Devuelto (Sin IVA)' },
     { key: 'Observaciones', label: 'Observaciones' }

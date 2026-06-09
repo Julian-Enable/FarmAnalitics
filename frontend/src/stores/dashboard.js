@@ -252,8 +252,18 @@ export const useDashboardStore = defineStore('dashboard', () => {
       throw new Error(finished.last_message || 'La sincronizacion local fallo')
     }
 
+    localAgentStatus.value = {
+      ...finished,
+      running: true,
+      last_message: 'Verificando que Railway ya tenga los datos nuevos...',
+    }
     clearData()
     await waitForRemoteStatus()
+    localAgentStatus.value = {
+      ...localAgentStatus.value,
+      running: false,
+      last_message: 'Actualizacion completa',
+    }
     if (status.ventas) await fetchResumen()
     return finished
   }

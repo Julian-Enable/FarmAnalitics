@@ -132,6 +132,7 @@ DATASETS = {
                 nc.Fecha,
                 nc.ID_PuntoVenta,
                 nc.Creada,
+                u.Nombre AS NombreVendedor,
                 nc.SubTotal AS SubTotalNota,
                 nc.IVA AS IVANota,
                 nc.Total AS TotalNota,
@@ -149,6 +150,7 @@ DATASETS = {
               ON nc.ID = ncp.ID_NotaCredito
              AND nc.ID_PuntoVenta = ncp.ID_PuntoVenta
             LEFT JOIN REFERENCIAS r ON ncp.Referencia = r.Referencia
+            LEFT JOIN USUARIOS u ON nc.Creada = u.Login
             WHERE nc.Enabled = 1
               AND nc.Fecha >= ?
               AND nc.Fecha < ?

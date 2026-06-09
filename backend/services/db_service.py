@@ -139,11 +139,13 @@ class DatabaseService:
                 f.ID_PuntoVenta,
                 f.Factura,
                 f.Creada,
+                u.Nombre AS NombreVendedor,
                 r.ID_Nivel,
                 fp.Cantidad * fp.PrecioVenta AS Ingreso
             FROM FACTURAS f
             INNER JOIN FACTURAS_PRODUCTOS fp ON f.ID = fp.ID_Factura
             LEFT JOIN REFERENCIAS r ON fp.Referencia = r.Referencia
+            LEFT JOIN USUARIOS u ON f.Creada = u.Login
             WHERE {where_str}
             """
 
@@ -360,8 +362,10 @@ class DatabaseService:
                     nc.IVA,
                     nc.Saldo,
                     nc.Observaciones,
-                    nc.Creada
+                    nc.Creada,
+                    u.Nombre AS NombreVendedor
                 FROM NOTAS_CREDITO nc
+                LEFT JOIN USUARIOS u ON nc.Creada = u.Login
                 WHERE {where_str}
                 """
 
@@ -405,8 +409,10 @@ class DatabaseService:
                 nc.IVA,
                 nc.Saldo,
                 nc.Observaciones,
-                nc.Creada
+                nc.Creada,
+                u.Nombre AS NombreVendedor
             FROM NOTAS_CREDITO nc
+            LEFT JOIN USUARIOS u ON nc.Creada = u.Login
             WHERE {where_str}
             """
 
@@ -844,6 +850,7 @@ class DatabaseService:
         LEFT JOIN PUNTO_VENTA pv ON f.ID_PuntoVenta = pv.ID
         LEFT JOIN NIVELES niv ON r.ID_Nivel = niv.ID
         LEFT JOIN LABORATORIOS lab ON r.ID_Laboratorio = lab.ID
+        LEFT JOIN USUARIOS u ON f.Creada = u.Login
         """
 
         # 1. KPIs
@@ -911,13 +918,13 @@ class DatabaseService:
         # 5. Vendedores
         sql_vend = f"""
         SELECT
-            f.Creada AS vendedor,
+            COALESCE(NULLIF(LTRIM(RTRIM(u.Nombre)), ''), f.Creada) AS vendedor,
             SUM(fp.Cantidad) AS unidades,
             SUM(fp.Cantidad * fp.PrecioVenta) AS ingresos,
             COUNT(DISTINCT f.ID) AS facturas
         {base_from}
         WHERE {where_str}
-        GROUP BY f.Creada
+        GROUP BY COALESCE(NULLIF(LTRIM(RTRIM(u.Nombre)), ''), f.Creada)
         ORDER BY ingresos DESC
         """
         df_vend = self._executor.execute_read(sql_vend, params)
