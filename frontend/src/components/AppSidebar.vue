@@ -34,7 +34,7 @@
           Conectado a Azure SQL Server. <br/>(Usuario: SPD_FARMAZION)
         </template>
         <template v-else>
-          Usando historico local en Railway. SQL en vivo bloqueado por firewall de Azure.
+          Usando historico local en Railway. Para actualizar desde SmartPOS, deja abierto el agente local en este PC.
         </template>
       </div>
       <div style="font-size: 0.75rem; color: var(--green); margin-top: 6px; display: flex; align-items: center; gap: 4px;">
@@ -48,7 +48,7 @@
       <button
         class="btn-upload"
         style="margin-top: 12px;"
-        :disabled="store.refreshingLive || !store.status.db_connected"
+        :disabled="store.refreshingLive"
         @click="handleLiveRefresh"
       >
         <span style="display:flex; align-items:center; justify-content:center; gap: 6px;">
@@ -56,6 +56,10 @@
           {{ liveRefreshLabel }}
         </span>
       </button>
+
+      <div v-if="store.localAgentStatus?.running" style="font-size: 0.72rem; color: var(--fg-muted); margin-top: 8px;">
+        {{ store.localAgentStatus.last_message || 'Sincronizando desde este PC...' }}
+      </div>
 
       <button
         class="btn-secondary"
@@ -211,8 +215,9 @@ const lastHistoricalUpdate = computed(() =>
   store.formatDateTime(store.historicalStatus?.datasets?.ventas?.max)
 )
 const liveRefreshLabel = computed(() => {
-  if (store.refreshingLive) return 'Actualizando...'
-  if (!store.status.db_connected) return 'SQL en vivo bloqueado'
+  if (store.refreshingLive && store.status.db_connected) return 'Actualizando SQL...'
+  if (store.refreshingLive) return 'Sincronizando desde este PC...'
+  if (!store.status.db_connected) return 'Actualizar desde este PC'
   return 'Actualizar informacion en vivo'
 })
 
@@ -266,8 +271,12 @@ async function handleReset() {
 }
 
 async function handleLiveRefresh() {
-  await store.refreshLiveInformation()
-  router.push('/')
+  try {
+    await store.refreshLiveInformation()
+    router.push('/')
+  } catch {
+    // El store ya muestra el error en la interfaz.
+  }
 }
 </script>
 

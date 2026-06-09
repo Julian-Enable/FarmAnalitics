@@ -13,11 +13,25 @@ axios.interceptors.request.use(config => {
   return config
 })
 
+const localAgentUrl = import.meta.env.VITE_LOCAL_SYNC_AGENT_URL || 'http://127.0.0.1:8765'
+const localAgentToken = localStorage.getItem('farm_local_agent_token') || import.meta.env.VITE_LOCAL_SYNC_AGENT_TOKEN || ''
+const localAgentClient = axios.create({ baseURL: localAgentUrl, timeout: 5000 })
+localAgentClient.interceptors.request.use(config => {
+  if (localAgentToken) config.headers['x-farma-agent-token'] = localAgentToken
+  return config
+})
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 export const useDashboardStore = defineStore('dashboard', () => {
   const status = reactive({ ventas: false, compras: false, inventario: false, notas_credito: false, metas: false })
   const uploading = ref(false)
   const exporting = ref(false)
   const refreshingLive = ref(false)
+  const localAgentAvailable = ref(false)
+  const localAgentStatus = ref(null)
   const uploadError = ref(null)
   const uploadDiagnostic = ref(null)
   const lastError = ref(null)
@@ -167,16 +181,90 @@ export const useDashboardStore = defineStore('dashboard', () => {
     }
   }
 
+  async function checkLocalAgent() {
+    try {
+      const { data: s } = await localAgentClient.get('/health')
+      localAgentStatus.value = s
+      localAgentAvailable.value = true
+      return s
+    } catch (e) {
+      localAgentAvailable.value = false
+      localAgentStatus.value = null
+      return null
+    }
+  }
+
+  async function waitForRemoteStatus(retries = 18) {
+    let lastFailure = null
+    for (let i = 0; i < retries; i += 1) {
+      try {
+        const { data: s } = await axios.get('/api/status')
+        Object.assign(status, s)
+        historicalStatus.value = s.historical || historicalStatus.value
+        return s
+      } catch (e) {
+        lastFailure = e
+        await sleep(5000)
+      }
+    }
+    throw lastFailure || new Error('Railway no respondio despues de la sincronizacion')
+  }
+
+  async function pollLocalAgentSync() {
+    for (let i = 0; i < 420; i += 1) {
+      const { data: s } = await localAgentClient.get('/sync/status')
+      localAgentStatus.value = s
+      localAgentAvailable.value = true
+      if (!s.running) return s
+      await sleep(3000)
+    }
+    throw new Error('La sincronizacion local sigue en curso. Revisa la ventana del agente local.')
+  }
+
+  async function refreshFromRailwaySql() {
+    const { data: result } = await axios.post('/api/historico/actualizar')
+    historicalStatus.value = result.status || historicalStatus.value
+    clearData()
+    await checkStatus()
+    if (status.ventas) await fetchResumen()
+    return result
+  }
+
+  async function refreshFromLocalAgent() {
+    const agent = await checkLocalAgent()
+    if (!agent) {
+      throw new Error('No se encontro el agente local. Abre iniciar_agente_sync.bat en este PC y vuelve a intentar.')
+    }
+
+    try {
+      const { data: started } = await localAgentClient.post('/sync', {
+        recent_days: 35,
+        skip_validate: true,
+        skip_upload: false,
+      })
+      localAgentStatus.value = started
+    } catch (e) {
+      if (e.response?.status !== 409) throw e
+    }
+
+    const finished = await pollLocalAgentSync()
+    if (!finished.last_success) {
+      throw new Error(finished.last_message || 'La sincronizacion local fallo')
+    }
+
+    clearData()
+    await waitForRemoteStatus()
+    if (status.ventas) await fetchResumen()
+    return finished
+  }
+
   async function refreshLiveInformation() {
     refreshingLive.value = true
     lastError.value = null
     try {
-      const { data: result } = await axios.post('/api/historico/actualizar')
-      historicalStatus.value = result.status || historicalStatus.value
-      clearData()
-      await checkStatus()
-      if (status.ventas) await fetchResumen()
-      return result
+      return status.db_connected
+        ? await refreshFromRailwaySql()
+        : await refreshFromLocalAgent()
     } catch (e) {
       lastError.value = errorMessage(e, 'No se pudo actualizar la informacion en vivo')
       throw e
@@ -395,12 +483,13 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   return {
-    status, uploading, exporting, refreshingLive, uploadError, uploadDiagnostic, lastError, files,
+    status, uploading, exporting, refreshingLive, localAgentAvailable, localAgentStatus,
+    uploadError, uploadDiagnostic, lastError, files,
     historicalStatus,
     data, loading, errors, settings,
     fmt, fmtN, formatDateTime,
     uploadFiles, checkStatus, resetSession, exportFullReport,
-    fetchHistoricalStatus, refreshLiveInformation,
+    fetchHistoricalStatus, refreshLiveInformation, checkLocalAgent,
     fetchResumen, fetchVentas, fetchRentabilidad,
     fetchInventario, fetchCompras, fetchSedes, fetchDevoluciones, fetchMetas,
   }

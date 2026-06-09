@@ -65,6 +65,21 @@ Ejecutar sincronizacion manual:
 .\sincronizar_ahora.bat
 ```
 
+Habilitar actualizacion desde la web usando este PC:
+
+```powershell
+.\iniciar_agente_sync.bat
+```
+
+Con esa ventana abierta, el boton `Actualizar desde este PC` en Vercel llama a
+`http://127.0.0.1:8765`, ejecuta `sincronizar_smartpos_railway.py`, sube el
+historico actualizado al volumen de Railway y espera a que el backend vuelva a
+responder. Para cerrarlo:
+
+```powershell
+.\cerrar_agente_sync.bat
+```
+
 Programar sincronizacion diaria:
 
 ```powershell
