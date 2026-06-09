@@ -67,7 +67,12 @@ def _incremental_start(config, fallback_days: int) -> tuple[pd.Timestamp, pd.Tim
     return start, previous_max
 
 
-def sync_local(recent_days: int, validate: bool) -> None:
+def _month_start() -> pd.Timestamp:
+    now = datetime.now()
+    return pd.Timestamp(datetime(now.year, now.month, 1))
+
+
+def sync_local(recent_days: int, validate: bool, mode: str = "incremental") -> None:
     if not is_db_configured():
         raise RuntimeError("Base de datos no configurada en .env")
 
@@ -77,7 +82,10 @@ def sync_local(recent_days: int, validate: bool) -> None:
         raise RuntimeError(connection.get("message") or "No hay conexion SQL")
 
     end = pd.Timestamp(datetime.now()) + pd.Timedelta(seconds=1)
-    logger.info("Sincronizando SmartPOS incremental hasta %s", end)
+    if mode == "month":
+        logger.info("Sincronizando SmartPOS mes actual hasta %s", end)
+    else:
+        logger.info("Sincronizando SmartPOS incremental hasta %s", end)
 
     logger.info("Paso 1/4: descargando tablas de apoyo")
     download_lookups(executor)
@@ -90,9 +98,22 @@ def sync_local(recent_days: int, validate: bool) -> None:
     validation_starts = []
     for config in DATASETS.values():
         current_dataset += 1
-        start, previous_max = _incremental_start(config, recent_days)
+        if mode == "month":
+            start = _month_start()
+            previous_max = None
+        else:
+            start, previous_max = _incremental_start(config, recent_days)
         validation_starts.append(start)
-        if previous_max is not None:
+        if mode == "month":
+            logger.info(
+                "[%s/%s] Consultando %s desde inicio del mes actual: %s -> %s",
+                current_dataset,
+                total_datasets,
+                config.name,
+                start,
+                end,
+            )
+        elif previous_max is not None:
             logger.info(
                 "[%s/%s] Consultando %s desde ultima fecha local %s (margen 1 dia): %s -> %s",
                 current_dataset,
@@ -156,6 +177,12 @@ def upload_to_railway() -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Sincroniza SmartPOS local y sube historico a Railway.")
     parser.add_argument("--recent-days", type=int, default=35, help="Dias recientes a reconsultar y mezclar.")
+    parser.add_argument(
+        "--mode",
+        choices=["incremental", "month"],
+        default="incremental",
+        help="incremental usa la ultima fecha local; month reprocesa desde el inicio del mes actual.",
+    )
     parser.add_argument("--skip-upload", action="store_true", help="No sube archivos a Railway.")
     parser.add_argument("--skip-validate", action="store_true", help="No valida conteos contra SQL.")
     return parser.parse_args()
@@ -163,7 +190,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    sync_local(args.recent_days, validate=not args.skip_validate)
+    sync_local(args.recent_days, validate=not args.skip_validate, mode=args.mode)
     if not args.skip_upload:
         upload_to_railway()
     logger.info("Sincronizacion completa")

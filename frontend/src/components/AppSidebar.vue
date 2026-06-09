@@ -49,11 +49,23 @@
         class="btn-upload"
         style="margin-top: 12px;"
         :disabled="store.refreshingLive"
-        @click="handleLiveRefresh"
+        @click="handleLiveRefresh('incremental')"
       >
         <span style="display:flex; align-items:center; justify-content:center; gap: 6px;">
-          <RefreshCw size="15" :class="{ spinning: store.refreshingLive }" />
-          {{ liveRefreshLabel }}
+          <RefreshCw size="15" :class="{ spinning: store.refreshingLive && store.refreshingLiveMode === 'incremental' }" />
+          {{ incrementalRefreshLabel }}
+        </span>
+      </button>
+
+      <button
+        class="btn-secondary"
+        style="margin-top: 8px;"
+        :disabled="store.refreshingLive"
+        @click="handleLiveRefresh('month')"
+      >
+        <span style="display:flex; align-items:center; justify-content:center; gap: 6px;">
+          <RefreshCw size="15" :class="{ spinning: store.refreshingLive && store.refreshingLiveMode === 'month' }" />
+          {{ monthRefreshLabel }}
         </span>
       </button>
 
@@ -214,11 +226,15 @@ const diagnosticItems = computed(() =>
 const lastHistoricalUpdate = computed(() =>
   store.formatDateTime(store.historicalStatus?.datasets?.ventas?.max)
 )
-const liveRefreshLabel = computed(() => {
-  if (store.refreshingLive && store.status.db_connected) return 'Actualizando SQL...'
-  if (store.refreshingLive) return 'Sincronizando desde este PC...'
-  if (!store.status.db_connected) return 'Actualizar desde este PC'
-  return 'Actualizar informacion en vivo'
+const incrementalRefreshLabel = computed(() => {
+  if (store.refreshingLive && store.refreshingLiveMode === 'incremental') {
+    return store.status.db_connected ? 'Actualizando SQL...' : 'Actualizando desde ultima vez...'
+  }
+  return store.status.db_connected ? 'Actualizar informacion en vivo' : 'Actualizar desde ultima vez'
+})
+const monthRefreshLabel = computed(() => {
+  if (store.refreshingLive && store.refreshingLiveMode === 'month') return 'Actualizando mes actual...'
+  return 'Actualizar mes actual'
 })
 const liveRefreshStatus = computed(() => {
   if (!store.refreshingLive) return ''
@@ -274,9 +290,9 @@ async function handleReset() {
   router.push('/')
 }
 
-async function handleLiveRefresh() {
+async function handleLiveRefresh(mode = 'incremental') {
   try {
-    await store.refreshLiveInformation()
+    await store.refreshLiveInformation(mode)
     router.push('/')
   } catch {
     // El store ya muestra el error en la interfaz.

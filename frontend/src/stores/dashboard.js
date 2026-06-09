@@ -30,6 +30,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const uploading = ref(false)
   const exporting = ref(false)
   const refreshingLive = ref(false)
+  const refreshingLiveMode = ref(null)
   const localAgentAvailable = ref(false)
   const localAgentStatus = ref(null)
   const uploadError = ref(null)
@@ -230,7 +231,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     return result
   }
 
-  async function refreshFromLocalAgent() {
+  async function refreshFromLocalAgent(mode = 'incremental') {
     const agent = await checkLocalAgent()
     if (!agent) {
       throw new Error('No se encontro el agente local. Abre scripts\\sync\\iniciar_agente_sync.bat en este PC y vuelve a intentar.')
@@ -239,6 +240,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     try {
       const { data: started } = await localAgentClient.post('/sync', {
         recent_days: 35,
+        mode,
         skip_validate: true,
         skip_upload: false,
       })
@@ -268,18 +270,20 @@ export const useDashboardStore = defineStore('dashboard', () => {
     return finished
   }
 
-  async function refreshLiveInformation() {
+  async function refreshLiveInformation(mode = 'incremental') {
     refreshingLive.value = true
+    refreshingLiveMode.value = mode
     lastError.value = null
     try {
       return status.db_connected
         ? await refreshFromRailwaySql()
-        : await refreshFromLocalAgent()
+        : await refreshFromLocalAgent(mode)
     } catch (e) {
       lastError.value = errorMessage(e, 'No se pudo actualizar la informacion en vivo')
       throw e
     } finally {
       refreshingLive.value = false
+      refreshingLiveMode.value = null
     }
   }
 
@@ -493,7 +497,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   return {
-    status, uploading, exporting, refreshingLive, localAgentAvailable, localAgentStatus,
+    status, uploading, exporting, refreshingLive, refreshingLiveMode, localAgentAvailable, localAgentStatus,
     uploadError, uploadDiagnostic, lastError, files,
     historicalStatus,
     data, loading, errors, settings,

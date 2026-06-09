@@ -44,6 +44,7 @@ STATE: dict[str, Any] = {
 
 class SyncRequest(BaseModel):
     recent_days: int = Field(default=35, ge=1, le=120)
+    mode: str = Field(default="incremental", pattern="^(incremental|month)$")
     skip_validate: bool = True
     skip_upload: bool = False
 
@@ -107,6 +108,8 @@ def _friendly_message(line: str) -> str | None:
         return "Preparando actualizacion desde SmartPOS..."
     if "sincronizando smartpos incremental" in text:
         return "Buscando la ultima actualizacion local..."
+    if "sincronizando smartpos mes actual" in text:
+        return "Reprocesando informacion del mes actual..."
     if "sincronizando smartpos desde" in text:
         return "Consultando ventas, compras y devoluciones recientes..."
     if "descargando tablas de apoyo" in text:
@@ -117,6 +120,8 @@ def _friendly_message(line: str) -> str | None:
         return "Actualizando historicos recientes..."
     if "desde ultima fecha local" in text:
         return "Consultando SmartPOS solo desde la ultima actualizacion..."
+    if "desde inicio del mes actual" in text:
+        return "Consultando SmartPOS desde el primer dia del mes..."
     if "sin historico local" in text:
         return "No hay historico local para una tabla; consultando ventana inicial..."
     if "consultando historico_ventas" in text:
@@ -146,6 +151,8 @@ def _run_sync(req: SyncRequest) -> None:
         str(ROOT_DIR / "sincronizar_smartpos_railway.py"),
         "--recent-days",
         str(req.recent_days),
+        "--mode",
+        req.mode,
     ]
     if req.skip_validate:
         command.append("--skip-validate")
