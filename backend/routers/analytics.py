@@ -21,7 +21,15 @@ from backend.services.processing import (
 )
 from backend.services.db_config import is_db_configured
 from backend.services.db_service import get_db_service
+from backend.services.historical_store import get_historical_store
 from backend.services.historical_refresh import historical_status, refresh_from_last_update
+from backend.services.management_analytics import (
+    detector_anomalias,
+    pedido_por_proveedor,
+    reporte_diario,
+    rentabilidad_gerencial,
+    sugerido_traslados,
+)
 
 def get_df(session_id, key, fecha_ini=None, fecha_fin=None, sede=None, limit=None):
     if is_db_configured():
@@ -35,9 +43,27 @@ def get_df(session_id, key, fecha_ini=None, fecha_fin=None, sede=None, limit=Non
                 return db.get_inventario()
             elif key == "notas_credito":
                 return db.get_notas_credito(fecha_ini, fecha_fin)
+    historical = get_historical_store()
+    if historical.available():
+        if key == "ventas":
+            return historical.get_ventas(fecha_ini, fecha_fin, sede, limit)
+        if key == "compras":
+            return historical.get_compras(fecha_ini, fecha_fin)
+        if key == "inventario" and historical.inventory_available():
+            return historical.get_inventario()
+        if key == "notas_credito":
+            return historical.get_notas_credito(fecha_ini, fecha_fin)
     return _store_get_df(session_id, key)
 
 def get_status(session_id):
+    historical = get_historical_store()
+    if historical.available():
+        return {
+            "ventas": True,
+            "compras": not historical.get_compras().empty,
+            "inventario": historical.inventory_available(),
+            "notas_credito": not historical.get_notas_credito().empty,
+        }
     if is_db_configured():
         db = get_db_service()
         if db:
@@ -671,6 +697,12 @@ def rentabilidad(fecha_ini: str = None, fecha_fin: str = None, x_session_id: str
         if db:
             res = db.get_analisis_rentabilidad_sql(fecha_ini=fecha_ini, fecha_fin=fecha_fin)
             if res:
+                try:
+                    df_v_g = get_df(x_session_id, "ventas", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
+                    df_i_g = get_df(x_session_id, "inventario")
+                    res["gerencial"] = rentabilidad_gerencial(df_v_g, df_i_g)
+                except Exception:
+                    res["gerencial"] = {}
                 return res
 
     # Fallback si no hay BD o no hay resultados
@@ -681,30 +713,103 @@ def rentabilidad(fecha_ini: str = None, fecha_fin: str = None, x_session_id: str
 
     df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin)
 
-    # Este fallback estÃ¡ muy limitado ya que la vista requiere kpis, top_rentables, etc.
-    # Solo devolvemos la matriz para compatibilidad.
     r = _sales_profit_frame(df_v, df_i)
     r = r.sort_values("utilidad_total", ascending=False)
+    r = r.replace([np.inf, -np.inf], np.nan).fillna(0)
 
     r["cum_util"] = r["utilidad_total"].cumsum()
     total_util = r["utilidad_total"].sum()
     if total_util > 0:
         r["pct_cum"] = r["cum_util"] / total_util
-        import numpy as np
         r["matriz_abc"] = np.where(r["pct_cum"] <= 0.8, "A", np.where(r["pct_cum"] <= 0.95, "B", "C"))
     else:
         r["matriz_abc"] = "C"
 
+    utilidad_total = float(r["utilidad_total"].sum()) if not r.empty else 0.0
+    ingreso_total = float(r["ingreso_total"].sum()) if not r.empty else 0.0
+    margen_global = round(utilidad_total / ingreso_total * 100, 2) if ingreso_total > 0 else 0
+    alta_rotacion_min = _high_rotation_threshold(r) if not r.empty else HIGH_ROTATION_MIN_UNITS
+    bajo_margen_df = r[(r["margen_pct"] < LOW_MARGIN_PCT) & (r["cant_vend"] >= alta_rotacion_min)].copy()
+    por_laboratorio = (
+        r.groupby("laboratorio", as_index=False)
+        .agg(utilidad_total=("utilidad_total", "sum"))
+        .sort_values("utilidad_total", ascending=False)
+        .head(15)
+    ) if "laboratorio" in r.columns and not r.empty else pd.DataFrame()
+    dias_periodo = _inclusive_days(df_v["Fecha"].min(), df_v["Fecha"].max(), default=1) if "Fecha" in df_v.columns else 1
+
     return {
         "kpis": {
-            "utilidad_total": 0, "ingreso_total": 0, "margen_global": 0, "productos": 0,
-            "bajo_margen_count": 0, "bajo_margen_umbral_pct": 5, "alta_rotacion_min_unidades": 0, "dias_periodo": 1
+            "utilidad_total": round(utilidad_total, 0),
+            "ingreso_total": round(ingreso_total, 0),
+            "margen_global": margen_global,
+            "productos": int(len(r)),
+            "bajo_margen_count": int(len(bajo_margen_df)),
+            "bajo_margen_umbral_pct": LOW_MARGIN_PCT,
+            "alta_rotacion_min_unidades": round(float(alta_rotacion_min), 0),
+            "dias_periodo": int(dias_periodo),
         },
-        "top_rentables": [],
-        "bajo_margen": [],
+        "top_rentables": json.loads(r.nlargest(15, "utilidad_total").to_json(orient="records")),
+        "bajo_margen": json.loads(bajo_margen_df.sort_values("margen_pct").to_json(orient="records")),
         "matriz_abc": json.loads(r.to_json(orient="records")),
-        "por_laboratorio": []
+        "por_laboratorio": json.loads(por_laboratorio.to_json(orient="records")) if not por_laboratorio.empty else [],
+        "gerencial": rentabilidad_gerencial(df_v, df_i),
     }
+
+
+def _management_frames(x_session_id: str):
+    df_v = get_df(x_session_id, "ventas")
+    df_c = get_df(x_session_id, "compras")
+    df_i = get_df(x_session_id, "inventario")
+    df_n = get_df(x_session_id, "notas_credito")
+    if df_v is None or df_i is None:
+        raise HTTPException(404, "Faltan ventas o inventario para analitica gerencial")
+    if df_c is None:
+        df_c = pd.DataFrame()
+    if df_n is None:
+        df_n = pd.DataFrame()
+    return df_v, df_c, df_i, df_n
+
+
+@router.get("/gerencia")
+def gerencia_operativa(x_session_id: str = Header(default="default-session")):
+    df_v, df_c, df_i, df_n = _management_frames(x_session_id)
+    traslados = sugerido_traslados(df_v, df_i)
+    pedidos = pedido_por_proveedor(df_v, df_c, df_i)
+    rentabilidad = rentabilidad_gerencial(df_v, df_i)
+    anomalias = detector_anomalias(df_v, df_c, df_i, df_n)
+    diario = reporte_diario(df_v, df_c, df_i, df_n)
+    return {
+        "traslados": traslados,
+        "pedidos": pedidos,
+        "rentabilidad": rentabilidad,
+        "anomalias": anomalias,
+        "reporte_diario": diario,
+    }
+
+
+@router.get("/gerencia/traslados")
+def gerencia_traslados(x_session_id: str = Header(default="default-session")):
+    df_v, _, df_i, _ = _management_frames(x_session_id)
+    return sugerido_traslados(df_v, df_i)
+
+
+@router.get("/gerencia/pedidos")
+def gerencia_pedidos(x_session_id: str = Header(default="default-session")):
+    df_v, df_c, df_i, _ = _management_frames(x_session_id)
+    return pedido_por_proveedor(df_v, df_c, df_i)
+
+
+@router.get("/gerencia/anomalias")
+def gerencia_anomalias(x_session_id: str = Header(default="default-session")):
+    df_v, df_c, df_i, df_n = _management_frames(x_session_id)
+    return detector_anomalias(df_v, df_c, df_i, df_n)
+
+
+@router.get("/gerencia/reporte-diario")
+def gerencia_reporte_diario(x_session_id: str = Header(default="default-session")):
+    df_v, df_c, df_i, df_n = _management_frames(x_session_id)
+    return reporte_diario(df_v, df_c, df_i, df_n)
 
 
 # â”€â”€ Inventario â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1218,10 +1323,19 @@ def proyeccion_metas(
     for sede, df_sede_all in df.groupby(col_sede):
         df_base = df_sede_all[(df_sede_all["Fecha"].dt.year == y_base) & (df_sede_all["Fecha"].dt.month == m_base)].copy()
         if df_base.empty:
-            continue
+            limite_base = pd.Timestamp(date(y_obj, m_obj, 1))
+            historico_sede = df_sede_all[df_sede_all["Fecha"] < limite_base].copy()
+            if historico_sede.empty:
+                continue
+            ultimo_periodo_sede = historico_sede["Fecha"].dt.to_period("M").max()
+            df_base = historico_sede[historico_sede["Fecha"].dt.to_period("M") == ultimo_periodo_sede].copy()
+            if df_base.empty:
+                continue
 
         ventas_mes_anterior = float(df_base["Ingreso"].sum())
-        dias_mes_anterior = calendar.monthrange(y_base, m_base)[1]
+        base_period = df_base["Fecha"].dt.to_period("M").iloc[0]
+        base_year, base_month = int(base_period.year), int(base_period.month)
+        dias_mes_anterior = calendar.monthrange(base_year, base_month)[1]
         idp_sede = ventas_mes_anterior / max(dias_mes_anterior, 1)
         proyeccion_base = idp_sede * dias_totales_proy
 
@@ -1282,6 +1396,7 @@ def proyeccion_metas(
             "incremento_aplicado_pct": round(incremento_aplicado * 100, 2),
             "ventas_hist_mismo_mes": float(venta_hist_obj),
             "ventas_hist_mes_anterior": float(venta_hist_prev),
+            "mes_base_sede": f"{base_year:04d}-{base_month:02d}",
             "vendedores": vendedores,
         })
 

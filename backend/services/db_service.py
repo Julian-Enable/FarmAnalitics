@@ -134,6 +134,7 @@ class DatabaseService:
                 fp.Descripcion,
                 fp.Cantidad AS Cant,
                 fp.PrecioVenta AS [Precio Venta],
+                fp.Costo,
                 r.ID_Laboratorio,
                 f.FechaFactura AS Fecha,
                 f.ID_PuntoVenta,

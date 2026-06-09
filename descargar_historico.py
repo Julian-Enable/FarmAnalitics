@@ -63,6 +63,7 @@ DATASETS = {
                 fp.Descripcion,
                 fp.Cantidad AS Cant,
                 fp.PrecioVenta AS [Precio Venta],
+                fp.Costo,
                 fp.Cantidad * fp.PrecioVenta AS Ingreso,
                 r.ID_Laboratorio,
                 r.ID_Nivel,

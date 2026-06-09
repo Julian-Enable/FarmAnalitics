@@ -55,6 +55,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     sedes: null,
     devoluciones: null,
     metas: null,
+    gerencia: null,
   })
 
   const loading = reactive({
@@ -66,6 +67,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     sedes: false,
     devoluciones: false,
     metas: false,
+    gerencia: false,
   })
 
   const errors = reactive({
@@ -77,6 +79,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     sedes: null,
     devoluciones: null,
     metas: null,
+    gerencia: null,
   })
 
   function fmt(n) {
@@ -392,6 +395,17 @@ export const useDashboardStore = defineStore('dashboard', () => {
     finally { loading.metas = false }
   }
 
+  async function fetchGerencia() {
+    if (!status.ventas || !status.inventario) return
+    loading.gerencia = true
+    clearModuleError('gerencia')
+    try {
+      const { data: d } = await axios.get('/api/gerencia')
+      data.gerencia = d
+    } catch (e) { setModuleError('gerencia', e, 'No se pudo cargar gerencia operativa') }
+    finally { loading.gerencia = false }
+  }
+
   async function exportFullReport() {
     exporting.value = true
     lastError.value = null
@@ -399,6 +413,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
       if (status.ventas && !data.resumen) await fetchResumen()
       if (status.ventas && !data.ventas) await fetchVentas()
       if (status.ventas && status.inventario && !data.rentabilidad) await fetchRentabilidad()
+      if (status.ventas && status.inventario && !data.gerencia) await fetchGerencia()
       if (status.inventario && !data.inventario) await fetchInventario()
       if (status.ventas && status.compras && status.inventario && !data.compras) await fetchCompras()
       if (status.ventas && !data.sedes) await fetchSedes()
@@ -488,6 +503,65 @@ export const useDashboardStore = defineStore('dashboard', () => {
             { key: 'ticket', label: 'Ticket' },
           ],
         },
+        {
+          name: 'Traslados sugeridos',
+          data: data.gerencia?.traslados?.sugerencias || [],
+          columns: [
+            { key: 'Referencia', label: 'Referencia' },
+            { key: 'Descripcion', label: 'Descripcion' },
+            { key: 'origen', label: 'Origen' },
+            { key: 'destino', label: 'Destino' },
+            { key: 'cantidad_sugerida', label: 'Cantidad' },
+            { key: 'cobertura_destino', label: 'Cobertura destino' },
+          ],
+        },
+        {
+          name: 'Pedido sugerido',
+          data: data.gerencia?.pedidos?.items || [],
+          columns: [
+            { key: 'proveedor', label: 'Proveedor' },
+            { key: 'Referencia', label: 'Referencia' },
+            { key: 'Descripcion', label: 'Descripcion' },
+            { key: 'cantidad_sugerida', label: 'Cantidad' },
+            { key: 'costo_estimado', label: 'Costo estimado' },
+          ],
+        },
+        {
+          name: 'Fugas de margen',
+          data: data.gerencia?.rentabilidad?.bajo_margen_alta_venta || [],
+          columns: [
+            { key: 'Referencia', label: 'Referencia' },
+            { key: 'nombre', label: 'Producto' },
+            { key: 'cant_vend', label: 'Unidades' },
+            { key: 'ingreso_total', label: 'Ingreso' },
+            { key: 'utilidad_total', label: 'Utilidad' },
+            { key: 'margen_pct', label: 'Margen %' },
+          ],
+        },
+        {
+          name: 'Anomalias',
+          data: data.gerencia?.anomalias?.anomalias || [],
+          columns: [
+            { key: 'tipo', label: 'Tipo' },
+            { key: 'severidad', label: 'Severidad' },
+            { key: 'detalle', label: 'Detalle' },
+            { key: 'valor', label: 'Valor' },
+            { key: 'referencia', label: 'Referencia' },
+          ],
+        },
+        {
+          name: 'Resumen diario',
+          data: data.gerencia?.reporte_diario?.resumen ? [data.gerencia.reporte_diario.resumen] : [],
+          columns: [
+            { key: 'ventas_ayer', label: 'Ventas ayer' },
+            { key: 'ventas_mes_actual', label: 'Ventas mes actual' },
+            { key: 'facturas_ayer', label: 'Facturas ayer' },
+            { key: 'compra_sugerida_dia', label: 'Compra sugerida' },
+            { key: 'anomalias', label: 'Anomalias' },
+            { key: 'capital_quieto', label: 'Capital quieto' },
+            { key: 'fugas_margen', label: 'Fugas margen' },
+          ],
+        },
       ], 'Reporte_Farma_Analytics')
     } catch (e) {
       lastError.value = errorMessage(e, 'No se pudo exportar el reporte')
@@ -505,6 +579,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
     uploadFiles, checkStatus, resetSession, exportFullReport,
     fetchHistoricalStatus, refreshLiveInformation, checkLocalAgent,
     fetchResumen, fetchVentas, fetchRentabilidad,
-    fetchInventario, fetchCompras, fetchSedes, fetchDevoluciones, fetchMetas,
+    fetchInventario, fetchCompras, fetchSedes, fetchDevoluciones, fetchMetas, fetchGerencia,
   }
 })
