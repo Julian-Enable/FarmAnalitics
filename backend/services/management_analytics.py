@@ -287,6 +287,11 @@ def sugerido_traslados(ventas: pd.DataFrame, inventario: pd.DataFrame, min_days:
     if sales.empty or inventario is None or inventario.empty or not sedes:
         return {"kpis": {"sugerencias": 0, "unidades": 0}, "sugerencias": [], "sedes": sedes}
 
+    # Excluir servicios
+    if "Descripcion" in inventario.columns:
+        es_servicio = (inventario.get("Nivel", "").astype(str).str.upper() == "SERVICIOS") | (inventario["Descripcion"].astype(str).str.contains("DOMICILIO|INYECTOLOGIA|FLETE|TARIFA DE SERVICIO", case=False, na=False))
+        inventario = inventario[~es_servicio].copy()
+
     # Filtrar ventas esporádicas para demanda de traslados
     sales_filtered, sporadic_summary = _tag_sporadic(sales)
     if sales_filtered is None or sales_filtered.empty:
@@ -363,6 +368,11 @@ def pedido_por_proveedor(ventas: pd.DataFrame, compras: pd.DataFrame, inventario
     sales_raw, dias, _ = _period_sales(ventas, 35)
     if sales_raw.empty or inventario is None or inventario.empty:
         return {"kpis": {"proveedores": 0, "items": 0, "costo_estimado": 0}, "proveedores": [], "items": []}
+
+    # Excluir servicios
+    if "Descripcion" in inventario.columns:
+        es_servicio = (inventario.get("Nivel", "").astype(str).str.upper() == "SERVICIOS") | (inventario["Descripcion"].astype(str).str.contains("DOMICILIO|INYECTOLOGIA|FLETE|TARIFA DE SERVICIO", case=False, na=False))
+        inventario = inventario[~es_servicio].copy()
 
     # Filtrar ventas esporádicas para sugeridos de compra
     sales, sporadic_summary = _tag_sporadic(sales_raw)

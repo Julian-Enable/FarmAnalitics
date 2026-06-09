@@ -820,6 +820,10 @@ def inventario(inv_min_dias: int = INV_MIN_DIAS, inv_max_dias: int = INV_MAX_DIA
 
     df_a = _inventory_with_total(df_i)
 
+    # Excluir servicios (domicilios, inyectología, fletes)
+    es_servicio = (df_a["Nivel"].astype(str).str.upper() == "SERVICIOS") | (df_a["Descripcion"].astype(str).str.contains("DOMICILIO|INYECTOLOGIA|FLETE|TARIFA DE SERVICIO", case=False, na=False))
+    df_a = df_a[~es_servicio].copy()
+
     # ── Filtrar ventas esporádicas para rotación ──
     from backend.services.management_analytics import _tag_sporadic
     df_v_filtered, sporadic_summary = _tag_sporadic(df_v)
@@ -952,7 +956,12 @@ def compras(
         comp = comp.drop(columns=[c for c in ["Descripcion_x", "Descripcion_y"] if c in comp.columns])
     else:
         comp["inv_actual"] = 0
-        comp["Descripcion"] = comp["Descripcion"].fillna("")
+        comp["Descripcion"] = comp.get("Descripcion", "").fillna("")
+        comp["Nivel"] = ""
+
+    # Excluir servicios (domicilios, inyectología, fletes)
+    es_servicio = (comp["Nivel"].astype(str).str.upper() == "SERVICIOS") | (comp["Descripcion"].astype(str).str.contains("DOMICILIO|INYECTOLOGIA|FLETE|TARIFA DE SERVICIO", case=False, na=False))
+    comp = comp[~es_servicio].copy()
 
     comp["inv_inicial"] = comp["inv_actual"] + comp["uds_vendidas"] - comp["uds_compradas"]
     dias_periodo = 30
