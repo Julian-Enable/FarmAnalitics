@@ -1,6 +1,7 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+set "ROOT_DIR=%~dp0..\.."
+cd /d "%ROOT_DIR%"
 
 echo ============================================================
 echo  FARMA ANALYTICS - Agente local para actualizar desde la web
@@ -12,7 +13,7 @@ echo.
 echo Deja esta ventana abierta mientras quieras usar el boton:
 echo   Actualizar desde este PC
 echo.
-echo Para cerrar el agente presiona Ctrl+C o ejecuta cerrar_agente_sync.bat
+echo Para cerrar el agente presiona Ctrl+C o ejecuta scripts\sync\cerrar_agente_sync.bat
 echo.
 
 if exist ".venv\Scripts\python.exe" (

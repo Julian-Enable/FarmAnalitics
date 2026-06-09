@@ -233,7 +233,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   async function refreshFromLocalAgent() {
     const agent = await checkLocalAgent()
     if (!agent) {
-      throw new Error('No se encontro el agente local. Abre iniciar_agente_sync.bat en este PC y vuelve a intentar.')
+      throw new Error('No se encontro el agente local. Abre scripts\\sync\\iniciar_agente_sync.bat en este PC y vuelve a intentar.')
     }
 
     try {

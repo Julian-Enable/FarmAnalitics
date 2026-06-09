@@ -1151,7 +1151,24 @@ def proyeccion_metas(
     domingos_festivos = 0
 
     col_sede = "Punto Venta" if "Punto Venta" in df.columns else None
-    col_vend = "Creada" if "Creada" in df.columns else None
+    col_vend = None
+    if "NombreVendedor" in df.columns or "Creada" in df.columns:
+        nombre_vendedor = (
+            df["NombreVendedor"].astype(str).str.strip()
+            if "NombreVendedor" in df.columns
+            else pd.Series("", index=df.index)
+        )
+        creada = (
+            df["Creada"].astype(str).str.strip()
+            if "Creada" in df.columns
+            else pd.Series("", index=df.index)
+        )
+        invalid_names = {"", "nan", "none", "NombreVendedor", "Creada"}
+        df["__VendedorMeta"] = nombre_vendedor.where(
+            ~nombre_vendedor.str.lower().isin({v.lower() for v in invalid_names}),
+            creada,
+        ).str.strip()
+        col_vend = "__VendedorMeta"
     if not col_sede:
         raise HTTPException(400, "Falta columna de Sede (Punto Venta)")
 

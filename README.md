@@ -33,6 +33,9 @@ Vue 3 en Vercel
 backend/                         API FastAPI y servicios analiticos
 frontend/                        App Vue 3 + Vite
 data/historico/                  Historico local ignorado por Git y Docker
+scripts/dev/                     Scripts para iniciar/cerrar la app local
+scripts/sync/                    Scripts del agente y sincronizacion SmartPOS
+scripts/legacy/                  Scripts antiguos conservados como respaldo
 descargar_historico.py           Descarga/mezcla datos SmartPOS
 sincronizar_smartpos_railway.py  Actualiza historico y sube a Railway
 Dockerfile                       Build del backend en Railway
@@ -43,7 +46,7 @@ requirements.txt                 Dependencias Python del backend/sync
 ## Desarrollo local
 
 ```powershell
-.\iniciar_app.bat
+.\scripts\dev\iniciar_app.bat
 ```
 
 Servicios locales:
@@ -54,7 +57,7 @@ Servicios locales:
 Para cerrar:
 
 ```powershell
-.\cerrar_app.bat
+.\scripts\dev\cerrar_app.bat
 ```
 
 ## Sincronizacion
@@ -62,13 +65,13 @@ Para cerrar:
 Ejecutar sincronizacion manual:
 
 ```powershell
-.\sincronizar_ahora.bat
+.\scripts\sync\sincronizar_ahora.bat
 ```
 
 Habilitar actualizacion desde la web usando este PC:
 
 ```powershell
-.\iniciar_agente_sync.bat
+.\scripts\sync\iniciar_agente_sync.bat
 ```
 
 Con esa ventana abierta, el boton `Actualizar desde este PC` en Vercel llama a
@@ -77,13 +80,13 @@ historico actualizado al volumen de Railway y espera a que el backend vuelva a
 responder. Para cerrarlo:
 
 ```powershell
-.\cerrar_agente_sync.bat
+.\scripts\sync\cerrar_agente_sync.bat
 ```
 
 Programar sincronizacion diaria:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\programar_sync_railway.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\sync\programar_sync_railway.ps1
 ```
 
 ## Deploy
