@@ -128,7 +128,7 @@ const number = value => store.fmtN(Math.round(Number(value || 0)))
 const pct = value => `${Number(value || 0).toFixed(1)}%`
 
 const trasladoCols = [
-  { key: 'Descripcion', label: 'Producto' },
+  { key: 'Descripcion', label: 'Producto', formatter: (v, row) => row.uds_esporadicas_excluidas > 0 ? `${v} ⚠️ (-${number(row.uds_esporadicas_excluidas)})` : v },
   { key: 'origen', label: 'Origen' },
   { key: 'destino', label: 'Destino' },
   { key: 'cantidad_sugerida', label: 'Cant', formatter: number },
@@ -142,7 +142,7 @@ const proveedorCols = [
 ]
 const pedidoCols = [
   { key: 'proveedor', label: 'Proveedor' },
-  { key: 'Descripcion', label: 'Producto' },
+  { key: 'Descripcion', label: 'Producto', formatter: (v, row) => row.uds_esporadicas_excluidas > 0 ? `${v} ⚠️ (-${number(row.uds_esporadicas_excluidas)})` : v },
   { key: 'cantidad_sugerida', label: 'Cant', formatter: number },
   { key: 'costo_estimado', label: 'Costo', formatter: money },
 ]
@@ -182,7 +182,7 @@ const SimpleTable = defineComponent({
           h('thead', [h('tr', props.cols.map(col => h('th', col.label)))]),
           h('tbody', rows.map((row, index) => h('tr', { key: index }, props.cols.map(col => {
             const value = row[col.key]
-            return h('td', col.formatter ? col.formatter(value) : String(value ?? ''))
+            return h('td', col.formatter ? col.formatter(value, row) : String(value ?? ''))
           }))))
         ])
       ])

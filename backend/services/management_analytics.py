@@ -53,6 +53,99 @@ def inventory_sede_columns(inventario: pd.DataFrame) -> list[str]:
     return cols
 
 
+# ── Detección de Ventas Esporádicas ──────────────────────────────────────────
+# Identifica picos de venta atípicos (licitaciones, pedidos institucionales)
+# que no representan demanda sostenida y contaminarían los cálculos de rotación,
+# sugeridos de compra y traslados.
+#
+# Se mantienen intactas para Ingresos totales, Rentabilidad y Resumen General.
+# Solo se excluyen en: rotación diaria, cobertura, sugeridos de compra/traslado.
+
+SPORADIC_IQR_MULTIPLIER = 3.0   # Qué tan agresivo es el filtro (3 = estándar Tukey)
+SPORADIC_MIN_SALE_DAYS = 5      # Mínimo de días con venta para aplicar filtro
+
+
+def _tag_sporadic(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Analiza un DataFrame de ventas y separa líneas normales de esporádicas.
+
+    Retorna:
+        (df_normal, df_sporadic_summary)
+        - df_normal: DataFrame con las líneas de venta que representan demanda regular.
+        - df_sporadic_summary: DataFrame con Referencia, uds_esporadicas_excluidas,
+          dias_esporadicos para informar al usuario.
+    """
+    if df is None or df.empty or "Fecha" not in df.columns or "Referencia" not in df.columns:
+        return df, pd.DataFrame(columns=["Referencia", "uds_esporadicas_excluidas", "dias_esporadicos"])
+
+    work = df.copy()
+    work["Fecha"] = pd.to_datetime(work["Fecha"], errors="coerce")
+    work["_dia"] = work["Fecha"].dt.normalize()
+
+    # Agrupar cantidad diaria por producto
+    daily = work.groupby(["Referencia", "_dia"], as_index=False)["Cant"].sum()
+
+    # Calcular estadísticos por producto
+    stats = daily.groupby("Referencia", as_index=False).agg(
+        dias_venta=("_dia", "nunique"),
+        q1=("Cant", lambda x: x.quantile(0.25)),
+        q3=("Cant", lambda x: x.quantile(0.75)),
+        mediana=("Cant", "median"),
+    )
+    stats["iqr"] = stats["q3"] - stats["q1"]
+    # Para productos con IQR=0 (siempre venden igual), usar la mediana como referencia
+    stats["iqr"] = stats["iqr"].where(stats["iqr"] > 0, stats["mediana"] * 0.5)
+    # Umbral: mediana + N * IQR
+    stats["umbral"] = stats["mediana"] + SPORADIC_IQR_MULTIPLIER * stats["iqr"]
+    # Mínimo umbral de seguridad: al menos 2x la mediana
+    stats["umbral"] = np.maximum(stats["umbral"], stats["mediana"] * 2)
+
+    # Solo aplicar a productos con suficiente historial
+    stats["aplicar_filtro"] = stats["dias_venta"] >= SPORADIC_MIN_SALE_DAYS
+
+    # Merge para saber el umbral de cada producto-día
+    daily_with_threshold = daily.merge(
+        stats[["Referencia", "umbral", "aplicar_filtro"]],
+        on="Referencia",
+        how="left",
+    )
+
+    # Marcar días esporádicos
+    daily_with_threshold["es_esporadico"] = (
+        daily_with_threshold["aplicar_filtro"]
+        & (daily_with_threshold["Cant"] > daily_with_threshold["umbral"])
+    )
+
+    # Set de (Referencia, día) esporádicos
+    sporadic_keys = set(
+        zip(
+            daily_with_threshold.loc[daily_with_threshold["es_esporadico"], "Referencia"],
+            daily_with_threshold.loc[daily_with_threshold["es_esporadico"], "_dia"],
+        )
+    )
+
+    if not sporadic_keys:
+        return df, pd.DataFrame(columns=["Referencia", "uds_esporadicas_excluidas", "dias_esporadicos"])
+
+    # Marcar líneas originales
+    work["_es_esporadico"] = list(zip(work["Referencia"], work["_dia"]))
+    work["_es_esporadico"] = work["_es_esporadico"].isin(sporadic_keys)
+
+    df_normal = work[~work["_es_esporadico"]].drop(columns=["_dia", "_es_esporadico"])
+    df_esporadico = work[work["_es_esporadico"]].copy()
+
+    # Resumen de lo excluido (para mostrar al usuario)
+    if not df_esporadico.empty:
+        sporadic_summary = df_esporadico.groupby("Referencia", as_index=False).agg(
+            uds_esporadicas_excluidas=("Cant", "sum"),
+            dias_esporadicos=("_dia", "nunique"),
+        )
+    else:
+        sporadic_summary = pd.DataFrame(columns=["Referencia", "uds_esporadicas_excluidas", "dias_esporadicos"])
+
+    return df_normal, sporadic_summary
+
+
 def _period_sales(ventas: pd.DataFrame, days: int = 35) -> tuple[pd.DataFrame, int, pd.Timestamp | None]:
     if ventas is None or ventas.empty or "Fecha" not in ventas.columns:
         return pd.DataFrame(), 1, None
@@ -74,16 +167,29 @@ def _profit_by_product(ventas: pd.DataFrame, inventario: pd.DataFrame, days: int
     if sales.empty or inventario is None or inventario.empty:
         return pd.DataFrame(), dias
 
-    base = sales.groupby("Referencia", as_index=False).agg(
+    # Filtrar ventas esporádicas para rotación (pero usar sales completo para ingresos)
+    sales_filtered, _ = _tag_sporadic(sales)
+    if sales_filtered is None or sales_filtered.empty:
+        sales_filtered = sales
+
+    # Agrupar con datos filtrados para rotación, pero con datos completos para ingresos
+    base_filtered = sales_filtered.groupby("Referencia", as_index=False).agg(
+        cant_vend_filtrada=("Cant", "sum"),
+    )
+    base_full = sales.groupby("Referencia", as_index=False).agg(
         nombre=("Descripcion", "last"),
         cant_vend=("Cant", "sum"),
         ingreso_total=("Ingreso", "sum"),
         lab=("Laboratorio", "last") if "Laboratorio" in sales.columns else ("Referencia", "last"),
         sede=("Punto Venta", "last") if "Punto Venta" in sales.columns else ("Referencia", "last"),
     )
+    base = base_full.merge(base_filtered, on="Referencia", how="left")
+    base["cant_vend_filtrada"] = base["cant_vend_filtrada"].fillna(0)
+    # cant_vend sigue siendo el total real (para ingresos/utilidad)
+    # cant_vend_filtrada se usará para rotación diaria
     base = base[base["cant_vend"] > 0].copy()
     if base.empty:
-        return base, dias
+        return pd.DataFrame(), dias
 
     inv_cols = ["Referencia", "Precio Compra", "Precio Venta", "Total", "Descripcion"]
     inv_cols = [c for c in inv_cols if c in inventario.columns]
@@ -114,7 +220,7 @@ def _profit_by_product(ventas: pd.DataFrame, inventario: pd.DataFrame, days: int
         (base["utilidad_unit"] / base["precio_venta_prom"]) * 100,
         0,
     )
-    base["rotacion_diaria"] = base["cant_vend"] / max(dias, 1)
+    base["rotacion_diaria"] = base["cant_vend_filtrada"] / max(dias, 1)
     base["capital_actual"] = base["stock_total"] * base["precio_compra"]
     base["precio_desviado_pct"] = np.where(
         base["precio_venta_config"] > 0,
@@ -181,7 +287,12 @@ def sugerido_traslados(ventas: pd.DataFrame, inventario: pd.DataFrame, min_days:
     if sales.empty or inventario is None or inventario.empty or not sedes:
         return {"kpis": {"sugerencias": 0, "unidades": 0}, "sugerencias": [], "sedes": sedes}
 
-    demand = sales.groupby(["Referencia", "Punto Venta"], as_index=False)["Cant"].sum()
+    # Filtrar ventas esporádicas para demanda de traslados
+    sales_filtered, sporadic_summary = _tag_sporadic(sales)
+    if sales_filtered is None or sales_filtered.empty:
+        sales_filtered = sales
+
+    demand = sales_filtered.groupby(["Referencia", "Punto Venta"], as_index=False)["Cant"].sum()
     demand["venta_diaria"] = demand["Cant"] / max(dias, 1)
     pivot = demand.pivot_table(index="Referencia", columns="Punto Venta", values="venta_diaria", aggfunc="sum", fill_value=0)
 
@@ -233,6 +344,13 @@ def sugerido_traslados(ventas: pd.DataFrame, inventario: pd.DataFrame, min_days:
     out = pd.DataFrame(rows)
     if out.empty:
         return {"kpis": {"sugerencias": 0, "unidades": 0}, "sugerencias": [], "sedes": sedes}
+    
+    if not sporadic_summary.empty:
+        out = out.merge(sporadic_summary[["Referencia", "uds_esporadicas_excluidas"]], on="Referencia", how="left")
+        out["uds_esporadicas_excluidas"] = out["uds_esporadicas_excluidas"].fillna(0)
+    else:
+        out["uds_esporadicas_excluidas"] = 0
+        
     out = out.sort_values(["prioridad", "cantidad_sugerida"], ascending=False)
     return {
         "kpis": {"sugerencias": int(len(out)), "unidades": int(out["cantidad_sugerida"].sum()), "dias_demanda": int(dias)},
@@ -242,9 +360,14 @@ def sugerido_traslados(ventas: pd.DataFrame, inventario: pd.DataFrame, min_days:
 
 
 def pedido_por_proveedor(ventas: pd.DataFrame, compras: pd.DataFrame, inventario: pd.DataFrame, target_days: int = 35, min_days: int = 15) -> dict[str, Any]:
-    sales, dias, _ = _period_sales(ventas, 35)
-    if sales.empty or inventario is None or inventario.empty:
+    sales_raw, dias, _ = _period_sales(ventas, 35)
+    if sales_raw.empty or inventario is None or inventario.empty:
         return {"kpis": {"proveedores": 0, "items": 0, "costo_estimado": 0}, "proveedores": [], "items": []}
+
+    # Filtrar ventas esporádicas para sugeridos de compra
+    sales, sporadic_summary = _tag_sporadic(sales_raw)
+    if sales is None or sales.empty:
+        sales = sales_raw
 
     rot = sales.groupby("Referencia", as_index=False).agg(uds_vendidas=("Cant", "sum"), ultima_venta=("Fecha", "max"))
     rot["venta_diaria"] = rot["uds_vendidas"] / max(dias, 1)
@@ -270,6 +393,13 @@ def pedido_por_proveedor(ventas: pd.DataFrame, compras: pd.DataFrame, inventario
     base["proveedor"] = base["proveedor"].fillna("Sin proveedor")
     base["cantidad_sugerida"] = np.ceil((target_days * base["venta_diaria"]) - base["Total"]).clip(lower=1).astype(int)
     base["costo_estimado"] = base["cantidad_sugerida"] * base["Precio Compra"]
+    
+    if not sporadic_summary.empty:
+        base = base.merge(sporadic_summary[["Referencia", "uds_esporadicas_excluidas"]], on="Referencia", how="left")
+        base["uds_esporadicas_excluidas"] = base["uds_esporadicas_excluidas"].fillna(0)
+    else:
+        base["uds_esporadicas_excluidas"] = 0
+        
     base = base.sort_values("costo_estimado", ascending=False)
     prov_sum = base.groupby("proveedor", as_index=False).agg(
         items=("Referencia", "nunique"),

@@ -115,8 +115,13 @@
                     {{ row.clasificacion_abc }}
                   </span>
                 </td>
-                <td>{{ row.Referencia }}</td>
-                <td>{{ row.Descripcion?.substring(0, 35) }}</td>
+                <td style="font-family: monospace; font-size: 0.9em;">{{ row.Referencia }}</td>
+                <td>
+                  {{ row.Descripcion?.substring(0, 35) }}
+                  <span v-if="row.uds_esporadicas_excluidas > 0" class="badge badge-amber" style="margin-left: 6px; font-size: 10px; padding: 2px 4px;" title="Ventas esporádicas excluidas de la demanda diaria">
+                    ⚠️ -{{ store.fmtN(row.uds_esporadicas_excluidas) }}
+                  </span>
+                </td>
                 <td>
                   {{ row.rotacion_proyectada > 0 ? row.rotacion_proyectada.toFixed(2) : '0.00' }} uds/día
                   <span v-if="row.factor_tendencia > 1.2" class="badge badge-amber" style="margin-left: 4px; font-size: 10px; padding: 2px 4px;" title="Demanda Acelerando"><TrendingUp size="12" /></span>

@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 # backend/routers/analytics.py  â€” Todos los endpoints de anÃ¡lisis
 # =============================================================================
 from fastapi import APIRouter, UploadFile, File, HTTPException, Header
@@ -810,9 +810,7 @@ def gerencia_anomalias(x_session_id: str = Header(default="default-session")):
 def gerencia_reporte_diario(x_session_id: str = Header(default="default-session")):
     df_v, df_c, df_i, df_n = _management_frames(x_session_id)
     return reporte_diario(df_v, df_c, df_i, df_n)
-
-
-# â”€â”€ Inventario â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Inventario ───────────────────────────────────────────────────────────────
 @router.get("/inventario")
 def inventario(inv_min_dias: int = INV_MIN_DIAS, inv_max_dias: int = INV_MAX_DIAS, quieto_dias: int = QUIETO_DIAS_DEFAULT, x_session_id: str = Header(default="default-session")):
     df_i = get_df(x_session_id, "inventario")
@@ -821,9 +819,28 @@ def inventario(inv_min_dias: int = INV_MIN_DIAS, inv_max_dias: int = INV_MAX_DIA
         raise HTTPException(404, "Faltan datos")
 
     df_a = _inventory_with_total(df_i)
-    v_agr = df_v.groupby("Referencia", as_index=False).agg(uds_vendidas=("Cant", "sum"), ultima_venta=("Fecha", "max"))
-    df_a = df_a.merge(v_agr, on="Referencia", how="left")
+
+    # ── Filtrar ventas esporádicas para rotación ──
+    from backend.services.management_analytics import _tag_sporadic
+    df_v_filtered, sporadic_summary = _tag_sporadic(df_v)
+    if df_v_filtered is None or df_v_filtered.empty:
+        df_v_filtered = df_v
+
+    # Rotación con datos filtrados (sin picos esporádicos)
+    v_agr_filtered = df_v_filtered.groupby("Referencia", as_index=False).agg(uds_vendidas=("Cant", "sum"))
+    # Última venta con datos completos
+    v_agr_ultima = df_v.groupby("Referencia", as_index=False).agg(ultima_venta=("Fecha", "max"))
+
+    df_a = df_a.merge(v_agr_filtered, on="Referencia", how="left")
+    df_a = df_a.merge(v_agr_ultima, on="Referencia", how="left")
     df_a["uds_vendidas"] = df_a["uds_vendidas"].fillna(0)
+
+    # Info de esporádicas excluidas
+    if not sporadic_summary.empty:
+        df_a = df_a.merge(sporadic_summary, on="Referencia", how="left")
+        df_a["uds_esporadicas_excluidas"] = df_a["uds_esporadicas_excluidas"].fillna(0)
+    else:
+        df_a["uds_esporadicas_excluidas"] = 0
 
     max_fecha = df_v["Fecha"].max()
     min_fecha = df_v["Fecha"].min()
