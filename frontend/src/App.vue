@@ -1,16 +1,26 @@
 <template>
   <div id="app">
-    <AppSidebar />
-    <main class="main">
-      <div v-if="store.lastError" class="app-error-banner">
-        {{ store.lastError }}
+    <template v-if="isStatusLoaded">
+      <AppSidebar />
+      <main class="main">
+        <div v-if="store.lastError" class="app-error-banner">
+          {{ store.lastError }}
+        </div>
+        <router-view v-slot="{ Component }">
+          <transition name="fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
+      </main>
+    </template>
+
+    <div v-else class="app-boot">
+      <div class="app-boot-panel">
+        <div class="app-boot-spinner"></div>
+        <strong>Farma Analytics</strong>
+        <span>Cargando informacion...</span>
       </div>
-      <router-view v-if="isStatusLoaded" v-slot="{ Component }">
-        <transition name="fade" mode="out-in">
-          <component :is="Component" />
-        </transition>
-      </router-view>
-    </main>
+    </div>
   </div>
 </template>
 

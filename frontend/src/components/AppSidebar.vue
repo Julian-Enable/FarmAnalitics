@@ -6,12 +6,12 @@
         <Activity color="var(--accent)" size="28" />
         <h1 style="margin: 0; font-size: 1.5rem; letter-spacing: -0.5px;">Farma Analytics</h1>
       </div>
-      <p style="margin: 0; font-size: 0.85rem; color: var(--text);">AnÃ¡lisis de POS FarmacÃ©utico</p>
+      <p style="margin: 0; font-size: 0.85rem; color: var(--text);">Analisis de POS Farmaceutico</p>
     </div>
 
-    <!-- NavegaciÃ³n -->
+    <!-- Navegacion -->
     <nav class="sidebar-nav">
-      <div class="nav-label">AnÃ¡lisis</div>
+      <div class="nav-label">Analisis</div>
       <router-link
         v-for="item in navItems" :key="item.to"
         :to="item.to" custom v-slot="{ isActive, navigate }"
@@ -78,27 +78,27 @@
       <label class="upload-zone" :class="{ uploaded: ventasFiles.length }">
         <input type="file" multiple accept=".csv,.xlsx,.xls" @change="onVentas" />
         <div style="display:flex;align-items:center;gap:6px;">
-          <span v-if="ventasFiles.length" class="check">âœ“</span>
+          <span v-if="ventasFiles.length" class="check">OK</span>
           <TrendingUp size="16" />
           <strong>Ventas</strong>
         </div>
-        <span>{{ ventasFiles.length ? `${ventasFiles.length} archivo(s) listos` : 'CSV / Excel â€” mÃºltiples OK' }}</span>
+        <span>{{ ventasFiles.length ? `${ventasFiles.length} archivo(s) listos` : 'CSV / Excel - multiples OK' }}</span>
       </label>
 
       <label class="upload-zone" :class="{ uploaded: comprasFiles.length }">
         <input type="file" multiple accept=".csv,.xlsx,.xls" @change="onCompras" />
         <div style="display:flex;align-items:center;gap:6px;">
-          <span v-if="comprasFiles.length" class="check">âœ“</span>
+          <span v-if="comprasFiles.length" class="check">OK</span>
           <Store size="16" />
           <strong>Compras</strong>
         </div>
-        <span>{{ comprasFiles.length ? `${comprasFiles.length} archivo(s) listos` : 'CSV / Excel â€” mÃºltiples OK' }}</span>
+        <span>{{ comprasFiles.length ? `${comprasFiles.length} archivo(s) listos` : 'CSV / Excel - multiples OK' }}</span>
       </label>
 
       <label class="upload-zone" :class="{ uploaded: inventarioFile }">
         <input type="file" accept=".csv,.xlsx,.xls" @change="onInventario" />
         <div style="display:flex;align-items:center;gap:6px;">
-          <span v-if="inventarioFile" class="check">âœ“</span>
+          <span v-if="inventarioFile" class="check">OK</span>
           <Database size="16" />
           <strong>Inventario</strong>
         </div>
@@ -108,11 +108,11 @@
       <label class="upload-zone" :class="{ uploaded: notasCreditoFile }">
         <input type="file" accept=".csv,.xlsx,.xls" @change="onNotasCredito" />
         <div style="display:flex;align-items:center;gap:6px;">
-          <span v-if="notasCreditoFile" class="check">âœ“</span>
+          <span v-if="notasCreditoFile" class="check">OK</span>
           <RotateCcw size="16" />
-          <strong>Notas CrÃ©dito</strong>
+          <strong>Notas Credito</strong>
         </div>
-        <span>{{ notasCreditoFile ? notasCreditoFile.name : 'CSV / Excel â€” opcional' }}</span>
+        <span>{{ notasCreditoFile ? notasCreditoFile.name : 'CSV / Excel - opcional' }}</span>
       </label>
 
       <button
@@ -174,7 +174,7 @@
               {{ diag.ok ? 'OK' : 'Faltan columnas' }}
             </span>
           </div>
-          <div style="color:var(--fg-muted);margin-top:2px;">{{ store.fmtN(diag.filas) }} filas Â· {{ diag.columnas.length }} columnas</div>
+          <div style="color:var(--fg-muted);margin-top:2px;">{{ store.fmtN(diag.filas) }} filas - {{ diag.columnas.length }} columnas</div>
           <div v-if="diag.faltantes.length" style="color:var(--red);margin-top:2px;">
             Faltan: {{ diag.faltantes.join(', ') }}
           </div>
@@ -218,20 +218,20 @@ const liveRefreshLabel = computed(() => {
 
 const navItems = [
   { to: '/',             icon: shallowRef(LayoutDashboard), label: 'Resumen General'    },
-  { to: '/ventas',       icon: shallowRef(TrendingUp),      label: 'AnÃ¡lisis de Ventas' },
+  { to: '/ventas',       icon: shallowRef(TrendingUp),      label: 'Analisis de Ventas' },
   { to: '/rentabilidad', icon: shallowRef(DollarSign),      label: 'Rentabilidad'        },
   { to: '/inventario',   icon: shallowRef(AlertCircle),     label: 'Alertas Inventario'  },
   { to: '/compras',      icon: shallowRef(Scale),           label: 'Compras vs Ventas'   },
   { to: '/sedes',        icon: shallowRef(Store),           label: 'Rendimiento Sedes'   },
   { to: '/devoluciones', icon: shallowRef(RotateCcw),       label: 'Devoluciones'        },
-  { to: '/metas',        icon: shallowRef(Target),          label: 'ProyecciÃ³n y Metas'  },
+  { to: '/metas',        icon: shallowRef(Target),          label: 'Proyeccion y Metas'  },
 ]
 
 const dataLabels = {
   ventas:       'Ventas cargadas',
   compras:      'Compras cargadas',
   inventario:   'Inventario cargado',
-  notas_credito: 'Notas crÃ©dito cargadas',
+  notas_credito: 'Notas credito cargadas',
 }
 const diagnosticLabels = {
   ventas: 'Ventas',

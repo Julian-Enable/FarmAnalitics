@@ -13,7 +13,7 @@
           <strong>{{ formatFecha(data.periodo.inicio) }}</strong>
           a
           <strong>{{ formatFecha(data.periodo.fin) }}</strong>
-          <span class="cmd-period-badge">{{ data.periodo.dias }} dias</span>
+          <span class="cmd-period-badge">{{ displayPeriodDays }} dias</span>
         </p>
         <p v-else class="cmd-period">Sube tus archivos para activar el analisis</p>
       </div>
@@ -28,11 +28,23 @@
     <div v-if="_store.status.ventas" class="filters-bar" style="margin-bottom: 16px;">
       <div class="filter-group">
         <label>Fecha Inicio</label>
-        <input type="date" v-model="filters.fecha_ini" @change="applyFilters" />
+        <input
+          type="date"
+          v-model="filters.fecha_ini"
+          :min="minAllowedDate"
+          :max="todayIso"
+          @change="applyFilters"
+        />
       </div>
       <div class="filter-group">
         <label>Fecha Fin</label>
-        <input type="date" v-model="filters.fecha_fin" @change="applyFilters" />
+        <input
+          type="date"
+          v-model="filters.fecha_fin"
+          :min="minAllowedDate"
+          :max="todayIso"
+          @change="applyFilters"
+        />
       </div>
     </div>
 
@@ -127,7 +139,7 @@
           <div class="cmd-kpi-body">
             <span class="cmd-kpi-label">Total Facturas</span>
             <span class="cmd-kpi-value">{{ _store.fmtN(data.kpis.facturas) }}</span>
-            <span class="cmd-kpi-sub">{{ data.periodo?.dias ? (data.kpis.facturas / data.periodo.dias).toFixed(1) + ' facturas/día' : '' }}</span>
+            <span class="cmd-kpi-sub">{{ displayPeriodDays ? (data.kpis.facturas / displayPeriodDays).toFixed(1) + ' facturas/dia' : '' }}</span>
           </div>
         </div>
 
@@ -294,13 +306,55 @@ const _store  = useDashboardStore()
 const data    = computed(() => _store.data.resumen)
 const loading = computed(() => _store.loading.resumen)
 
-const filters = ref({ fecha_ini: '', fecha_fin: '' })
+function toIsoDate(date) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function parseIsoDate(value) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  const [y, m, d] = value.split('-').map(Number)
+  const parsed = new Date(y, m - 1, d)
+  if (
+    parsed.getFullYear() !== y ||
+    parsed.getMonth() !== m - 1 ||
+    parsed.getDate() !== d
+  ) return null
+  return parsed
+}
+
+const now = new Date()
+const todayIso = toIsoDate(now)
+const yearStartIso = `${now.getFullYear()}-01-01`
+const minAllowedDate = '2024-01-01'
+
+const filters = ref({ fecha_ini: yearStartIso, fecha_fin: todayIso })
+
+function normalizeFilters() {
+  const minDate = parseIsoDate(minAllowedDate)
+  const today = parseIsoDate(todayIso)
+  let fin = parseIsoDate(filters.value.fecha_fin)
+  let ini = parseIsoDate(filters.value.fecha_ini)
+
+  if (!fin || fin < minDate || fin > today) fin = today
+  if (!ini || ini < minDate) ini = new Date(fin.getFullYear(), 0, 1)
+  if (ini < minDate) ini = minDate
+  if (ini > today) ini = today
+  if (ini > fin) fin = new Date(ini)
+
+  filters.value.fecha_ini = toIsoDate(ini)
+  filters.value.fecha_fin = toIsoDate(fin)
+
+  return {
+    fecha_ini: filters.value.fecha_ini,
+    fecha_fin: filters.value.fecha_fin,
+  }
+}
 
 function applyFilters() {
-  const params = {}
-  if (filters.value.fecha_ini) params.fecha_ini = filters.value.fecha_ini
-  if (filters.value.fecha_fin) params.fecha_fin = filters.value.fecha_fin
-  _store.fetchResumen(params)
+  _store.fetchResumen(normalizeFilters())
 }
 
 onMounted(() => {
@@ -309,6 +363,13 @@ onMounted(() => {
 
 const tendenciaCat  = computed(() => data.value?.tendencia?.map(d => d.fecha) || [])
 const tendenciaData = computed(() => data.value?.tendencia?.map(d => d.ingreso) || [])
+
+const displayPeriodDays = computed(() => {
+  const inicio = parseIsoDate(data.value?.periodo?.inicio)
+  const fin = parseIsoDate(data.value?.periodo?.fin)
+  if (!inicio || !fin || inicio > fin) return data.value?.periodo?.dias || 0
+  return Math.round((fin - inicio) / 86400000) + 1
+})
 
 const hayAlertas = computed(() => {
   const a = data.value?.alertas
@@ -339,6 +400,8 @@ const healthClass = computed(() => {
 
 function formatFecha(f) {
   if (!f) return ''
+  const parsed = parseIsoDate(f)
+  if (!parsed) return f
   const [y, m, d] = f.split('-')
   const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
   return `${d} ${meses[parseInt(m)-1]} ${y}`

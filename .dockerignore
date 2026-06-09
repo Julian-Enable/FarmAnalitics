@@ -5,6 +5,7 @@ __pycache__
 *.pyc
 *.log
 *.err
+backend/scratch/
 data/historico/*.parquet
 data/historico/_backups/
 frontend/node_modules

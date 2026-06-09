@@ -4,8 +4,6 @@ pandas
 numpy
 openpyxl
 python-multipart
-streamlit
-plotly
 holidays
 pyodbc>=5.1.0
 python-dotenv>=1.0.0

@@ -66,6 +66,7 @@ from config import (
 router = APIRouter(prefix="/api")
 
 SEDES = SEDES_INVENTARIO
+MIN_ANALYTICS_DATE = date(2024, 1, 1)
 
 # â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -88,6 +89,33 @@ def _inclusive_days(min_fecha, max_fecha, default: int = 1) -> int:
     if pd.isna(min_fecha) or pd.isna(max_fecha):
         return default
     return max((max_fecha - min_fecha).days + 1, 1)
+
+
+def _parse_iso_date(value: str | None, field: str) -> date | None:
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(400, f"{field} debe tener formato YYYY-MM-DD")
+
+
+def _effective_summary_range(fecha_ini: str | None, fecha_fin: str | None) -> tuple[date, date]:
+    today = date.today()
+    f_fin = _parse_iso_date(fecha_fin, "fecha_fin") or today
+    if f_fin < MIN_ANALYTICS_DATE or f_fin > today:
+        f_fin = today
+
+    f_ini = _parse_iso_date(fecha_ini, "fecha_ini") or date(f_fin.year, 1, 1)
+    if f_ini < MIN_ANALYTICS_DATE:
+        f_ini = date(f_fin.year, 1, 1)
+    if f_ini < MIN_ANALYTICS_DATE:
+        f_ini = MIN_ANALYTICS_DATE
+
+    if f_ini > f_fin:
+        raise HTTPException(400, "fecha_ini no puede ser mayor que fecha_fin")
+
+    return f_ini, f_fin
 
 
 def _apply_date_filter(
@@ -468,10 +496,7 @@ def resumen(
         raise HTTPException(500, "Base de datos no conectada")
 
     # Definir un unico rango efectivo para que todos los KPIs usen el mismo periodo.
-    import datetime
-    from dateutil.relativedelta import relativedelta
-    f_fin = datetime.datetime.strptime(fecha_fin, "%Y-%m-%d").date() if fecha_fin else datetime.date.today()
-    f_ini = datetime.datetime.strptime(fecha_ini, "%Y-%m-%d").date() if fecha_ini else datetime.date(f_fin.year, 1, 1)
+    f_ini, f_fin = _effective_summary_range(fecha_ini, fecha_fin)
     fecha_ini_eff = f_ini.strftime("%Y-%m-%d")
     fecha_fin_eff = f_fin.strftime("%Y-%m-%d")
     dias_periodo = max((f_fin - f_ini).days + 1, 1)
