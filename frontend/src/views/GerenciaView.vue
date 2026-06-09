@@ -9,6 +9,18 @@
       <div class="accent-bar"></div>
     </div>
 
+    <ModuleInfo>
+      <p><strong>¿Qué te muestra esta página?</strong> Es tu asistente de operaciones diarias. Aquí encuentras acciones concretas basadas en datos y anomalías de tus ventas e inventario:</p>
+      <ul style="margin-left: 20px; margin-top: 8px;">
+        <li><strong>Reporte Diario:</strong> Resumen ejecutivo de cómo te fue ayer y cómo va el mes.</li>
+        <li><strong>Sugerido de Traslado:</strong> Calcula si hay exceso de stock de un producto en una sede y faltante en otra, sugiriendo moverlo antes de comprar más. Filtra picos esporádicos para no sobre-reaccionar.</li>
+        <li><strong>Pedido Automático por Proveedor:</strong> Agrupa todos los productos que están bajos de stock y te sugiere la compra agrupada por proveedor.</li>
+        <li><strong>Fugas de Margen:</strong> Productos que estás vendiendo mucho pero con un margen de ganancia críticamente bajo (&lt;8%).</li>
+        <li><strong>Anomalías:</strong> Detecta tickets inusualmente grandes, ventas de productos atípicos, caídas abruptas de venta en sedes o costos que subieron más del 20% de golpe.</li>
+        <li><strong>⚠️ Ventas Esporádicas (Ícono Amarillo):</strong> Si ves este ícono, significa que el sistema detectó una venta inusual (ej. licitación) y la <strong>excluyó</strong> del cálculo de compras y traslados para no pedir de más.</li>
+      </ul>
+    </ModuleInfo>
+
     <div v-if="store.errors.gerencia" class="card" style="border-color:#fecdd3;color:#be123c;margin-bottom:16px;background:#fff1f2;">
       {{ store.errors.gerencia }}
     </div>
@@ -102,6 +114,7 @@ import { computed, defineComponent, h, onMounted } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
 import KpiCard from '../components/ui/KpiCard.vue'
 import SectionTitle from '../components/ui/SectionTitle.vue'
+import ModuleInfo from '../components/ui/ModuleInfo.vue'
 import { exportToCSV } from '../utils/export'
 import {
   ArrowLeftRight,
