@@ -22,11 +22,23 @@
     <div v-if="store.status.ventas && store.status.inventario" class="filters-bar" style="margin-bottom: 16px;">
       <div class="filter-group">
         <label>Fecha Inicio</label>
-        <input type="date" v-model="filters.fecha_ini" @change="applyFilters" />
+        <input
+          type="date"
+          v-model="filters.fecha_ini"
+          :min="minAllowedDate"
+          :max="todayIso"
+          @change="applyFilters"
+        />
       </div>
       <div class="filter-group">
         <label>Fecha Fin</label>
-        <input type="date" v-model="filters.fecha_fin" @change="applyFilters" />
+        <input
+          type="date"
+          v-model="filters.fecha_fin"
+          :min="minAllowedDate"
+          :max="todayIso"
+          @change="applyFilters"
+        />
       </div>
     </div>
 
@@ -211,11 +223,47 @@ const data = computed(() => store.data.rentabilidad)
 const loading = computed(() => store.loading.rentabilidad)
 
 const filters = ref({ fecha_ini: '', fecha_fin: '' })
+const minAllowedDate = '2024-01-01'
+const todayIso = toIsoDate(new Date())
 
-function applyFilters() {
+function toIsoDate(date) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function parseIsoDate(value) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  const [y, m, d] = value.split('-').map(Number)
+  const parsed = new Date(y, m - 1, d)
+  if (
+    parsed.getFullYear() !== y ||
+    parsed.getMonth() !== m - 1 ||
+    parsed.getDate() !== d
+  ) return null
+  return parsed
+}
+
+function buildDateParams() {
   const params = {}
+  const minDate = parseIsoDate(minAllowedDate)
+  const today = parseIsoDate(todayIso)
+  const start = parseIsoDate(filters.value.fecha_ini)
+  const end = parseIsoDate(filters.value.fecha_fin)
+
+  if (filters.value.fecha_ini && (!start || start < minDate || start > today)) return null
+  if (filters.value.fecha_fin && (!end || end < minDate || end > today)) return null
+  if (start && end && start > end) return null
+
   if (filters.value.fecha_ini) params.fecha_ini = filters.value.fecha_ini
   if (filters.value.fecha_fin) params.fecha_fin = filters.value.fecha_fin
+  return params
+}
+
+function applyFilters() {
+  const params = buildDateParams()
+  if (!params) return
   store.fetchRentabilidad(params)
 }
 

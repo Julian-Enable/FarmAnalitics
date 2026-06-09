@@ -118,6 +118,13 @@ def _effective_summary_range(fecha_ini: str | None, fecha_fin: str | None) -> tu
     return f_ini, f_fin
 
 
+def _normalize_optional_date_range(fecha_ini: str | None, fecha_fin: str | None) -> tuple[str | None, str | None]:
+    if not fecha_ini and not fecha_fin:
+        return None, None
+    f_ini, f_fin = _effective_summary_range(fecha_ini, fecha_fin)
+    return f_ini.strftime("%Y-%m-%d"), f_fin.strftime("%Y-%m-%d")
+
+
 def _apply_date_filter(
     df: pd.DataFrame,
     date_col: str,
@@ -636,6 +643,8 @@ def rentabilidad(fecha_ini: str = None, fecha_fin: str = None, x_session_id: str
     from backend.services.db_config import is_db_configured
     from backend.services.db_service import get_db_service
 
+    fecha_ini, fecha_fin = _normalize_optional_date_range(fecha_ini, fecha_fin)
+
     if is_db_configured():
         db = get_db_service()
         if db:
@@ -653,7 +662,6 @@ def rentabilidad(fecha_ini: str = None, fecha_fin: str = None, x_session_id: str
 
     # Este fallback estÃ¡ muy limitado ya que la vista requiere kpis, top_rentables, etc.
     # Solo devolvemos la matriz para compatibilidad.
-    from backend.services.processing import _sales_profit_frame
     r = _sales_profit_frame(df_v, df_i)
     r = r.sort_values("utilidad_total", ascending=False)
 
