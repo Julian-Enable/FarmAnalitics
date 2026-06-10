@@ -372,18 +372,18 @@ const displayPeriodDays = computed(() => {
 })
 
 const hayAlertas = computed(() => {
-  const a = data.value?.alertas
-  return a && (a.sin_stock > 0 || a.criticos_7d > 0 || a.atencion_15d > 0 || a.capital_quieto > 0)
+  const a = data.value?.alertas_inventario
+  return a && (a.productos_sin_stock > 0 || a.productos_criticos_7d > 0 || a.productos_atencion_15d > 0 || a.capital_quieto > 0)
 })
 
 // Puntuación de salud del negocio (0-100)
 const healthScore = computed(() => {
   if (!data.value) return '—'
-  const a = data.value.alertas || {}
+  const a = data.value.alertas_inventario || {}
   const k = data.value.kpis
   let score = 100
-  score -= Math.min(a.sin_stock || 0, 20) * 2      // hasta -40 por quiebres
-  score -= Math.min(a.criticos_7d || 0, 10) * 1.5  // hasta -15 por críticos
+  score -= Math.min(a.productos_sin_stock || 0, 20) * 2      // hasta -40 por quiebres
+  score -= Math.min(a.productos_criticos_7d || 0, 10) * 1.5  // hasta -15 por críticos
   if (k.variacion_ing != null && k.variacion_ing < 0) score -= 10
   if (k.margen_pct != null && k.margen_pct < 10) score -= 10
   score = Math.max(0, Math.min(100, Math.round(score)))
