@@ -299,17 +299,22 @@ def _sales_profit_frame(df_v: pd.DataFrame, df_i: pd.DataFrame) -> pd.DataFrame:
     v = df_v.groupby("Referencia", as_index=False).agg(
         cant_vend=("Cant", "sum"),
         ingreso_total=("Ingreso", "sum"),
-        descripcion=("Descripcion", "first"),
-        laboratorio=("Laboratorio", "first"),
+        nombre=("Descripcion", "last"),
+        lab=("Laboratorio", "last") if "Laboratorio" in df_v.columns else ("Referencia", "last"),
     )
     extra = ["Nivel"] if "Nivel" in df_i.columns else []
     r = v.merge(_inventory_price_lookup(df_i, extra), on="Referencia", how="inner")
-    r["costo_total"] = r["Precio Compra"] * r["cant_vend"]
-    r["utilidad_total"] = r["ingreso_total"] - r["costo_total"]
-    r["precio_venta_prom"] = r["ingreso_total"] / r["cant_vend"].where(r["cant_vend"] != 0)
-    r["margen_unit"] = r["precio_venta_prom"] - r["Precio Compra"]
-    r["margen_pct"] = ((r["utilidad_total"] / r["ingreso_total"]) * 100).round(2)
+    r["precio_compra"] = r["Precio Compra"]
+    r["precio_venta"] = r["ingreso_total"] / r["cant_vend"].where(r["cant_vend"] != 0)
+    r["utilidad_unit"] = r["precio_venta"] - r["precio_compra"]
+    r["utilidad_total"] = r["utilidad_unit"] * r["cant_vend"]
+    r["margen_pct"] = ((r["utilidad_unit"] / r["precio_venta"]) * 100).round(2)
     r["margen_pct"] = r["margen_pct"].replace([float("inf"), float("-inf")], 0).fillna(0)
+    
+    min_fecha = df_v["Fecha"].min() if "Fecha" in df_v.columns else pd.NaT
+    max_fecha = df_v["Fecha"].max() if "Fecha" in df_v.columns else pd.NaT
+    dias = max((max_fecha - min_fecha).days + 1, 1) if pd.notna(min_fecha) and pd.notna(max_fecha) else 1
+    r["rotacion_diaria"] = r["cant_vend"] / dias
     return r
 
 
@@ -873,11 +878,11 @@ def rentabilidad(fecha_ini: str = None, fecha_fin: str = None, x_session_id: str
     alta_rotacion_min = _high_rotation_threshold(r) if not r.empty else HIGH_ROTATION_MIN_UNITS
     bajo_margen_df = r[(r["margen_pct"] < LOW_MARGIN_PCT) & (r["cant_vend"] >= alta_rotacion_min)].copy()
     por_laboratorio = (
-        r.groupby("laboratorio", as_index=False)
+        r.groupby("lab", as_index=False)
         .agg(utilidad_total=("utilidad_total", "sum"))
         .sort_values("utilidad_total", ascending=False)
         .head(15)
-    ) if "laboratorio" in r.columns and not r.empty else pd.DataFrame()
+    ) if "lab" in r.columns and not r.empty else pd.DataFrame()
     dias_periodo = _inclusive_days(df_v["Fecha"].min(), df_v["Fecha"].max(), default=1) if "Fecha" in df_v.columns else 1
 
     return {
