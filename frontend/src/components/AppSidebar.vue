@@ -204,17 +204,35 @@
         </div>
       </div>
     </div>
+
+    <!-- Alternador de Tema -->
+    <div class="theme-switch-container">
+      <span>Apariencia</span>
+      <button class="theme-switch-btn" @click="store.toggleTheme">
+        <Sun v-if="store.theme === 'dark'" size="14" />
+        <Moon v-else size="14" />
+        {{ store.theme === 'dark' ? 'Tema Claro' : 'Tema Oscuro' }}
+      </button>
+    </div>
   </aside>
 </template>
 
 <script setup>
-import { ref, computed, shallowRef } from 'vue'
+import { ref, computed, shallowRef, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDashboardStore } from '../stores/dashboard'
-import { LayoutDashboard, TrendingUp, DollarSign, AlertCircle, Scale, Store, FileUp, Database, Activity, Download, Trash2, RotateCcw, Target, RefreshCw, BriefcaseBusiness } from 'lucide-vue-next'
+import { LayoutDashboard, TrendingUp, DollarSign, AlertCircle, Scale, Store, FileUp, Database, Activity, Download, Trash2, RotateCcw, Target, RefreshCw, BriefcaseBusiness, Sun, Moon } from 'lucide-vue-next'
 
 const store  = useDashboardStore()
 const router = useRouter()
+
+onMounted(() => {
+  if (store.theme === 'light') {
+    document.body.classList.add('light-theme')
+  } else {
+    document.body.classList.remove('light-theme')
+  }
+})
 
 const ventasFiles    = ref([])
 const comprasFiles   = ref([])

@@ -17,21 +17,24 @@ defineProps({
 .dash-section-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  margin-bottom: 16px;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-h);
+  gap: 10px;
+  margin-top: 4px;
+  margin-bottom: 20px;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--fg);
+  letter-spacing: -0.3px;
 }
 
 .section-icon {
   width: 20px;
   height: 20px;
   color: var(--accent);
+  stroke-width: 2.2px;
 }
 
 .section-icon-text {
-  font-size: 20px;
+  font-size: 1.25rem;
 }
 </style>

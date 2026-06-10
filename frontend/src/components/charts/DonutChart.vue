@@ -4,6 +4,9 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useDashboardStore } from '../../stores/dashboard'
+
+const store = useDashboardStore()
 
 const props = defineProps({
   labels: { type: Array, required: true },
@@ -12,15 +15,20 @@ const props = defineProps({
 
 const chartOptions = computed(() => ({
   chart: {
-    fontFamily: 'Inter, sans-serif',
+    fontFamily: 'var(--font-body)',
+    background: 'transparent',
     animations: { enabled: true, easing: 'easeinout', speed: 800 }
   },
   labels: props.labels,
-  colors: ['#5E6AD2', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'],
+  colors: ['#6366f1', '#10b981', '#f59e0b', '#f43f5e', '#a855f7'],
   dataLabels: {
     enabled: true,
     formatter: function (val) {
       return val.toFixed(1) + "%"
+    },
+    style: {
+      fontFamily: 'var(--font-body)',
+      fontWeight: 700
     }
   },
   plotOptions: {
@@ -30,14 +38,21 @@ const chartOptions = computed(() => ({
       }
     }
   },
-  stroke: { show: true, colors: ['#ffffff'], width: 2 },
+  stroke: { 
+    show: true, 
+    colors: [store.theme === 'dark' ? '#0f162a' : '#ffffff'], 
+    width: 2 
+  },
   legend: {
     position: 'bottom',
     horizontalAlign: 'center',
-    labels: { colors: '#374151' }
+    labels: { 
+      colors: store.theme === 'dark' ? '#9ca3af' : '#4b5563',
+      fontFamily: 'var(--font-body)'
+    }
   },
   tooltip: {
-    theme: 'light',
+    theme: store.theme,
     y: {
       formatter: function (val) {
         return val.toLocaleString('es-CO')

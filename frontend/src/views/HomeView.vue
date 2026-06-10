@@ -62,8 +62,8 @@
       <!-- Fila 1: KPIs con variación -->
       <div class="kpi-grid kpi-grid-3" style="margin-bottom: 16px;">
         <div class="cmd-kpi-card">
-          <div class="cmd-kpi-icon-wrap" style="background: #eff6ff;">
-            <DollarSign size="18" color="#2563eb" />
+          <div class="cmd-kpi-icon-wrap icon-wrap-blue">
+            <DollarSign size="18" />
           </div>
           <div class="cmd-kpi-body">
             <span class="cmd-kpi-label">{{ data.devoluciones ? 'Ingresos Brutos' : 'Ingresos Totales' }}</span>
@@ -78,8 +78,8 @@
         </div>
 
         <div class="cmd-kpi-card">
-          <div class="cmd-kpi-icon-wrap" style="background: #f0fdf4;">
-            <Gem size="18" color="#16a34a" />
+          <div class="cmd-kpi-icon-wrap icon-wrap-green">
+            <Gem size="18" />
           </div>
           <div class="cmd-kpi-body">
             <span class="cmd-kpi-label">Utilidad Bruta</span>
@@ -88,23 +88,23 @@
           </div>
         </div>
 
-        <div v-if="data.devoluciones" class="cmd-kpi-card" style="border: 1px solid var(--red-light); background: #fffcfc;">
-          <div class="cmd-kpi-icon-wrap" style="background: #fee2e2;">
-            <RotateCcw size="18" color="#ef4444" />
+        <div v-if="data.devoluciones" class="cmd-kpi-card" style="border: 1.5px solid var(--red); background: var(--red-lt);">
+          <div class="cmd-kpi-icon-wrap icon-wrap-red">
+            <RotateCcw size="18" />
           </div>
           <div class="cmd-kpi-body">
             <span class="cmd-kpi-label" style="color: var(--red);">Devoluciones (Notas Cr)</span>
             <span class="cmd-kpi-value" style="color: var(--red);">{{ _store.fmt(data.devoluciones.total_devuelto) }}</span>
             <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
-              <span class="cmd-kpi-sub" style="color: var(--red);">Tasa: {{ data.devoluciones.tasa_pct }}%</span>
-              <router-link to="/devoluciones" style="font-size:10px; color:var(--red); text-decoration:underline;">Ver detalle</router-link>
+              <span class="cmd-kpi-sub" style="color: var(--red); opacity: 0.9;">Tasa: {{ data.devoluciones.tasa_pct }}%</span>
+              <router-link to="/devoluciones" style="font-size:10px; color:var(--red); font-weight:700; text-decoration:underline;">Ver detalle</router-link>
             </div>
           </div>
         </div>
 
         <div class="cmd-kpi-card">
-          <div class="cmd-kpi-icon-wrap" style="background: #fdf4ff;">
-            <CreditCard size="18" color="#9333ea" />
+          <div class="cmd-kpi-icon-wrap icon-wrap-purple">
+            <CreditCard size="18" />
           </div>
           <div class="cmd-kpi-body">
             <span class="cmd-kpi-label">Ticket Promedio</span>
@@ -118,8 +118,8 @@
         </div>
 
         <div class="cmd-kpi-card">
-          <div class="cmd-kpi-icon-wrap" style="background: #fff7ed;">
-            <Package size="18" color="#ea580c" />
+          <div class="cmd-kpi-icon-wrap icon-wrap-orange">
+            <Package size="18" />
           </div>
           <div class="cmd-kpi-body">
             <span class="cmd-kpi-label">Unidades Vendidas</span>
@@ -133,8 +133,8 @@
         </div>
 
         <div class="cmd-kpi-card">
-          <div class="cmd-kpi-icon-wrap" style="background: #fefce8;">
-            <Receipt size="18" color="#ca8a04" />
+          <div class="cmd-kpi-icon-wrap icon-wrap-amber">
+            <Receipt size="18" />
           </div>
           <div class="cmd-kpi-body">
             <span class="cmd-kpi-label">Total Facturas</span>
@@ -144,8 +144,8 @@
         </div>
 
         <div class="cmd-kpi-card cmd-kpi-muted">
-          <div class="cmd-kpi-icon-wrap" style="background: #f1f5f9;">
-            <Activity size="18" color="#64748b" />
+          <div class="cmd-kpi-icon-wrap icon-wrap-gray">
+            <Activity size="18" />
           </div>
           <div class="cmd-kpi-body">
             <span class="cmd-kpi-label">Uds/Factura Promedio</span>

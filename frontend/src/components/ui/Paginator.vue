@@ -1,7 +1,7 @@
 <template>
   <div class="paginator-container" v-if="totalPages > 1">
     <div class="paginator-info">
-      Mostrando {{ startIndex + 1 }} a {{ endIndex }} de {{ totalItems }}
+      Mostrando <strong>{{ startIndex + 1 }}</strong> a <strong>{{ endIndex }}</strong> de <strong>{{ totalItems }}</strong> registros
     </div>
     
     <div class="paginator-controls">
@@ -10,7 +10,7 @@
         :disabled="modelValue === 1"
         @click="changePage(modelValue - 1)"
       >
-        <ChevronLeft size="16" />
+        <ChevronLeft size="15" />
       </button>
       
       <div class="page-numbers">
@@ -30,7 +30,7 @@
         :disabled="modelValue === totalPages"
         @click="changePage(modelValue + 1)"
       >
-        <ChevronRight size="16" />
+        <ChevronRight size="15" />
       </button>
     </div>
   </div>
@@ -96,14 +96,17 @@ function changePage(page) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 0 0 0;
-  margin-top: 12px;
+  padding: 16px 0 0 0;
+  margin-top: 16px;
   border-top: 1px solid var(--border);
-  font-size: 13px;
+  font-size: 0.85rem;
 }
 
 .paginator-info {
   color: var(--fg-muted);
+}
+.paginator-info strong {
+  color: var(--fg);
 }
 
 .paginator-controls {
@@ -124,31 +127,41 @@ function changePage(page) {
   min-width: 32px;
   height: 32px;
   padding: 0 8px;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
   cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 500;
+  transition: all 0.2s var(--ease);
+  font-family: var(--font-display);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+body.light-theme .page-btn {
+  background: rgba(0, 0, 0, 0.02);
 }
 
 .page-btn:hover:not(:disabled) {
   border-color: var(--accent);
-  color: var(--accent);
-  background: var(--bg-hover);
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: var(--glow-accent);
+}
+
+body.light-theme .page-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .page-btn.active {
-  background: var(--accent);
+  background: var(--accent-gradient);
   color: white;
   border-color: var(--accent);
+  box-shadow: 0 4px 10px rgba(99, 102, 241, 0.25);
 }
 
 .page-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.2;
   cursor: not-allowed;
 }
 </style>

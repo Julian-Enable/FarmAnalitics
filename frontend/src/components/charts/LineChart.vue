@@ -4,6 +4,9 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useDashboardStore } from '../../stores/dashboard'
+
+const store = useDashboardStore()
 
 const props = defineProps({
   categories: { type: Array, required: true },
@@ -14,23 +17,28 @@ const props = defineProps({
 
 const chartOptions = computed(() => ({
   chart: {
-    fontFamily: 'Inter, sans-serif',
+    fontFamily: 'var(--font-body)',
+    background: 'transparent',
     toolbar: { show: false },
     zoom: { enabled: false },
     animations: { enabled: true, easing: 'easeinout', speed: 800 }
   },
-  colors: ['#5E6AD2', '#10B981', '#F59E0B'],
+  colors: ['#6366f1', '#10b981', '#f59e0b'],
   stroke: { curve: 'smooth', width: 3 },
   xaxis: {
     categories: props.categories,
     tickAmount: 10,
     labels: { 
-      style: { colors: '#6B7280', fontSize: '11px' },
+      style: { 
+        colors: store.theme === 'dark' ? '#9ca3af' : '#4b5563', 
+        fontSize: '11px',
+        fontFamily: 'var(--font-body)',
+        fontWeight: 500
+      },
       rotate: -45,
       rotateAlways: false,
       hideOverlappingLabels: true,
       formatter: function(val) {
-        // Truncate long labels slightly if they are not dates
         if (typeof val === 'string' && val.length > 15) return val.substring(0, 15) + '...'
         return val
       }
@@ -40,7 +48,12 @@ const chartOptions = computed(() => ({
   },
   yaxis: {
     labels: {
-      style: { colors: '#6B7280', fontSize: '12px' },
+      style: { 
+        colors: store.theme === 'dark' ? '#9ca3af' : '#4b5563', 
+        fontSize: '12px',
+        fontFamily: 'var(--font-body)',
+        fontWeight: 500
+      },
       formatter: (value) => {
         if (value >= 1000000) return '$' + (value / 1000000).toFixed(1) + 'M'
         if (value >= 1000) return '$' + (value / 1000).toFixed(0) + 'k'
@@ -49,14 +62,14 @@ const chartOptions = computed(() => ({
     }
   },
   grid: {
-    borderColor: '#E5E7EB',
+    borderColor: store.theme === 'dark' ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.08)',
     strokeDashArray: 4,
     xaxis: { lines: { show: true } },
     yaxis: { lines: { show: true } }
   },
   dataLabels: { enabled: false },
   tooltip: {
-    theme: 'light',
+    theme: store.theme,
     y: {
       formatter: function (val) {
         return "$" + val.toLocaleString('es-CO')

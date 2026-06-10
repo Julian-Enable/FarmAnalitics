@@ -26,6 +26,19 @@ function sleep(ms) {
 }
 
 export const useDashboardStore = defineStore('dashboard', () => {
+  const theme = ref(localStorage.getItem('farm_theme') || 'dark')
+  
+  function toggleTheme() {
+    if (theme.value === 'dark') {
+      theme.value = 'light'
+      document.body.classList.add('light-theme')
+    } else {
+      theme.value = 'dark'
+      document.body.classList.remove('light-theme')
+    }
+    localStorage.setItem('farm_theme', theme.value)
+  }
+
   const status = reactive({ ventas: false, compras: false, inventario: false, notas_credito: false, metas: false })
   const uploading = ref(false)
   const exporting = ref(false)
@@ -572,6 +585,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   return {
+    theme, toggleTheme,
     status, uploading, exporting, refreshingLive, refreshingLiveMode, localAgentAvailable, localAgentStatus,
     uploadError, uploadDiagnostic, lastError, files,
     historicalStatus,
