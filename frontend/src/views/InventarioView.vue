@@ -189,6 +189,12 @@
                 <th @click="sortByQuieto('Total')" style="cursor: pointer;">
                   Stock <span style="opacity: 0.5; font-size: 10px;">{{ sortQuietoCol === 'Total' ? (sortQuietoDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
+                <th @click="sortByQuieto('ultima_compra_fecha')" style="cursor: pointer;">
+                  Última Compra <span style="opacity: 0.5; font-size: 10px;">{{ sortQuietoCol === 'ultima_compra_fecha' ? (sortQuietoDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortByQuieto('ultima_compra_cantidad')" style="cursor: pointer;">
+                  Cant. Última Compra <span style="opacity: 0.5; font-size: 10px;">{{ sortQuietoCol === 'ultima_compra_cantidad' ? (sortQuietoDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
                 <th @click="sortByQuieto('capital_inmovilizado')" style="cursor: pointer;">
                   Capital Atrapado <span style="opacity: 0.5; font-size: 10px;">{{ sortQuietoCol === 'capital_inmovilizado' ? (sortQuietoDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
@@ -200,10 +206,12 @@
                 <td>{{ row.Descripcion?.substring(0, 45) }}</td>
                 <td><span class="badge badge-red">{{ row.dias_sin_venta >= 9999 ? 'NUNCA' : row.dias_sin_venta + ' d' }}</span></td>
                 <td>{{ store.fmtN(row.Total) }}</td>
+                <td>{{ row.ultima_compra_fecha }}</td>
+                <td>{{ row.ultima_compra_cantidad ? store.fmtN(row.ultima_compra_cantidad) : '0' }}</td>
                 <td style="font-weight: 600;">{{ store.fmt(row.capital_inmovilizado) }}</td>
               </tr>
               <tr v-if="!data.inventario_quieto_tabla.length">
-                <td colspan="5" style="text-align: center; color: var(--fg-muted);">¡Excelente! Todo el inventario está rotando.</td>
+                <td colspan="7" style="text-align: center; color: var(--fg-muted);">¡Excelente! Todo el inventario está rotando.</td>
               </tr>
             </tbody>
           </table>
@@ -338,6 +346,8 @@ function exportQuieto() {
     { key: 'Descripcion', label: 'Descripción' },
     { key: 'dias_sin_venta', label: 'Días Sin Venta' },
     { key: 'Total', label: 'Stock Actual' },
+    { key: 'ultima_compra_fecha', label: 'Fecha Última Compra' },
+    { key: 'ultima_compra_cantidad', label: 'Cant. Última Compra', formatter: v => v ? Math.round(v) : 0 },
     { key: 'capital_inmovilizado', label: 'Capital Inmovilizado', formatter: v => v ? Math.round(v) : 0 }
   ]
   exportToCSV(sortedQuieto.value, cols, 'Inventario_Quieto')

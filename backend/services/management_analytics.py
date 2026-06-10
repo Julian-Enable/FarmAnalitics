@@ -364,8 +364,8 @@ def sugerido_traslados(ventas: pd.DataFrame, inventario: pd.DataFrame, min_days:
     }
 
 
-def pedido_por_proveedor(ventas: pd.DataFrame, compras: pd.DataFrame, inventario: pd.DataFrame, target_days: int = 35, min_days: int = 15) -> dict[str, Any]:
-    sales_raw, dias, _ = _period_sales(ventas, 35)
+def pedido_por_proveedor(ventas: pd.DataFrame, compras: pd.DataFrame, inventario: pd.DataFrame, target_days: int = 5, min_days: int = 5) -> dict[str, Any]:
+    sales_raw, dias, max_fecha = _period_sales(ventas, 90)
     if sales_raw.empty or inventario is None or inventario.empty:
         return {"kpis": {"proveedores": 0, "items": 0, "costo_estimado": 0}, "proveedores": [], "items": []}
 
@@ -395,6 +395,9 @@ def pedido_por_proveedor(ventas: pd.DataFrame, compras: pd.DataFrame, inventario
     if compras is not None and not compras.empty and {"REFERENCIA", "PROVEEDOR"}.issubset(compras.columns):
         comp = compras.copy()
         comp["FECHA"] = pd.to_datetime(comp["FECHA"], errors="coerce") if "FECHA" in comp.columns else pd.NaT
+        if max_fecha is not None:
+            start_date = max_fecha - pd.Timedelta(days=90 - 1)
+            comp = comp[comp["FECHA"] >= start_date]
         prov = comp.sort_values("FECHA").groupby("REFERENCIA", as_index=False).agg(proveedor=("PROVEEDOR", "last"))
         base = base.merge(prov.rename(columns={"REFERENCIA": "Referencia"}), on="Referencia", how="left")
     else:
@@ -542,9 +545,9 @@ def reporte_diario(ventas: pd.DataFrame, compras: pd.DataFrame, inventario: pd.D
     ayer = sales[sales["Fecha"].dt.normalize() == dia]
     mes = sales[sales["Fecha"] >= mes_ini]
     top_sedes = ayer.groupby("Punto Venta", as_index=False).agg(ingreso=("Ingreso", "sum"), unidades=("Cant", "sum")).sort_values("ingreso", ascending=False)
-    pedidos = pedido_por_proveedor(sales, compras, inventario)
-    rent = rentabilidad_gerencial(sales, inventario)
-    anom = detector_anomalias(sales, compras, inventario, notas)
+    pedidos = pedido_por_proveedor(ventas, compras, inventario)
+    rent = rentabilidad_gerencial(ventas, inventario)
+    anom = detector_anomalias(ventas, compras, inventario, notas)
     inv = inventario.copy() if inventario is not None else pd.DataFrame()
     if not inv.empty:
         inv["Total"] = _num(inv.get("Total", 0))

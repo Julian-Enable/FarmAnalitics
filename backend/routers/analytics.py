@@ -984,6 +984,29 @@ def inventario(inv_min_dias: int = INV_MIN_DIAS, inv_max_dias: int = INV_MAX_DIA
 
     df_a = df_a.merge(v_agr_filtered, on="Referencia", how="left")
     df_a = df_a.merge(v_agr_ultima, on="Referencia", how="left")
+
+    df_c = get_df(x_session_id, "compras")
+    if df_c is not None and not df_c.empty and "REFERENCIA" in df_c.columns:
+        df_c_sorted = df_c[df_c["FECHA"].notna()].sort_values("FECHA")
+        if not df_c_sorted.empty:
+            last_purchases = df_c_sorted.groupby("REFERENCIA").last().reset_index()
+            last_purchases = last_purchases[["REFERENCIA", "FECHA", "CANT"]].rename(
+                columns={
+                    "REFERENCIA": "Referencia",
+                    "FECHA": "ultima_compra_fecha",
+                    "CANT": "ultima_compra_cantidad",
+                }
+            )
+            df_a = df_a.merge(last_purchases, on="Referencia", how="left")
+
+    if "ultima_compra_fecha" in df_a.columns:
+        df_a["ultima_compra_fecha"] = df_a["ultima_compra_fecha"].apply(
+            lambda x: x.strftime("%Y-%m-%d") if pd.notna(x) else "-"
+        )
+        df_a["ultima_compra_cantidad"] = df_a["ultima_compra_cantidad"].fillna(0)
+    else:
+        df_a["ultima_compra_fecha"] = "-"
+        df_a["ultima_compra_cantidad"] = 0
     df_a["uds_vendidas"] = df_a["uds_vendidas"].fillna(0)
 
     # Info de esporádicas excluidas

@@ -161,15 +161,68 @@ const pedidoCols = [
 ]
 const margenCols = [
   { key: 'nombre', label: 'Producto' },
+  { key: 'precio_compra', label: 'Costo Unit.', formatter: money },
+  { key: 'precio_venta_prom', label: 'Venta Unit.', formatter: money },
   { key: 'cant_vend', label: 'Cant', formatter: number },
   { key: 'margen_pct', label: 'Margen', formatter: pct },
   { key: 'utilidad_total', label: 'Utilidad', formatter: money },
 ]
+const TIPO_ANOMALIA_LABELS = {
+  'Venta atipica producto': 'Pico de Venta Atípico',
+  'Caida fuerte por sede': 'Caída de Venta en Sede',
+  'Ticket atipico': 'Ticket de Venta Muy Alto',
+  'Devoluciones altas por vendedor': 'Devoluciones Elevadas por Cajero',
+  'Stock cero o negativo con venta reciente': 'Stock Cero con Venta Reciente',
+  'Costo subio mas de 20%': 'Aumento de Costo > 20%',
+  'Compra grande con baja rotacion': 'Compra Grande de Baja Rotación',
+}
+
 const anomaliaCols = [
-  { key: 'tipo', label: 'Tipo' },
-  { key: 'severidad', label: 'Sev' },
-  { key: 'detalle', label: 'Detalle' },
-  { key: 'valor', label: 'Valor' },
+  { 
+    key: 'tipo', 
+    label: 'Tipo de Anomalía',
+    formatter: (v) => TIPO_ANOMALIA_LABELS[v] || v
+  },
+  { 
+    key: 'severidad', 
+    label: 'Severidad',
+    formatter: (v) => {
+      const s = String(v).toUpperCase()
+      if (s === 'ALTA') return '🔴 ALTA'
+      if (s === 'MEDIA') return '🟡 MEDIA'
+      return '🟢 BAJA'
+    }
+  },
+  { 
+    key: 'detalle', 
+    label: 'Detalle',
+    formatter: (v, row) => {
+      if (row.referencia) {
+        return `[${row.referencia}] ${v}`
+      }
+      return v
+    }
+  },
+  { 
+    key: 'valor', 
+    label: 'Valor Detectado',
+    formatter: (v, row) => {
+      const tipo = row.tipo
+      if (tipo === 'Caida fuerte por sede') {
+        return `${Number(v).toFixed(1)}% de caída`
+      }
+      if (tipo === 'Ticket atipico' || tipo === 'Costo subio mas de 20%' || tipo === 'Devoluciones altas por vendedor') {
+        return money(v)
+      }
+      if (tipo === 'Venta atipica producto' || tipo === 'Compra grande con baja rotacion') {
+        return `${number(v)} uds`
+      }
+      if (tipo === 'Stock cero o negativo con venta reciente') {
+        return `Stock: ${number(v)}`
+      }
+      return v
+    }
+  },
 ]
 const labCols = [
   { key: 'lab', label: 'Laboratorio' },
