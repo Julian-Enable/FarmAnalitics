@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div>
     <div class="page-header">
       <div style="display: flex; align-items: center; gap: 12px;">
@@ -60,14 +60,14 @@
           </div>
         </template>
       </KpiCard>
-      <div class="cmd-kpi-card" style="border: 1px solid var(--accent-light); background: #f8fafc;">
-        <div class="cmd-kpi-icon-wrap" style="background: var(--accent-light);">
-          <Target size="18" color="var(--accent)" />
+      <div class="cmd-kpi-card" style="border: 1.5px solid var(--accent); background: var(--accent-lt);">
+        <div class="cmd-kpi-icon-wrap" style="background: var(--accent); color: white;">
+          <Target size="18" />
         </div>
         <div class="cmd-kpi-body">
           <span class="cmd-kpi-label" style="color: var(--accent);">Meta Global Sugerida</span>
-          <span class="cmd-kpi-value" style="color: var(--accent);">{{ store.fmt(data.resumen.meta_total) }}</span>
-          <span class="cmd-kpi-sub">{{ metaVsProjectionLabel }}</span>
+          <span class="cmd-kpi-value" style="color: var(--fg);">{{ store.fmt(data.resumen.meta_total) }}</span>
+          <span class="cmd-kpi-sub" style="color: var(--fg-muted);">{{ metaVsProjectionLabel }}</span>
         </div>
       </div>
     </div>
@@ -128,7 +128,7 @@
                     <RotateCcw size="14" />
                   </button>
                 </div>
-                <div style="width: 60px; height: 4px; background: #e2e8f0; border-radius: 2px; overflow: hidden; margin-top: 4px;">
+                <div style="width: 60px; height: 4px; background: var(--border-md); border-radius: 2px; overflow: hidden; margin-top: 4px;">
                   <div :style="{ width: v.peso_final + '%', background: v.isLocked ? '#8b5cf6' : 'var(--accent)', height: '100%' }"></div>
                 </div>
               </td>
@@ -252,23 +252,36 @@ function clearWeight(sedeName, vendName) {
 
 <style scoped>
 .btn-agresividad {
-  background: white;
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border);
-  padding: 6px 12px;
-  border-radius: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--fg-muted);
+  transition: all 0.2s var(--ease);
+  font-family: inherit;
+}
+body.light-theme .btn-agresividad {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.12);
   color: var(--fg);
-  transition: all 0.2s;
 }
 .btn-agresividad:hover {
-  background: #f8fafc;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--fg);
+  border-color: var(--accent);
+  box-shadow: var(--glow-accent);
+}
+body.light-theme .btn-agresividad:hover {
+  background: rgba(0, 0, 0, 0.02);
 }
 .btn-agresividad.active {
-  background: var(--accent);
+  background: var(--accent-gradient);
   color: white;
   border-color: var(--accent);
+  box-shadow: 0 4px 10px rgba(99, 102, 241, 0.25);
 }
 </style>
 

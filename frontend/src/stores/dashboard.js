@@ -28,6 +28,13 @@ function sleep(ms) {
 export const useDashboardStore = defineStore('dashboard', () => {
   const theme = ref(localStorage.getItem('farm_theme') || 'dark')
   
+  // Sync initial theme class to document.body
+  if (theme.value === 'light') {
+    document.body.classList.add('light-theme')
+  } else {
+    document.body.classList.remove('light-theme')
+  }
+  
   function toggleTheme() {
     if (theme.value === 'dark') {
       theme.value = 'light'

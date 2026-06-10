@@ -52,8 +52,8 @@ const isOpen = ref(false)
 .info-title {
   flex: 1;
   font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--accent-dk);
+  font-weight: 700;
+  color: var(--fg);
 }
 
 .info-toggle {
@@ -65,9 +65,13 @@ const isOpen = ref(false)
 .info-body {
   padding: 16px;
   border-top: 1px solid rgba(94, 106, 210, 0.2);
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   color: var(--fg);
-  line-height: 1.6;
+  line-height: 1.65;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+body.light-theme .info-body {
   background: #ffffff;
 }
 
