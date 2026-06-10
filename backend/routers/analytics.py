@@ -644,7 +644,7 @@ def resumen(
             productos_atencion_15d = int(((df_a["cobertura_dias"] >= 7) & (df_a["cobertura_dias"] < 15)).sum())
             
             # Excluir servicios del capital quieto
-            es_servicio = (df_a.get("Nivel", "").astype(str).str.upper() == "SERVICIOS") | (df_a.get("Descripcion", "").astype(str).str.contains("DOMICILIO|INYECTOLOGIA|FLETE|TARIFA DE SERVICIO", case=False, na=False))
+            es_servicio = (df_a.get("Nivel", "").astype(str).str.upper() == "SERVICIOS") | (df_a.get("Descripcion", "").astype(str).str.contains("DOMICILIO|INYECTOLOGIA|FLETE|TARIFA DE SERVICIO|PERIODICO", case=False, na=False))
             quietos = df_a[(df_a["dias_sin_venta"] > QUIETO_DIAS_DEFAULT) & (~es_servicio)]
             capital_quieto = float((quietos["Total"] * quietos["PrecioCompra"]).sum())
 
@@ -781,7 +781,7 @@ def resumen(
     if df_i is not None and not df_i.empty:
         inv = _inventory_with_total(df_i)
         # Excluir servicios
-        es_servicio = (inv["Nivel"].astype(str).str.upper() == "SERVICIOS") | (inv["Descripcion"].astype(str).str.contains("DOMICILIO|INYECTOLOGIA|FLETE|TARIFA DE SERVICIO", case=False, na=False))
+        es_servicio = (inv["Nivel"].astype(str).str.upper() == "SERVICIOS") | (inv["Descripcion"].astype(str).str.contains("DOMICILIO|INYECTOLOGIA|FLETE|TARIFA DE SERVICIO|PERIODICO", case=False, na=False))
         inv = inv[~es_servicio]
         
         # Rotación y última venta de los 35 días (general)
@@ -968,7 +968,7 @@ def inventario(inv_min_dias: int = INV_MIN_DIAS, inv_max_dias: int = INV_MAX_DIA
     df_a = _inventory_with_total(df_i)
 
     # Excluir servicios (domicilios, inyectología, fletes)
-    es_servicio = (df_a["Nivel"].astype(str).str.upper() == "SERVICIOS") | (df_a["Descripcion"].astype(str).str.contains("DOMICILIO|INYECTOLOGIA|FLETE|TARIFA DE SERVICIO", case=False, na=False))
+    es_servicio = (df_a["Nivel"].astype(str).str.upper() == "SERVICIOS") | (df_a["Descripcion"].astype(str).str.contains("DOMICILIO|INYECTOLOGIA|FLETE|TARIFA DE SERVICIO|PERIODICO", case=False, na=False))
     df_a = df_a[~es_servicio].copy()
 
     # ── Filtrar ventas esporádicas para rotación ──
@@ -1107,7 +1107,7 @@ def compras(
         comp["Nivel"] = ""
 
     # Excluir servicios (domicilios, inyectología, fletes)
-    es_servicio = (comp["Nivel"].astype(str).str.upper() == "SERVICIOS") | (comp["Descripcion"].astype(str).str.contains("DOMICILIO|INYECTOLOGIA|FLETE|TARIFA DE SERVICIO", case=False, na=False))
+    es_servicio = (comp["Nivel"].astype(str).str.upper() == "SERVICIOS") | (comp["Descripcion"].astype(str).str.contains("DOMICILIO|INYECTOLOGIA|FLETE|TARIFA DE SERVICIO|PERIODICO", case=False, na=False))
     comp = comp[~es_servicio].copy()
 
     comp["inv_inicial"] = comp["inv_actual"] + comp["uds_vendidas"] - comp["uds_compradas"]
