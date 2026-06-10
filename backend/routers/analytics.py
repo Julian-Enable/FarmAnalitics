@@ -693,7 +693,8 @@ def resumen(
         # Cruce con inventario para obtener costo
         v_agg = v_filt.groupby("Referencia", as_index=False)["Cant"].sum()
         if "Precio Compra" in df_i.columns:
-            m = v_agg.merge(df_i[["Referencia", "Precio Compra"]], on="Referencia", how="inner")
+            inv_prices = _inventory_price_lookup(df_i)
+            m = v_agg.merge(inv_prices[["Referencia", "Precio Compra"]], on="Referencia", how="inner")
             m["Costo_Total"] = m["Cant"] * pd.to_numeric(m["Precio Compra"], errors="coerce").fillna(0)
             costo_total = float(m["Costo_Total"].sum())
             util_bruta = ing_total - costo_total
