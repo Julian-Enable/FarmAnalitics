@@ -365,9 +365,12 @@ const tendenciaCat  = computed(() => data.value?.tendencia?.map(d => d.fecha) ||
 const tendenciaData = computed(() => data.value?.tendencia?.map(d => d.ingreso) || [])
 
 const displayPeriodDays = computed(() => {
-  const inicio = parseIsoDate(data.value?.periodo?.inicio)
-  const fin = parseIsoDate(data.value?.periodo?.fin)
-  if (!inicio || !fin || inicio > fin) return data.value?.periodo?.dias || 0
+  const f_ini = filters.value.fecha_ini
+  const f_fin = filters.value.fecha_fin
+  if (!f_ini || !f_fin) return 0
+  const inicio = parseIsoDate(f_ini)
+  const fin = parseIsoDate(f_fin)
+  if (!inicio || !fin || inicio > fin) return 0
   return Math.round((fin - inicio) / 86400000) + 1
 })
 
