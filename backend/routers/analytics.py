@@ -679,7 +679,7 @@ def resumen(
         raise HTTPException(404, "No hay datos de ventas cargados")
 
     f_ini, f_fin = _effective_summary_range(fecha_ini, fecha_fin)
-    v_filt = _apply_date_filter(df_v, f_ini.strftime("%Y-%m-%d"), f_fin.strftime("%Y-%m-%d"))
+    v_filt = _apply_date_filter(df_v, "Fecha", f_ini.strftime("%Y-%m-%d"), f_fin.strftime("%Y-%m-%d"))
     if v_filt.empty:
         return {"kpis": {}, "tendencia": [], "top_productos": [], "top_vendedores": [], "top_laboratorios": [], "sedes": []}
 
@@ -758,7 +758,7 @@ def resumen(
     # Notas Crédito
     devoluciones_resumen = None
     if df_n is not None and not df_n.empty:
-        n_filt = _apply_date_filter(df_n, f_ini.strftime("%Y-%m-%d"), f_fin.strftime("%Y-%m-%d"))
+        n_filt = _apply_date_filter(df_n, "Fecha", f_ini.strftime("%Y-%m-%d"), f_fin.strftime("%Y-%m-%d"))
         if not n_filt.empty:
             notas_unicas = _notas_credito_note_frame(n_filt)
             total_devuelto = float(notas_unicas["Total Neto"].sum())
