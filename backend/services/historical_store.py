@@ -43,9 +43,11 @@ class HistoricalStore:
             return pd.DataFrame()
 
         if path.suffix.lower() == ".parquet":
-            df = pd.read_parquet(path)
+            with open(path, "rb") as f:
+                df = pd.read_parquet(f)
         else:
-            df = pd.read_csv(path)
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                df = pd.read_csv(f)
 
         df = self._normalize(name, df)
         self._cache[name] = df

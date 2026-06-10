@@ -176,6 +176,7 @@ def _run_sync(req: SyncRequest) -> None:
         process = subprocess.Popen(
             command,
             cwd=ROOT_DIR,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,

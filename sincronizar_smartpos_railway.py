@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 def _run(cmd: list[str]) -> None:
     logger.info("Ejecutando: %s", " ".join(cmd))
-    subprocess.run(cmd, cwd=ROOT_DIR, check=True)
+    subprocess.run(cmd, cwd=ROOT_DIR, stdin=subprocess.DEVNULL, check=True)
 
 
 def _incremental_start(config, fallback_days: int) -> tuple[pd.Timestamp, pd.Timestamp | None]:
@@ -146,32 +146,72 @@ def sync_local(recent_days: int, validate: bool, mode: str = "incremental") -> N
         logger.info("Paso 4/4: validacion omitida para acelerar la sincronizacion diaria")
 
 
-def upload_to_railway() -> None:
+def upload_to_railway(script_start_time: datetime) -> None:
     railway = shutil.which("railway")
     if not railway:
         raise RuntimeError("Railway CLI no esta instalado o no esta en PATH")
     if not DATA_DIR.exists():
         raise RuntimeError(f"No existe {DATA_DIR}")
+
+    logger.info("Consultando archivos remotos en Railway volume %s...", RAILWAY_VOLUME)
+    remote_files = {}
+    try:
+        # Use proper options order
+        cmd = [railway, "volume", "files", "--volume", RAILWAY_VOLUME, "list", RAILWAY_REMOTE_PATH, "--json"]
+        proc = subprocess.run(cmd, cwd=ROOT_DIR, stdin=subprocess.DEVNULL, capture_output=True, text=True, check=True)
+        import json
+        remote_data = json.loads(proc.stdout)
+        remote_files = {f["name"]: f for f in remote_data.get("files", []) if f["type"] == "file"}
+        logger.info("Se encontraron %s archivos en la nube", len(remote_files))
+    except Exception as e:
+        logger.warning("No se pudo obtener la lista de archivos remotos: %s. Se subiran todos los archivos.", e)
+
     files = [path for path in sorted(DATA_DIR.iterdir()) if path.is_file()]
-    logger.info("Subiendo %s archivos a Railway volume %s", len(files), RAILWAY_VOLUME)
+    logger.info("Evaluando %s archivos locales para subir", len(files))
+
+    uploaded_count = 0
+    skipped_count = 0
+
     for index, path in enumerate(files, start=1):
-        size_mb = path.stat().st_size / (1024 * 1024)
-        logger.info("[%s/%s] Subiendo %s (%.1f MB)", index, len(files), path.name, size_mb)
-        _run([
-            railway,
-            "volume",
-            "files",
-            "--volume",
-            RAILWAY_VOLUME,
-            "upload",
-            str(path),
-            f"{RAILWAY_REMOTE_PATH}/{path.name}",
-            "--overwrite",
-            "--json",
-        ])
-        logger.info("[%s/%s] Subida terminada: %s", index, len(files), path.name)
-    logger.info("Reiniciando servicio en Railway")
-    _run([railway, "restart", "--yes"])
+        local_size = path.stat().st_size
+        size_mb = local_size / (1024 * 1024)
+        local_mtime = datetime.fromtimestamp(path.stat().st_mtime)
+
+        should_upload = True
+        if path.name in remote_files:
+            remote_file = remote_files[path.name]
+            remote_size = remote_file.get("size")
+            # Skip if the file was NOT modified during this script run and the sizes match exactly
+            if local_mtime < script_start_time and local_size == remote_size:
+                should_upload = False
+
+        if should_upload:
+            logger.info("[%s/%s] Subiendo %s (%.1f MB)", index, len(files), path.name, size_mb)
+            _run([
+                railway,
+                "volume",
+                "files",
+                "--volume",
+                RAILWAY_VOLUME,
+                "upload",
+                str(path),
+                f"{RAILWAY_REMOTE_PATH}/{path.name}",
+                "--overwrite",
+                "--json",
+            ])
+            logger.info("[%s/%s] Subida terminada: %s", index, len(files), path.name)
+            uploaded_count += 1
+        else:
+            logger.info("[%s/%s] Omitiendo %s (sin cambios, %.1f MB)", index, len(files), path.name, size_mb)
+            skipped_count += 1
+
+    logger.info("Resumen de subida: %s subidos, %s omitidos", uploaded_count, skipped_count)
+
+    if uploaded_count > 0:
+        logger.info("Reiniciando servicio en Railway")
+        _run([railway, "restart", "--yes"])
+    else:
+        logger.info("No se subieron nuevos archivos. Se omite el reinicio de Railway.")
 
 
 def parse_args() -> argparse.Namespace:
@@ -189,10 +229,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    script_start_time = datetime.now()
     args = parse_args()
     sync_local(args.recent_days, validate=not args.skip_validate, mode=args.mode)
     if not args.skip_upload:
-        upload_to_railway()
+        upload_to_railway(script_start_time)
     logger.info("Sincronizacion completa")
 
 

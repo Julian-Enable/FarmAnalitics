@@ -258,7 +258,12 @@ def output_path(base_name: str) -> Path:
 def read_local(path: Path, date_column: str | None = None) -> pd.DataFrame:
     if not path.exists():
         return pd.DataFrame()
-    df = pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path)
+    if path.suffix == ".parquet":
+        with open(path, "rb") as f:
+            df = pd.read_parquet(f)
+    else:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            df = pd.read_csv(f)
     if date_column and date_column in df.columns:
         df[date_column] = pd.to_datetime(df[date_column], errors="coerce")
     return df
@@ -277,6 +282,16 @@ def backup_existing(path: Path) -> None:
 def save_df(df: pd.DataFrame, base_name: str) -> Path:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     path = output_path(base_name)
+    
+    if path.exists():
+        try:
+            existing_df = read_local(path)
+            if not existing_df.empty and existing_df.equals(df):
+                logger.info("El archivo %s no ha cambiado, omitiendo escritura", path.name)
+                return path
+        except Exception as e:
+            logger.warning("No se pudo comparar el archivo existente %s: %s", path.name, e)
+
     backup_existing(path)
 
     tmp_path = path.with_suffix(path.suffix + ".tmp")
@@ -284,7 +299,24 @@ def save_df(df: pd.DataFrame, base_name: str) -> Path:
         df.to_parquet(tmp_path, index=False)
     else:
         df.to_csv(tmp_path, index=False)
-    tmp_path.replace(path)
+    
+    try:
+        if path.exists():
+            try:
+                path.unlink()
+            except PermissionError:
+                # If unlink fails on Windows, we fall back to letting replace raise or handle it
+                pass
+        tmp_path.replace(path)
+    except PermissionError as e:
+        logger.error("Error de permisos al reemplazar %s. Detalle: %s", path.name, e)
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
+        raise e
+
     logger.info("Guardado %s: %s filas en %s", base_name, f"{len(df):,}", path)
     return path
 

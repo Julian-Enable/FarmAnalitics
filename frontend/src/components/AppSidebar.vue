@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <aside class="sidebar">
     <!-- Logo -->
     <div class="sidebar-logo">
@@ -71,6 +71,13 @@
 
       <div v-if="liveRefreshStatus" style="font-size: 0.72rem; color: var(--fg-muted); margin-top: 8px; line-height: 1.35;">
         {{ liveRefreshStatus }}
+      </div>
+
+      <div v-if="store.lastError"
+           style="margin-top:8px;padding:8px 10px;background:#fff1f2;
+                  border-radius:8px;font-size:0.74rem;color:#be123c; display:flex; gap: 6px; align-items: flex-start;">
+        <AlertCircle size="14" style="flex-shrink:0; margin-top:2px;" />
+        <span>{{ store.lastError }}</span>
       </div>
 
       <button
