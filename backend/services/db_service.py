@@ -1,4 +1,4 @@
-﻿import pandas as pd
+import pandas as pd
 import logging
 import json
 import numpy as np
@@ -157,6 +157,13 @@ class DatabaseService:
                 df["Laboratorio"] = df["ID_Laboratorio"].map(self._laboratorio_map).fillna("Sin Laboratorio")
                 df["Nivel"] = df["ID_Nivel"].map(self._nivel_map).fillna("Sin Nivel")
                 df = df.drop(columns=["ID_PuntoVenta", "ID_Laboratorio", "ID_Nivel"])
+
+                # Excluir servicios
+                es_servicio = (
+                    (df.get("Nivel", pd.Series(dtype=str)).astype(str).str.upper() == "SERVICIOS") | 
+                    (df.get("Descripcion", pd.Series(dtype=str)).astype(str).str.contains("DOMICILIO|INYECTOLOGIA|FLETE|TARIFA DE SERVICIO", case=False, na=False))
+                )
+                df = df[~es_servicio].copy()
 
             return df
 
@@ -840,6 +847,10 @@ class DatabaseService:
         if laboratorio and laboratorio != "Todos":
             where_clauses.append("lab.Nombre = ?")
             params.append(laboratorio)
+
+        # Excluir servicios
+        where_clauses.append("(niv.Nombre IS NULL OR UPPER(niv.Nombre) != 'SERVICIOS')")
+        where_clauses.append("(fp.Descripcion NOT LIKE '%DOMICILIO%' AND fp.Descripcion NOT LIKE '%INYECTOLOGIA%' AND fp.Descripcion NOT LIKE '%FLETE%' AND fp.Descripcion NOT LIKE '%TARIFA DE SERVICIO%')")
 
         where_str = " AND ".join(where_clauses)
 

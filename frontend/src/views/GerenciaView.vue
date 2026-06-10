@@ -40,7 +40,7 @@
       <div class="card" style="margin-bottom:16px;">
         <SectionTitle :icon="SunMedium" :title="'Reporte diario' + (data.reporte_diario.fecha ? ' - ' + data.reporte_diario.fecha : '')" />
         <div class="kpi-grid kpi-grid-4" style="margin-top:12px;">
-          <KpiCard :icon="DollarSign" label="Ventas ayer" :value="store.fmt(data.reporte_diario.resumen.ventas_ayer || 0)" />
+          <KpiCard :icon="DollarSign" label="Ventas último día" :value="store.fmt(data.reporte_diario.resumen.ventas_ayer || 0)" />
           <KpiCard :icon="CalendarDays" label="Ventas mes actual" :value="store.fmt(data.reporte_diario.resumen.ventas_mes_actual || 0)" />
           <KpiCard :icon="PackageX" label="Agotados criticos" :value="store.fmtN(data.reporte_diario.agotados_criticos?.length || 0)" />
           <KpiCard :icon="Boxes" label="Capital quieto" :value="store.fmt(data.reporte_diario.resumen.capital_quieto || 0)" />

@@ -89,6 +89,13 @@ class HistoricalStore:
                 df["Laboratorio"] = df["ID_Laboratorio"].astype(str).str.strip().map(labs).fillna("Sin Laboratorio")
             if "ID_Nivel" in df.columns:
                 df["Nivel"] = df["ID_Nivel"].astype(str).str.strip().map(niveles).fillna("Sin Nivel")
+            
+            # Excluir servicios
+            es_servicio = (
+                (df.get("Nivel", pd.Series(dtype=str)).astype(str).str.upper() == "SERVICIOS") | 
+                (df.get("Descripcion", pd.Series(dtype=str)).astype(str).str.contains("DOMICILIO|INYECTOLOGIA|FLETE|TARIFA DE SERVICIO", case=False, na=False))
+            )
+            df = df[~es_servicio].copy()
             return df
 
         if name == "HISTORICO_COMPRAS":
