@@ -62,10 +62,73 @@
           <div class="section-header-row">
             <SectionTitle :icon="ShoppingCart" title="Pedido automatico por proveedor" />
             <button class="export-btn" @click="exportRows(data.pedidos.items, pedidoCols, 'Pedido_Sugerido')">
-              <Download size="16" /> CSV
+              <Download size="16" /> Descargar Todo (Excel)
             </button>
           </div>
-          <SimpleTable :rows="data.pedidos.proveedores" :cols="proveedorCols" :limit="12" />
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th v-for="col in proveedorCols" :key="col.key">{{ col.label }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr 
+                  v-for="(row, idx) in (data.pedidos.proveedores || []).slice(0, 12)" 
+                  :key="idx"
+                  @click="selectedProvider = row.proveedor"
+                  :style="{ 
+                    cursor: 'pointer', 
+                    background: selectedProvider === row.proveedor ? 'rgba(59, 130, 246, 0.15)' : '',
+                    fontWeight: selectedProvider === row.proveedor ? '700' : 'normal'
+                  }"
+                >
+                  <td v-for="col in proveedorCols" :key="col.key">
+                    {{ col.formatter ? col.formatter(row[col.key], row) : row[col.key] }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Listado de productos para el proveedor seleccionado -->
+          <div v-if="selectedProvider" class="order-details-section" style="margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px;">
+            <div class="section-header-row" style="margin-bottom: 8px;">
+              <h4 style="margin: 0; color: var(--fg); font-size: 13px; font-weight: 700;">
+                📦 Productos a comprar para: <strong style="color: var(--accent);">{{ selectedProvider }}</strong>
+              </h4>
+              <button class="export-btn" style="font-size: 11px; padding: 4px 8px;" @click="exportSelectedProviderItems">
+                <Download size="12" /> Excel Proveedor
+              </button>
+            </div>
+            <div style="max-height: 250px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px;">
+              <table class="data-table" style="margin-bottom: 0;">
+                <thead style="position: sticky; top: 0; z-index: 10; background: var(--bg-card, #ffffff);">
+                  <tr>
+                    <th>Ref</th>
+                    <th>Producto</th>
+                    <th>Stock</th>
+                    <th>Cant. Pedir</th>
+                    <th>Costo Unit.</th>
+                    <th>Total Estimado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in filteredItems" :key="item.Referencia">
+                    <td style="font-size: 11px; font-variant-numeric: tabular-nums;">{{ item.Referencia }}</td>
+                    <td style="font-size: 11px;" :title="item.Descripcion">{{ item.Descripcion?.substring(0, 40) }}</td>
+                    <td style="font-size: 11px;">{{ number(item.Total) }}</td>
+                    <td style="font-weight: 700; color: var(--accent); font-size: 11px;">{{ number(item.cantidad_sugerida) }}</td>
+                    <td style="font-size: 11px;">{{ money(item.Precio_Compra || item['Precio Compra']) }}</td>
+                    <td style="font-weight: 600; color: var(--green); font-size: 11px;">{{ money(item.costo_estimado) }}</td>
+                  </tr>
+                  <tr v-if="!filteredItems.length">
+                    <td colspan="6" style="text-align: center; color: var(--fg-muted); font-size: 11px;">No hay productos para este proveedor.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
         <div class="card">
@@ -110,7 +173,7 @@
 </template>
 
 <script setup>
-import { computed, defineComponent, h, onMounted } from 'vue'
+import { ref, computed, watch, defineComponent, h, onMounted } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
 import KpiCard from '../components/ui/KpiCard.vue'
 import SectionTitle from '../components/ui/SectionTitle.vue'
@@ -139,6 +202,32 @@ const loading = computed(() => store.loading.gerencia)
 const money = value => store.fmt(Number(value || 0))
 const number = value => store.fmtN(Math.round(Number(value || 0)))
 const pct = value => `${Number(value || 0).toFixed(1)}%`
+
+const selectedProvider = ref(null)
+
+const filteredItems = computed(() => {
+  if (!selectedProvider.value || !data.value?.pedidos?.items) return []
+  return data.value.pedidos.items.filter(item => item.proveedor === selectedProvider.value)
+})
+
+watch(() => data.value?.pedidos?.proveedores, (newProv) => {
+  if (newProv && newProv.length > 0 && !selectedProvider.value) {
+    selectedProvider.value = newProv[0].proveedor
+  }
+}, { immediate: true })
+
+function exportSelectedProviderItems() {
+  if (!selectedProvider.value || !filteredItems.value.length) return
+  const cols = [
+    { key: 'Referencia', label: 'Referencia' },
+    { key: 'Descripcion', label: 'Producto' },
+    { key: 'Total', label: 'Stock Actual' },
+    { key: 'cantidad_sugerida', label: 'Cantidad a Pedir' },
+    { key: 'Precio Compra', label: 'Costo Unit.', formatter: v => v ? Math.round(v) : 0 },
+    { key: 'costo_estimado', label: 'Costo Total', formatter: v => v ? Math.round(v) : 0 }
+  ]
+  exportToCSV(filteredItems.value, cols, `Pedido_${selectedProvider.value.replace(/\s+/g, '_')}`)
+}
 
 const trasladoCols = [
   { key: 'Descripcion', label: 'Producto', formatter: (v, row) => row.uds_esporadicas_excluidas > 0 ? `${v} ⚠️ (-${number(row.uds_esporadicas_excluidas)})` : v },
