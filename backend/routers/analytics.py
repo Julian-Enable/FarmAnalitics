@@ -199,14 +199,14 @@ def _inventory_with_total(df_i: pd.DataFrame) -> pd.DataFrame:
     df = df_i.copy()
     if "Total" in df.columns:
         df["Total"] = pd.to_numeric(df["Total"], errors="coerce").fillna(0)
-        return df
+        return df.drop_duplicates("Referencia")
 
     posibles_sedes = [
         c for c in df.columns
         if c not in EXCLUDED_INVENTORY_COLUMNS and pd.api.types.is_numeric_dtype(df[c])
     ]
     df["Total"] = df[posibles_sedes].sum(axis=1) if posibles_sedes else 0
-    return df
+    return df.drop_duplicates("Referencia")
 
 
 def _inventory_price_lookup(df_i: pd.DataFrame, extra_cols: list[str] | None = None) -> pd.DataFrame:
