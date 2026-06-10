@@ -199,7 +199,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     }
   }
 
-  async function waitForRemoteStatus(retries = 18) {
+  async function waitForRemoteStatus(retries = 50) {
     let lastFailure = null
     for (let i = 0; i < retries; i += 1) {
       try {
@@ -212,7 +212,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
         await sleep(5000)
       }
     }
-    throw lastFailure || new Error('Railway no respondio despues de la sincronizacion')
+    throw new Error('El servidor en la nube se está demorando en reiniciar para aplicar los cambios. Por favor, espera 1 o 2 minutos y recarga la página para ver los nuevos datos.')
   }
 
   async function pollLocalAgentSync() {
