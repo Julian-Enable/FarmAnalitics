@@ -1454,16 +1454,16 @@ def proyeccion_metas(
     df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce")
     df = df[df["Fecha"].notna()]
     if df.empty:
-        raise HTTPException(400, "No hay fechas vÃ¡lidas en ventas")
+        raise HTTPException(400, "No hay fechas válidas en ventas")
 
     if fecha_ini and fecha_fin:
         try:
             d_ini = datetime.strptime(fecha_ini, "%Y-%m-%d").date()
             d_fin = datetime.strptime(fecha_fin, "%Y-%m-%d").date()
         except ValueError:
-            raise HTTPException(400, "Formato de fecha invÃ¡lido o rango errÃ³neo")
+            raise HTTPException(400, "Formato de fecha inválido o rango erróneo")
         if d_fin < d_ini:
-            raise HTTPException(400, "Formato de fecha invÃ¡lido o rango errÃ³neo")
+            raise HTTPException(400, "Formato de fecha inválido o rango erróneo")
         y_obj, m_obj = d_ini.year, d_ini.month
         dias_totales_proy = (d_fin - d_ini).days + 1
     else:
