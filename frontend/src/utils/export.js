@@ -18,7 +18,7 @@ export function exportToCSV(data, columns, filename = 'exportacion') {
     return columns.map(col => {
       let cellData = row[col.key];
       if (col.formatter && typeof col.formatter === 'function') {
-        cellData = col.formatter(cellData);
+        cellData = col.formatter(cellData, row);
       }
       if (cellData === null || cellData === undefined) {
         cellData = '';
@@ -60,7 +60,7 @@ function buildSheetHtml(sheet) {
   const body = rows.map(row => {
     const cells = columns.map(col => {
       let value = row[col.key]
-      if (col.formatter && typeof col.formatter === 'function') value = col.formatter(value)
+      if (col.formatter && typeof col.formatter === 'function') value = col.formatter(value, row)
       return `<td>${escapeHtml(value)}</td>`
     }).join('')
     return `<tr>${cells}</tr>`
