@@ -846,14 +846,16 @@ def rentabilidad(fecha_ini: str = None, fecha_fin: str = None, x_session_id: str
             if res:
                 try:
                     df_v_g = get_df(x_session_id, "ventas", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
+                    df_c_g = get_df(x_session_id, "compras", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
                     df_i_g = get_df(x_session_id, "inventario")
-                    res["gerencial"] = rentabilidad_gerencial(df_v_g, df_i_g)
+                    res["gerencial"] = rentabilidad_gerencial(df_v_g, df_c_g, df_i_g)
                 except Exception:
                     res["gerencial"] = {}
                 return res
 
     # Fallback si no hay BD o no hay resultados
     df_v = get_df(x_session_id, "ventas", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
+    df_c = get_df(x_session_id, "compras", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
     df_i = get_df(x_session_id, "inventario")
     if df_v is None or df_i is None:
         raise HTTPException(404, "Faltan datos para rentabilidad")
@@ -900,7 +902,7 @@ def rentabilidad(fecha_ini: str = None, fecha_fin: str = None, x_session_id: str
         "bajo_margen": json.loads(bajo_margen_df.sort_values("margen_pct").to_json(orient="records")),
         "matriz_abc": json.loads(r.to_json(orient="records")),
         "por_laboratorio": json.loads(por_laboratorio.to_json(orient="records")) if not por_laboratorio.empty else [],
-        "gerencial": rentabilidad_gerencial(df_v, df_i),
+        "gerencial": rentabilidad_gerencial(df_v, df_c, df_i),
     }
 
 
@@ -923,7 +925,7 @@ def gerencia_operativa(x_session_id: str = Header(default="default-session")):
     df_v, df_c, df_i, df_n = _management_frames(x_session_id)
     traslados = sugerido_traslados(df_v, df_i)
     pedidos = pedido_por_proveedor(df_v, df_c, df_i)
-    rentabilidad = rentabilidad_gerencial(df_v, df_i)
+    rentabilidad = rentabilidad_gerencial(df_v, df_c, df_i)
     anomalias = detector_anomalias(df_v, df_c, df_i, df_n)
     diario = reporte_diario(df_v, df_c, df_i, df_n)
     return {

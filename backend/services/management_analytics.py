@@ -162,8 +162,8 @@ def _period_sales(ventas: pd.DataFrame, days: int = 35) -> tuple[pd.DataFrame, i
     return df, dias, max_fecha
 
 
-def _profit_by_product(ventas: pd.DataFrame, inventario: pd.DataFrame, days: int = 35) -> tuple[pd.DataFrame, int]:
-    sales, dias, _ = _period_sales(ventas, days)
+def _profit_by_product(ventas: pd.DataFrame, compras: pd.DataFrame, inventario: pd.DataFrame, days: int = 35) -> tuple[pd.DataFrame, int]:
+    sales, dias, max_fecha = _period_sales(ventas, days)
     if sales.empty or inventario is None or inventario.empty:
         return pd.DataFrame(), dias
 
@@ -199,17 +199,70 @@ def _profit_by_product(ventas: pd.DataFrame, inventario: pd.DataFrame, days: int
             inv[col] = _num(inv[col])
 
     base = base.merge(inv, on="Referencia", how="left", suffixes=("", "_inv"))
+    
+    # 1. Obtener costo transaccional si existe en Ventas
     if "Costo" in sales.columns:
         costo_real = sales.groupby("Referencia", as_index=False).agg(costo_real_total=("Costo", "sum"))
         base = base.merge(costo_real, on="Referencia", how="left")
-        base["precio_compra"] = np.where(
+        base["precio_compra_tx"] = np.where(
             base["cant_vend"] > 0,
             _num(base.get("costo_real_total", 0)) / base["cant_vend"],
-            _num(base.get("Precio Compra", 0)),
+            0
         )
-        base["precio_compra"] = base["precio_compra"].where(base["precio_compra"] > 0, _num(base.get("Precio Compra", 0)))
+        base["precio_compra_tx"] = base["precio_compra_tx"].fillna(0)
     else:
-        base["precio_compra"] = _num(base.get("Precio Compra", 0))
+        base["precio_compra_tx"] = 0
+
+    # 2. Calcular costo promedio ponderado usando compras e historiales
+    if compras is not None and not compras.empty and {"REFERENCIA", "PRECIO", "CANT"}.issubset(compras.columns):
+        comp = compras.copy()
+        comp["FECHA"] = pd.to_datetime(comp["FECHA"], errors="coerce")
+        comp["PRECIO"] = _num(comp["PRECIO"])
+        comp["CANT"] = _num(comp["CANT"])
+        
+        if "Costo Total" not in comp.columns:
+            comp["Costo Total"] = comp["CANT"] * comp["PRECIO"]
+        else:
+            comp["Costo Total"] = _num(comp["Costo Total"])
+
+        # Compras recientes: ventana de 90 días hacia atrás desde max_fecha de ventas
+        if max_fecha is not None:
+            start_date = max_fecha - pd.Timedelta(days=90)
+            comp_recent = comp[(comp["FECHA"] >= start_date) & (comp["FECHA"] <= max_fecha)]
+        else:
+            comp_recent = comp
+
+        # Costo Promedio Ponderado de compras recientes
+        grp_recent = comp_recent.groupby("REFERENCIA").agg(
+            total_spent=("Costo Total", "sum"),
+            total_units=("CANT", "sum")
+        )
+        grp_recent["cpp_recent"] = np.where(
+            grp_recent["total_units"] > 0,
+            grp_recent["total_spent"] / grp_recent["total_units"],
+            np.nan
+        )
+
+        # Última compra histórica absoluta (de respaldo si no hay compras en ventana 90d)
+        comp_sorted = comp[comp["PRECIO"] > 0].sort_values("FECHA")
+        last_purch = comp_sorted.groupby("REFERENCIA").last().reset_index()
+        last_purch = last_purch[["REFERENCIA", "PRECIO"]].rename(columns={"PRECIO": "precio_last_compra"})
+
+        base = base.merge(grp_recent[["cpp_recent"]].reset_index().rename(columns={"REFERENCIA": "Referencia"}), on="Referencia", how="left")
+        base = base.merge(last_purch.rename(columns={"REFERENCIA": "Referencia"}), on="Referencia", how="left")
+
+        # Cascada de decisión: 1. Transaccional Ventas -> 2. CPP Compras 90d -> 3. Última Compra -> 4. Catálogo Inventario
+        base["precio_compra"] = np.where(
+            base["precio_compra_tx"] > 0,
+            base["precio_compra_tx"],
+            base["cpp_recent"].fillna(base["precio_last_compra"]).fillna(_num(base.get("Precio Compra", 0)))
+        )
+    else:
+        base["precio_compra"] = np.where(
+            base["precio_compra_tx"] > 0,
+            base["precio_compra_tx"],
+            _num(base.get("Precio Compra", 0))
+        )
     base["precio_venta_config"] = _num(base.get("Precio Venta", 0))
     base["stock_total"] = _num(base.get("Total", 0))
     base["precio_venta_prom"] = base["ingreso_total"] / base["cant_vend"].replace(0, np.nan)
@@ -230,8 +283,8 @@ def _profit_by_product(ventas: pd.DataFrame, inventario: pd.DataFrame, days: int
     return base.replace([np.inf, -np.inf], np.nan).fillna(0), dias
 
 
-def rentabilidad_gerencial(ventas: pd.DataFrame, inventario: pd.DataFrame) -> dict[str, Any]:
-    profit, dias = _profit_by_product(ventas, inventario, 35)
+def rentabilidad_gerencial(ventas: pd.DataFrame, compras: pd.DataFrame, inventario: pd.DataFrame) -> dict[str, Any]:
+    profit, dias = _profit_by_product(ventas, compras, inventario, 35)
     if profit.empty:
         return {
             "kpis": {"fugas_margen": 0, "vendidos_bajo_costo": 0, "precio_desviado": 0, "sedes_baja_utilidad": 0},
@@ -546,7 +599,7 @@ def reporte_diario(ventas: pd.DataFrame, compras: pd.DataFrame, inventario: pd.D
     mes = sales[sales["Fecha"] >= mes_ini]
     top_sedes = ayer.groupby("Punto Venta", as_index=False).agg(ingreso=("Ingreso", "sum"), unidades=("Cant", "sum")).sort_values("ingreso", ascending=False)
     pedidos = pedido_por_proveedor(ventas, compras, inventario)
-    rent = rentabilidad_gerencial(ventas, inventario)
+    rent = rentabilidad_gerencial(ventas, compras, inventario)
     anom = detector_anomalias(ventas, compras, inventario, notas)
     inv = inventario.copy() if inventario is not None else pd.DataFrame()
     if not inv.empty:
