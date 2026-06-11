@@ -20,7 +20,23 @@ import pandas as pd
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT_DIR))
 
-from backend.services.geocoding import build_geocode_order, geocode_addresses, load_cache  # noqa: E402
+from backend.services.geocoding import normalize_address, geocode_addresses, load_cache  # noqa: E402
+
+
+def _order_year_first(df: pd.DataFrame) -> tuple[list[str], int]:
+    """Direcciones del año en curso primero (por frecuencia), luego el resto."""
+    work = df.copy()
+    work["Fecha"] = pd.to_datetime(work["Fecha"], errors="coerce")
+    work["_n"] = work["Direccion"].map(normalize_address)
+    work = work[work["_n"].notna()]
+    if work.empty:
+        return [], 0
+    year = int(work["Fecha"].max().year)
+    cur = work[work["Fecha"].dt.year == year]
+    cur_order = cur["_n"].value_counts().index.tolist()
+    all_order = work["_n"].value_counts().index.tolist()
+    seen = set(cur_order)
+    return cur_order + [a for a in all_order if a not in seen], year
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -38,13 +54,13 @@ def main() -> None:
         raise SystemExit(f"No existe {DOMICILIOS_PATH}. Ejecuta primero la sincronización de domicilios.")
 
     df = pd.read_parquet(DOMICILIOS_PATH, columns=["Fecha", "Direccion"])
-    # Recientes primero, luego por frecuencia histórica.
-    ordered = build_geocode_order(df)
+    # Año en curso primero, luego el resto por frecuencia.
+    ordered, year = _order_year_first(df)
 
     cache = load_cache()
     ya = int((cache["ok"] == True).sum()) if not cache.empty else 0  # noqa: E712
-    logger.info("Direcciones únicas: %s | ya geocodificadas: %s | objetivo esta corrida: %s",
-                f"{len(ordered):,}", f"{ya:,}", args.limit)
+    logger.info("Direcciones únicas: %s | prioridad: año %s | ya geocodificadas: %s | objetivo esta corrida: %s",
+                f"{len(ordered):,}", year, f"{ya:,}", args.limit)
 
     result = geocode_addresses(ordered, limit=args.limit, retry_failed=args.retry_failed)
     logger.info("Resultado: %s", result)

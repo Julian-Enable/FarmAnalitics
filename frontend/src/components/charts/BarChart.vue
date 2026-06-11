@@ -1,5 +1,5 @@
 <template>
-  <apexchart :type="horizontal ? 'bar' : 'column'" height="350" :options="chartOptions" :series="series"></apexchart>
+  <apexchart :type="horizontal ? 'bar' : 'column'" :height="height" :options="chartOptions" :series="series"></apexchart>
 </template>
 
 <script setup>
@@ -12,6 +12,7 @@ const props = defineProps({
   categories: { type: Array, required: true },
   series: { type: Array, required: true },
   horizontal: { type: Boolean, default: false },
+  height: { type: [Number, String], default: 350 },
   formatTooltip: { type: String, default: 'number' } // 'number' or 'currency'
 })
 
