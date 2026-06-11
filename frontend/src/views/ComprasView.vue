@@ -148,7 +148,7 @@
 
       <!-- Comprado vs Vendido por punto de venta -->
       <div class="card" style="grid-column: span 2;" v-if="data.por_sede?.length">
-        <SectionTitle :icon="Store" title="Comprado vs Vendido por Punto de Venta (en pesos)" />
+        <SectionTitle :icon="Store" title="Comprado vs Vendido por Punto de Venta" />
         <BarChart
           :categories="data.por_sede.map(s => s.sede)"
           :series="[

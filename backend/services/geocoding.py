@@ -94,6 +94,29 @@ def address_to_query(norm: str) -> str:
     return f"{via}, Bogotá, Colombia"
 
 
+def build_geocode_order(df: pd.DataFrame, recent_days: int = 90) -> list[str]:
+    """Orden de geocodificación: primero las direcciones más frecuentes del periodo
+    reciente (para que el mapa del último mes siempre tenga datos), luego el resto
+    por frecuencia histórica."""
+    if df is None or df.empty or "Direccion" not in df.columns:
+        return []
+    work = df.copy()
+    work["_n"] = work["Direccion"].map(normalize_address)
+    work = work[work["_n"].notna()]
+    if work.empty:
+        return []
+    recent_order: list[str] = []
+    if "Fecha" in work.columns:
+        work["Fecha"] = pd.to_datetime(work["Fecha"], errors="coerce")
+        max_f = work["Fecha"].max()
+        if pd.notna(max_f):
+            recent = work[work["Fecha"] >= max_f - pd.Timedelta(days=recent_days)]
+            recent_order = recent["_n"].value_counts().index.tolist()
+    all_order = work["_n"].value_counts().index.tolist()
+    seen = set(recent_order)
+    return recent_order + [a for a in all_order if a not in seen]
+
+
 def load_cache() -> pd.DataFrame:
     path = _cache_path()
     if not path.exists():

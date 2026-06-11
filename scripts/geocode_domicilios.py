@@ -20,7 +20,7 @@ import pandas as pd
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT_DIR))
 
-from backend.services.geocoding import normalize_address, geocode_addresses, load_cache  # noqa: E402
+from backend.services.geocoding import build_geocode_order, geocode_addresses, load_cache  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -37,10 +37,9 @@ def main() -> None:
     if not DOMICILIOS_PATH.exists():
         raise SystemExit(f"No existe {DOMICILIOS_PATH}. Ejecuta primero la sincronización de domicilios.")
 
-    df = pd.read_parquet(DOMICILIOS_PATH, columns=["Direccion"])
-    norm = df["Direccion"].map(normalize_address).dropna()
-    # Orden por frecuencia: las direcciones más repetidas cubren más domicilios.
-    ordered = norm.value_counts().index.tolist()
+    df = pd.read_parquet(DOMICILIOS_PATH, columns=["Fecha", "Direccion"])
+    # Recientes primero, luego por frecuencia histórica.
+    ordered = build_geocode_order(df)
 
     cache = load_cache()
     ya = int((cache["ok"] == True).sum()) if not cache.empty else 0  # noqa: E712

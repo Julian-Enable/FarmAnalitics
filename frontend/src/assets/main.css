@@ -1191,7 +1191,15 @@ body.light-theme ::-webkit-scrollbar-thumb:hover {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   margin-bottom: 18px;
+}
+
+/* El SectionTitle ya trae su propio margen; dentro de una fila de encabezado se
+   anula para que no quede un hueco doble entre el titulo y el contenido. */
+.section-header-row .dash-section-title {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
 }
 
 /* ── KPI Icon Wrappers ────────────────────────────────────── */

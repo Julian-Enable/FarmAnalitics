@@ -57,13 +57,29 @@
         <KpiCard :icon="MapPin" label="Ubicados en Mapa" :value="data.kpis.pct_ubicado + '%'" />
       </div>
 
-      <!-- Mapa de calor -->
+      <!-- Mapa de zonas de entrega -->
       <div class="card" style="margin-bottom:16px;">
-        <SectionTitle :icon="MapPin" title="Mapa de calor de entregas (por dirección)" />
-        <div v-if="data.kpis.pct_ubicado < 100" style="font-size:12px;color:var(--fg-muted);margin-bottom:8px;">
-          {{ data.kpis.pct_ubicado }}% de los domicilios del periodo están geocodificados ({{ store.fmtN(data.kpis.ubicados_en_mapa) }} de {{ store.fmtN(data.kpis.total_domicilios) }}). El resto se geocodifica progresivamente en cada actualización.
+        <div class="section-header-row">
+          <SectionTitle :icon="MapPin" title="Zonas de entrega (por dirección)" />
+          <div class="metric-toggle">
+            <button :class="{ active: mapMode === 'burbujas' }" @click="setMapMode('burbujas')">Burbujas</button>
+            <button :class="{ active: mapMode === 'calor' }" @click="setMapMode('calor')">Calor</button>
+          </div>
         </div>
-        <div ref="mapEl" class="map-container"></div>
+        <div v-if="data.kpis.pct_ubicado < 100" style="font-size:12px;color:var(--fg-muted);margin-bottom:8px;">
+          {{ data.kpis.pct_ubicado }}% de los domicilios del periodo están ubicados en el mapa ({{ store.fmtN(data.kpis.ubicados_en_mapa) }} de {{ store.fmtN(data.kpis.total_domicilios) }}). El resto se ubica progresivamente en cada actualización.
+        </div>
+        <div class="map-wrap">
+          <div ref="mapEl" class="map-container"></div>
+          <div class="map-legend" v-if="mapMode === 'burbujas'">
+            <div class="legend-title">Domicilios por zona</div>
+            <div class="legend-row"><span class="legend-dot" style="background:#dc2626"></span> Muy alta</div>
+            <div class="legend-row"><span class="legend-dot" style="background:#f97316"></span> Alta</div>
+            <div class="legend-row"><span class="legend-dot" style="background:#eab308"></span> Media</div>
+            <div class="legend-row"><span class="legend-dot" style="background:#3b82f6"></span> Baja</div>
+            <div class="legend-hint">El círculo crece con la cantidad. Clic para ver cantidad y valor.</div>
+          </div>
+        </div>
       </div>
 
       <div class="grid-2">
@@ -154,8 +170,10 @@ const filters = ref({ fecha_ini: '', fecha_fin: '', sede: 'Todas' })
 const mMetric = ref('domicilios')
 
 const mapEl = ref(null)
+const mapMode = ref('burbujas')
 let map = null
 let heatLayer = null
+let markersLayer = null
 
 function applyFilters() {
   const params = {}
@@ -173,16 +191,59 @@ function initMap() {
   }).addTo(map)
 }
 
-function updateHeat() {
-  if (!map || !L.heatLayer) return
-  const pts = (data.value?.mapa || [])
+function clearMapLayers() {
   if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null }
+  if (markersLayer) { map.removeLayer(markersLayer); markersLayer = null }
+}
+
+function colorFor(ratio) {
+  if (ratio >= 0.5) return '#dc2626'   // Muy alta
+  if (ratio >= 0.25) return '#f97316'  // Alta
+  if (ratio >= 0.1) return '#eab308'   // Media
+  return '#3b82f6'                     // Baja
+}
+
+function updateHeat() {
+  if (!map) return
+  const pts = (data.value?.mapa || [])
+  clearMapLayers()
   if (!pts.length) return
-  const maxC = Math.max(...pts.map(p => p.domicilios), 1)
-  const heatPoints = pts.map(p => [p.lat, p.lon, p.domicilios / maxC])
-  heatLayer = L.heatLayer(heatPoints, { radius: 22, blur: 18, maxZoom: 15 }).addTo(map)
+
+  if (mapMode.value === 'calor') {
+    if (!L.heatLayer) return
+    const maxC = Math.max(...pts.map(p => p.domicilios), 1)
+    heatLayer = L.heatLayer(pts.map(p => [p.lat, p.lon, p.domicilios / maxC]), { radius: 22, blur: 18, maxZoom: 15 }).addTo(map)
+  } else {
+    // Burbujas proporcionales: tamaño y color crecen con la cantidad de domicilios.
+    const maxC = Math.max(...pts.map(p => p.domicilios), 1)
+    const top = [...pts].sort((a, b) => b.domicilios - a.domicilios).slice(0, 10)
+    const topSet = new Set(top.map(p => `${p.lat},${p.lon}`))
+    markersLayer = L.layerGroup()
+    for (const p of pts) {
+      const ratio = p.domicilios / maxC
+      const radius = 6 + 22 * Math.sqrt(ratio)
+      const m = L.circleMarker([p.lat, p.lon], {
+        radius, color: '#ffffff', weight: 1.5, fillColor: colorFor(ratio), fillOpacity: 0.78,
+      })
+      m.bindPopup(
+        `<div style="font-size:13px;"><b>${p.domicilios.toLocaleString('es-CO')} domicilios</b><br>` +
+        `$${Math.round(p.valor).toLocaleString('es-CO')}</div>`
+      )
+      if (topSet.has(`${p.lat},${p.lon}`)) {
+        m.bindTooltip(p.domicilios.toLocaleString('es-CO'), { permanent: true, direction: 'center', className: 'zone-label' })
+      }
+      m.addTo(markersLayer)
+    }
+    markersLayer.addTo(map)
+  }
+
   const bounds = L.latLngBounds(pts.map(p => [p.lat, p.lon]))
   if (bounds.isValid()) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 })
+}
+
+function setMapMode(mode) {
+  mapMode.value = mode
+  updateHeat()
 }
 
 const mensCat = computed(() => (data.value?.por_mensajero || []).slice(0, 12).map(m => m.Mensajero))
@@ -217,12 +278,64 @@ function exportMensajeros() {
 </script>
 
 <style scoped>
+.map-wrap {
+  position: relative;
+}
 .map-container {
   width: 100%;
   height: 460px;
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid var(--border);
+}
+.map-legend {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  z-index: 1000;
+  background: var(--card, #fff);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--fg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  max-width: 180px;
+}
+.legend-title {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 0;
+}
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 1px solid #fff;
+}
+.legend-hint {
+  margin-top: 6px;
+  color: var(--fg-muted);
+  font-size: 10px;
+  line-height: 1.3;
+}
+:deep(.zone-label) {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: #fff;
+  font-weight: 700;
+  font-size: 11px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+:deep(.zone-label::before) {
+  display: none;
 }
 .metric-toggle {
   display: inline-flex;

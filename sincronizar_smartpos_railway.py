@@ -79,7 +79,7 @@ def geocode_step(limit: int) -> None:
     if limit <= 0:
         return
     try:
-        from backend.services.geocoding import normalize_address, geocode_addresses
+        from backend.services.geocoding import build_geocode_order, geocode_addresses
     except Exception as exc:
         logger.warning("Geocodificacion no disponible: %s", exc)
         return
@@ -88,8 +88,8 @@ def geocode_step(limit: int) -> None:
     if dom.empty or "Direccion" not in dom.columns:
         logger.info("Geocodificacion omitida: no hay domicilios con direccion")
         return
-    norm = dom["Direccion"].map(normalize_address).dropna()
-    ordered = norm.value_counts().index.tolist()
+    # Recientes primero para que el mapa del periodo actual siempre tenga datos.
+    ordered = build_geocode_order(dom)
     logger.info("Geocodificando hasta %s direcciones nuevas de domicilios", limit)
     result = geocode_addresses(ordered, limit=limit)
     logger.info("Geocodificacion completada: %s", result)
@@ -252,7 +252,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--skip-upload", action="store_true", help="No sube archivos a Railway.")
     parser.add_argument("--skip-validate", action="store_true", help="No valida conteos contra SQL.")
-    parser.add_argument("--geocode-limit", type=int, default=200, help="Maximo de direcciones nuevas a geocodificar por corrida (0 = omitir).")
+    parser.add_argument("--geocode-limit", type=int, default=300, help="Maximo de direcciones nuevas a geocodificar por corrida (0 = omitir).")
     return parser.parse_args()
 
 
