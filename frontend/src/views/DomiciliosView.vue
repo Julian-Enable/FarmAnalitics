@@ -183,6 +183,13 @@ function applyFilters() {
   store.fetchDomicilios(params)
 }
 
+function invalidateMapSize() {
+  if (!map) return
+  map.invalidateSize()
+  setTimeout(() => map?.invalidateSize(), 150)
+  setTimeout(() => map?.invalidateSize(), 500)
+}
+
 function initMap() {
   if (map || !mapEl.value) return
   map = L.map(mapEl.value, { scrollWheelZoom: false }).setView([4.655, -74.08], 12)
@@ -206,8 +213,20 @@ function colorFor(ratio) {
 function updateHeat() {
   if (!map) return
   const pts = (data.value?.mapa || [])
+    .map(p => ({
+      ...p,
+      lat: Number(p.lat),
+      lon: Number(p.lon),
+      domicilios: Number(p.domicilios || 0),
+      valor: Number(p.valor || 0),
+    }))
+    .filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lon))
   clearMapLayers()
-  if (!pts.length) return
+  invalidateMapSize()
+  if (!pts.length) {
+    map.setView([4.655, -74.08], 12)
+    return
+  }
 
   if (mapMode.value === 'calor') {
     if (!L.heatLayer) return
@@ -239,6 +258,7 @@ function updateHeat() {
 
   const bounds = L.latLngBounds(pts.map(p => [p.lat, p.lon]))
   if (bounds.isValid()) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 })
+  invalidateMapSize()
 }
 
 function setMapMode(mode) {
@@ -253,14 +273,19 @@ const estadoData = computed(() => (data.value?.por_estado || []).map(e => e.domi
 const tendCat = computed(() => (data.value?.tendencia || []).map(t => t.fecha))
 const tendData = computed(() => (data.value?.tendencia || []).map(t => t.domicilios))
 
-watch(() => data.value?.mapa, () => { nextTick(() => { initMap(); updateHeat(); if (map) setTimeout(() => map.invalidateSize(), 100) }) })
-
-onMounted(async () => {
-  if (store.status.domicilios && !data.value) applyFilters()
+async function renderMap() {
   await heatReady
   await nextTick()
   initMap()
+  invalidateMapSize()
   updateHeat()
+}
+
+watch(() => data.value?.mapa, () => { renderMap() }, { flush: 'post' })
+
+onMounted(async () => {
+  if (store.status.domicilios && !data.value) applyFilters()
+  await renderMap()
 })
 
 onBeforeUnmount(() => { if (map) { map.remove(); map = null } })
