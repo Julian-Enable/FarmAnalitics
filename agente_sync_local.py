@@ -132,6 +132,8 @@ def _friendly_message(line: str) -> str | None:
         return "Consultando devoluciones recientes..."
     if "mezclando" in text:
         return "Guardando informacion en la base historica local..."
+    if "geocodificando" in text:
+        return "Ubicando direcciones de domicilios en el mapa..."
     if "subiendo" in text and "railway" in text:
         return "Subiendo informacion actualizada a Railway..."
     if "subida terminada" in text:

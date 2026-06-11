@@ -63,6 +63,7 @@ def get_status(session_id):
             "compras": not historical.get_compras().empty,
             "inventario": historical.inventory_available(),
             "notas_credito": not historical.get_notas_credito().empty,
+            "domicilios": historical.domicilios_available(),
         }
     if is_db_configured():
         db = get_db_service()
@@ -79,9 +80,10 @@ def get_status(session_id):
                     "compras": historical["datasets"].get("compras", {}).get("exists", False),
                     "inventario": historical["datasets"].get("inventario", {}).get("exists", False) or connected,
                     "notas_credito": historical["datasets"].get("notas_credito", {}).get("exists", False),
+                    "domicilios": get_historical_store().domicilios_available() or connected,
                 }
             if connected:
-                return {"ventas": True, "compras": True, "inventario": True, "notas_credito": True}
+                return {"ventas": True, "compras": True, "inventario": True, "notas_credito": True, "domicilios": True}
     return _store_get_status(session_id)
 from config import (
     SEDES_INVENTARIO, MAX_UPLOAD_SIZE, ALLOWED_EXTENSIONS, EXCLUDED_INVENTORY_COLUMNS,
@@ -906,29 +908,42 @@ def rentabilidad(fecha_ini: str = None, fecha_fin: str = None, x_session_id: str
     }
 
 
-def _management_frames(x_session_id: str):
-    df_v = get_df(x_session_id, "ventas")
-    df_c = get_df(x_session_id, "compras")
+def _management_frames(x_session_id: str, fecha_ini: str | None = None, fecha_fin: str | None = None):
+    df_v = get_df(x_session_id, "ventas", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
+    df_c = get_df(x_session_id, "compras", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
     df_i = get_df(x_session_id, "inventario")
-    df_n = get_df(x_session_id, "notas_credito")
+    df_n = get_df(x_session_id, "notas_credito", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
     if df_v is None or df_i is None:
         raise HTTPException(404, "Faltan ventas o inventario para analitica gerencial")
     if df_c is None:
         df_c = pd.DataFrame()
     if df_n is None:
         df_n = pd.DataFrame()
+    # Filtro de respaldo para el almacenamiento en memoria (DB/historico ya filtran).
+    if fecha_ini or fecha_fin:
+        df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin)
+        if not df_c.empty:
+            df_c = _apply_date_filter(df_c, "FECHA", fecha_ini, fecha_fin)
+        if not df_n.empty:
+            df_n = _apply_date_filter(df_n, "Fecha", fecha_ini, fecha_fin)
     return df_v, df_c, df_i, df_n
 
 
 @router.get("/gerencia")
-def gerencia_operativa(x_session_id: str = Header(default="default-session")):
-    df_v, df_c, df_i, df_n = _management_frames(x_session_id)
+def gerencia_operativa(
+    fecha_ini: str = None,
+    fecha_fin: str = None,
+    x_session_id: str = Header(default="default-session"),
+):
+    fecha_ini, fecha_fin = _normalize_optional_date_range(fecha_ini, fecha_fin)
+    df_v, df_c, df_i, df_n = _management_frames(x_session_id, fecha_ini, fecha_fin)
     traslados = sugerido_traslados(df_v, df_i)
     pedidos = pedido_por_proveedor(df_v, df_c, df_i)
     rentabilidad = rentabilidad_gerencial(df_v, df_c, df_i)
     anomalias = detector_anomalias(df_v, df_c, df_i, df_n)
     diario = reporte_diario(df_v, df_c, df_i, df_n)
     return {
+        "periodo": {"fecha_ini": fecha_ini, "fecha_fin": fecha_fin},
         "traslados": traslados,
         "pedidos": pedidos,
         "rentabilidad": rentabilidad,
@@ -938,26 +953,30 @@ def gerencia_operativa(x_session_id: str = Header(default="default-session")):
 
 
 @router.get("/gerencia/traslados")
-def gerencia_traslados(x_session_id: str = Header(default="default-session")):
-    df_v, _, df_i, _ = _management_frames(x_session_id)
+def gerencia_traslados(fecha_ini: str = None, fecha_fin: str = None, x_session_id: str = Header(default="default-session")):
+    fecha_ini, fecha_fin = _normalize_optional_date_range(fecha_ini, fecha_fin)
+    df_v, _, df_i, _ = _management_frames(x_session_id, fecha_ini, fecha_fin)
     return sugerido_traslados(df_v, df_i)
 
 
 @router.get("/gerencia/pedidos")
-def gerencia_pedidos(x_session_id: str = Header(default="default-session")):
-    df_v, df_c, df_i, _ = _management_frames(x_session_id)
+def gerencia_pedidos(fecha_ini: str = None, fecha_fin: str = None, x_session_id: str = Header(default="default-session")):
+    fecha_ini, fecha_fin = _normalize_optional_date_range(fecha_ini, fecha_fin)
+    df_v, df_c, df_i, _ = _management_frames(x_session_id, fecha_ini, fecha_fin)
     return pedido_por_proveedor(df_v, df_c, df_i)
 
 
 @router.get("/gerencia/anomalias")
-def gerencia_anomalias(x_session_id: str = Header(default="default-session")):
-    df_v, df_c, df_i, df_n = _management_frames(x_session_id)
+def gerencia_anomalias(fecha_ini: str = None, fecha_fin: str = None, x_session_id: str = Header(default="default-session")):
+    fecha_ini, fecha_fin = _normalize_optional_date_range(fecha_ini, fecha_fin)
+    df_v, df_c, df_i, df_n = _management_frames(x_session_id, fecha_ini, fecha_fin)
     return detector_anomalias(df_v, df_c, df_i, df_n)
 
 
 @router.get("/gerencia/reporte-diario")
-def gerencia_reporte_diario(x_session_id: str = Header(default="default-session")):
-    df_v, df_c, df_i, df_n = _management_frames(x_session_id)
+def gerencia_reporte_diario(fecha_ini: str = None, fecha_fin: str = None, x_session_id: str = Header(default="default-session")):
+    fecha_ini, fecha_fin = _normalize_optional_date_range(fecha_ini, fecha_fin)
+    df_v, df_c, df_i, df_n = _management_frames(x_session_id, fecha_ini, fecha_fin)
     return reporte_diario(df_v, df_c, df_i, df_n)
 # ── Inventario ───────────────────────────────────────────────────────────────
 @router.get("/inventario")
@@ -1112,14 +1131,19 @@ def compras(
     if df_c is None or df_v is None:
         raise HTTPException(404, "Faltan datos")
 
+    if "Costo Total" not in df_c.columns:
+        df_c = df_c.copy()
+        df_c["Costo Total"] = pd.to_numeric(df_c.get("CANT", 0), errors="coerce").fillna(0) * pd.to_numeric(df_c.get("PRECIO", 0), errors="coerce").fillna(0)
     c = (
         df_c.groupby(["REFERENCIA", "DESCRIPCION"], as_index=False)
-        .agg(uds_compradas=("CANT", "sum"), proveedor=("PROVEEDOR", "first"))
+        .agg(uds_compradas=("CANT", "sum"), valor_comprado=("Costo Total", "sum"), proveedor=("PROVEEDOR", "first"))
         .rename(columns={"REFERENCIA": "Referencia", "DESCRIPCION": "Descripcion"})
     )
-    v = df_v.groupby("Referencia", as_index=False).agg(uds_vendidas=("Cant", "sum"))
+    v = df_v.groupby("Referencia", as_index=False).agg(uds_vendidas=("Cant", "sum"), valor_vendido=("Ingreso", "sum"))
 
-    comp = c.merge(v, on="Referencia", how="outer").fillna({"uds_compradas": 0, "uds_vendidas": 0})
+    comp = c.merge(v, on="Referencia", how="outer").fillna(
+        {"uds_compradas": 0, "uds_vendidas": 0, "valor_comprado": 0, "valor_vendido": 0}
+    )
     if df_i is not None:
         inv_cols = [c for c in ["Referencia", "Descripcion", "Total", "Nivel"] if c in df_i.columns]
         inv = _inventory_with_total(df_i)[inv_cols].rename(columns={"Total": "inv_actual"})
@@ -1167,10 +1191,33 @@ def compras(
         .rename(columns={"PROVEEDOR": "proveedor"})
     )
 
+    # ── Participación por punto de venta: cuánto compra vs cuánto vende cada sede ──
+    sede_compra_col = "SEDE" if "SEDE" in df_c.columns else ("ID_PuntoVenta" if "ID_PuntoVenta" in df_c.columns else None)
+    por_sede = []
+    if sede_compra_col and "Punto Venta" in df_v.columns:
+        compra_sede = (df_c.groupby(sede_compra_col, as_index=False)
+                       .agg(valor_comprado=("Costo Total", "sum"), uds_compradas=("CANT", "sum"))
+                       .rename(columns={sede_compra_col: "sede"}))
+        venta_sede = (df_v.groupby("Punto Venta", as_index=False)
+                      .agg(valor_vendido=("Ingreso", "sum"), uds_vendidas=("Cant", "sum"))
+                      .rename(columns={"Punto Venta": "sede"}))
+        ps = compra_sede.merge(venta_sede, on="sede", how="outer").fillna(0)
+        total_compra = float(ps["valor_comprado"].sum()) or 1.0
+        total_venta = float(ps["valor_vendido"].sum()) or 1.0
+        ps["diferencia"] = ps["valor_vendido"] - ps["valor_comprado"]
+        ps["margen_pct"] = np.where(ps["valor_vendido"] > 0, ps["diferencia"] / ps["valor_vendido"] * 100, 0)
+        ps["part_compra_pct"] = ps["valor_comprado"] / total_compra * 100
+        ps["part_venta_pct"] = ps["valor_vendido"] / total_venta * 100
+        ps["ratio_venta_compra"] = np.where(ps["valor_comprado"] > 0, ps["valor_vendido"] / ps["valor_comprado"], 0)
+        ps = ps.sort_values("valor_vendido", ascending=False)
+        por_sede = json.loads(ps.to_json(orient="records"))
+
     return {
         "kpis": {
             "total_comprado": int(comp["uds_compradas"].sum()),
             "total_vendido": int(comp["uds_vendidas"].sum()),
+            "valor_comprado": round(float(comp["valor_comprado"].sum()), 0),
+            "valor_vendido": round(float(comp["valor_vendido"].sum()), 0),
             "n_sobre_compra": int(len(comp[comp["estado"] == "sobre_compra"])),
             "n_desabastecimiento": int(len(comp[comp["estado"] == "desabastecimiento"])),
             "dias_periodo": int(dias_periodo),
@@ -1178,6 +1225,7 @@ def compras(
             "inv_max_dias": inv_max_dias,
         },
         "comparativo": json.loads(filtered.sort_values("uds_compradas", ascending=False).to_json(orient="records")),
+        "por_sede": por_sede,
         "top_proveedores": json.loads(top_prov.to_json(orient="records")),
         "filtros": {
             "proveedores": sorted(df_c["PROVEEDOR"].dropna().unique().tolist()),
@@ -1204,6 +1252,30 @@ def endpoint_notas_credito(
     df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin) if df_v is not None else None
     notas_unicas = _notas_credito_note_frame(df_nc)
     lineas_producto = _notas_credito_product_frame(df_nc)
+
+    # Frame de lineas con unidades, motivo y vendedor para complementar el valor
+    # devuelto con la cantidad de unidades en cada corte.
+    lp_units = lineas_producto.copy() if not lineas_producto.empty else pd.DataFrame()
+    key_cols_units = _notas_credito_key_cols(lp_units) if not lp_units.empty else []
+    if not lp_units.empty:
+        lp_units["Cantidad"] = pd.to_numeric(lp_units.get("Cantidad", 0), errors="coerce").fillna(0)
+        if "Motivo" not in lp_units.columns:
+            if "Observaciones" in lp_units.columns:
+                from backend.services.processing import _categorizar_motivo
+                lp_units["Motivo"] = lp_units["Observaciones"].apply(_categorizar_motivo)
+            else:
+                lp_units["Motivo"] = "Sin observacion"
+        _vs_units = _preferred_vendedor_series(lp_units)
+        if _vs_units is not None:
+            lp_units["Vendedor"] = _vs_units
+
+    def _units_by(col: str) -> pd.DataFrame:
+        if lp_units.empty or col not in lp_units.columns:
+            return pd.DataFrame(columns=[col, "n_unidades"])
+        return lp_units.groupby(col, as_index=False)["Cantidad"].sum().rename(columns={"Cantidad": "n_unidades"})
+
+    total_unidades = float(lp_units["Cantidad"].sum()) if not lp_units.empty else 0.0
+
     dias_periodo = 1
     if fecha_ini and fecha_fin:
         dias_periodo = max((datetime.strptime(fecha_fin, "%Y-%m-%d").date() - datetime.strptime(fecha_ini, "%Y-%m-%d").date()).days + 1, 1)
@@ -1214,6 +1286,7 @@ def endpoint_notas_credito(
         return {
             "kpis": {
                 "total_devuelto": 0,
+                "unidades_devueltas": 0,
                 "n_notas": 0,
                 "promedio_nota": 0,
                 "tasa_pct": 0,
@@ -1250,31 +1323,40 @@ def endpoint_notas_credito(
         tendencia = [{"fecha": str(r["Fecha"].date()), "total": round(r["Total Neto"], 0)}
                      for _, r in s.iterrows()]
 
-    # Por sede
+    # Por sede (valor + unidades)
     col_sede = "Punto Venta" if "Punto Venta" in notas_unicas.columns else None
     por_sede = []
     if col_sede:
         sede_df = (notas_unicas.groupby(col_sede, as_index=False)
                    .agg(total_devuelto=("Total Neto", "sum"), n_notas=("Total Neto", "count"))
-                   .sort_values("total_devuelto", ascending=False)
                    .rename(columns={col_sede: "sede"}))
+        u = _units_by("Punto Venta").rename(columns={"Punto Venta": "sede"})
+        sede_df = sede_df.merge(u, on="sede", how="left")
+        sede_df["n_unidades"] = sede_df["n_unidades"].fillna(0)
+        sede_df = sede_df.sort_values("total_devuelto", ascending=False)
         por_sede = json.loads(sede_df.to_json(orient="records"))
 
-    # Por vendedor
+    # Por vendedor (valor + unidades)
     por_vendedor = []
     if "Vendedor" in notas_unicas.columns:
         vend_df = (notas_unicas.groupby("Vendedor", as_index=False)
                    .agg(total_devuelto=("Total Neto", "sum"), n_notas=("Total Neto", "count"))
-                   .sort_values("total_devuelto", ascending=False)
                    .rename(columns={"Vendedor": "vendedor"}))
+        u = _units_by("Vendedor").rename(columns={"Vendedor": "vendedor"})
+        vend_df = vend_df.merge(u, on="vendedor", how="left")
+        vend_df["n_unidades"] = vend_df["n_unidades"].fillna(0)
+        vend_df = vend_df.sort_values("total_devuelto", ascending=False)
         por_vendedor = json.loads(vend_df.to_json(orient="records"))
 
-    # Por motivo
+    # Por motivo (valor + unidades)
     por_motivo = []
     if "Motivo" in notas_unicas.columns:
         mot_df = (notas_unicas.groupby("Motivo", as_index=False)
-                  .agg(total=("Total Neto", "sum"), n=("Total Neto", "count"))
-                  .sort_values("total", ascending=False))
+                  .agg(total=("Total Neto", "sum"), n=("Total Neto", "count")))
+        u = _units_by("Motivo")
+        mot_df = mot_df.merge(u, on="Motivo", how="left")
+        mot_df["n_unidades"] = mot_df["n_unidades"].fillna(0)
+        mot_df = mot_df.sort_values("total", ascending=False)
         por_motivo = json.loads(mot_df.to_json(orient="records"))
 
     # Productos devueltos: usar las lineas reales de la nota credito.
@@ -1293,8 +1375,14 @@ def endpoint_notas_credito(
         prod_dev["nombre"] = prod_dev["Descripcion"].astype(str).str[:35]
         top_productos_devueltos = json.loads(prod_dev.to_json(orient="records"))
 
+    # Unidades por nota (para la tabla de detalle)
+    if key_cols_units and not lp_units.empty:
+        units_nota = lp_units.groupby(key_cols_units, as_index=False)["Cantidad"].sum().rename(columns={"Cantidad": "Unidades"})
+        notas_unicas = notas_unicas.merge(units_nota, on=key_cols_units, how="left")
+        notas_unicas["Unidades"] = notas_unicas["Unidades"].fillna(0)
+
     # Tabla detalle
-    cols_tabla = [c for c in ["Fecha", "NotaCredito", "Punto Venta", "Total Neto",
+    cols_tabla = [c for c in ["Fecha", "NotaCredito", "Punto Venta", "Total Neto", "Unidades",
                                "Vendedor", "Creada", "Motivo", "Factura", "Observaciones", "Saldo"]
                   if c in notas_unicas.columns]
     tabla = _df_to_records(notas_unicas[cols_tabla].sort_values("Fecha", ascending=False), max_rows=300)
@@ -1302,6 +1390,7 @@ def endpoint_notas_credito(
     return {
         "kpis": {
             "total_devuelto":  round(total_devuelto, 0),
+            "unidades_devueltas": int(total_unidades),
             "n_notas":         n_notas,
             "promedio_nota":   promedio_nota,
             "tasa_pct":        tasa_pct,
@@ -1780,6 +1869,145 @@ def sedes(
         "top5_sede":     top5,
         "stock_sedes":   stock_sede,
         "lista_sedes":   lista_sedes,
+    }
+
+
+# ── Domicilios ────────────────────────────────────────────────────────────────
+
+def _get_domicilios(fecha_ini=None, fecha_fin=None) -> pd.DataFrame:
+    historical = get_historical_store()
+    if historical.domicilios_available():
+        return historical.get_domicilios(fecha_ini, fecha_fin)
+    if is_db_configured():
+        db = get_db_service()
+        if db:
+            return db.get_domicilios(fecha_ini, fecha_fin)
+    return pd.DataFrame()
+
+
+@router.get("/domicilios")
+def domicilios(
+    fecha_ini: str = None,
+    fecha_fin: str = None,
+    sede: str = "Todas",
+    x_session_id: str = Header(default="default-session"),
+):
+    from backend.services.geocoding import attach_coords
+
+    fecha_ini, fecha_fin = _normalize_optional_date_range(fecha_ini, fecha_fin)
+    dom = _get_domicilios(fecha_ini, fecha_fin)
+    if dom is None or dom.empty:
+        raise HTTPException(404, "No hay datos de domicilios para el periodo")
+
+    dom = dom.copy()
+    sede_col = "Punto Venta" if "Punto Venta" in dom.columns else "ID_PuntoVenta"
+    lista_sedes = sorted(dom[sede_col].dropna().astype(str).unique().tolist()) if sede_col in dom.columns else []
+    if sede and sede != "Todas" and sede_col in dom.columns:
+        dom = dom[dom[sede_col].astype(str) == sede]
+    if dom.empty:
+        raise HTTPException(404, "No hay domicilios para los filtros seleccionados")
+
+    dom["Total"] = pd.to_numeric(dom.get("Total", 0), errors="coerce").fillna(0)
+    dom["Estado"] = dom.get("Estado", "").astype(str)
+    estado_norm = dom["Estado"].str.strip().str.lower()
+    dom["Mensajero"] = dom.get("Mensajero", "").astype(str).str.strip().replace({"": "Sin mensajero", "nan": "Sin mensajero"})
+
+    n_dom = int(len(dom))
+    n_entregados = int((estado_norm == "entregado").sum())
+    valor_movido = float(dom["Total"].sum())
+    ticket_prom = round(valor_movido / n_dom, 0) if n_dom else 0
+
+    # Tarifa de servicio de domicilio: líneas de venta de servicio de domicilio.
+    df_v = get_df(x_session_id, "ventas", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
+    tarifa_servicio = 0.0
+    n_servicios = 0
+    if df_v is not None and not df_v.empty and "Descripcion" in df_v.columns:
+        df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin)
+        if sede and sede != "Todas" and "Punto Venta" in df_v.columns:
+            df_v = df_v[df_v["Punto Venta"].astype(str) == sede]
+        serv = df_v[df_v["Descripcion"].astype(str).str.contains("SERVICIO DOMICILIO|DOMICILIO POLIGONO|POLIGONO", case=False, na=False, regex=True)]
+        if not serv.empty:
+            tarifa_servicio = float(serv["Ingreso"].sum())
+            n_servicios = int(serv["Cant"].sum())
+
+    # Por mensajero (cantidad, valor, % entregados)
+    g = dom.assign(_entregado=(estado_norm == "entregado").astype(int))
+    por_mensajero_df = (g.groupby("Mensajero", as_index=False)
+                        .agg(domicilios=("ID", "count") if "ID" in g.columns else ("Total", "count"),
+                             valor=("Total", "sum"),
+                             entregados=("_entregado", "sum"))
+                        .sort_values("domicilios", ascending=False))
+    por_mensajero_df["pct_entregado"] = np.where(por_mensajero_df["domicilios"] > 0,
+                                                 por_mensajero_df["entregados"] / por_mensajero_df["domicilios"] * 100, 0).round(1)
+    por_mensajero = json.loads(por_mensajero_df.to_json(orient="records"))
+
+    # Por sede
+    por_sede = []
+    if sede_col in dom.columns:
+        ps = (dom.groupby(sede_col, as_index=False)
+              .agg(domicilios=("Total", "count"), valor=("Total", "sum"))
+              .sort_values("domicilios", ascending=False)
+              .rename(columns={sede_col: "sede"}))
+        por_sede = json.loads(ps.to_json(orient="records"))
+
+    # Por estado
+    por_estado = json.loads(
+        dom.groupby(dom["Estado"].str.strip().replace({"": "Sin estado"}), as_index=False)
+        .agg(domicilios=("Total", "count"))
+        .sort_values("domicilios", ascending=False)
+        .rename(columns={"Estado": "estado"})
+        .to_json(orient="records")
+    )
+
+    # Tendencia semanal (cantidad y valor)
+    tendencia = []
+    if "Fecha" in dom.columns:
+        d = dom.copy()
+        d["Fecha"] = pd.to_datetime(d["Fecha"], errors="coerce")
+        d = d[d["Fecha"].notna()]
+        if not d.empty:
+            s = d.set_index("Fecha").resample("W").agg(domicilios=("Total", "count"), valor=("Total", "sum")).reset_index()
+            tendencia = [{"fecha": str(r["Fecha"].date()), "domicilios": int(r["domicilios"]), "valor": round(float(r["valor"]), 0)} for _, r in s.iterrows()]
+
+    # Mapa: geocodificar direcciones y agregar por coordenada (heatmap)
+    mapa = []
+    n_ubicados = 0
+    geo = attach_coords(dom, "Direccion")
+    if "lat" in geo.columns:
+        geo_ok = geo[geo["lat"].notna() & geo["lon"].notna()].copy()
+        n_ubicados = int(len(geo_ok))
+        if not geo_ok.empty:
+            geo_ok["lat_r"] = geo_ok["lat"].round(4)
+            geo_ok["lon_r"] = geo_ok["lon"].round(4)
+            pts = (geo_ok.groupby(["lat_r", "lon_r"], as_index=False)
+                   .agg(domicilios=("Total", "count"), valor=("Total", "sum")))
+            pts = pts.sort_values("domicilios", ascending=False).head(3000)
+            mapa = [{"lat": float(r["lat_r"]), "lon": float(r["lon_r"]), "domicilios": int(r["domicilios"]), "valor": round(float(r["valor"]), 0)} for _, r in pts.iterrows()]
+
+    # Tabla detalle
+    cols_tabla = [c for c in ["Fecha", "Factura", "Punto Venta", "Cliente", "Direccion", "Mensajero", "Estado", "Total"] if c in dom.columns]
+    tabla = _df_to_records(dom[cols_tabla].sort_values("Fecha", ascending=False), max_rows=300)
+
+    return {
+        "kpis": {
+            "total_domicilios": n_dom,
+            "entregados": n_entregados,
+            "pct_entregado": round(n_entregados / n_dom * 100, 1) if n_dom else 0,
+            "valor_movido": round(valor_movido, 0),
+            "ticket_promedio": ticket_prom,
+            "tarifa_servicio": round(tarifa_servicio, 0),
+            "n_servicios_domicilio": n_servicios,
+            "n_mensajeros": int(por_mensajero_df.shape[0]),
+            "ubicados_en_mapa": n_ubicados,
+            "pct_ubicado": round(n_ubicados / n_dom * 100, 1) if n_dom else 0,
+        },
+        "por_mensajero": por_mensajero,
+        "por_sede": por_sede,
+        "por_estado": por_estado,
+        "tendencia": tendencia,
+        "mapa": mapa,
+        "tabla": tabla,
+        "lista_sedes": lista_sedes,
     }
 
 

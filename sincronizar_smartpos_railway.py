@@ -72,7 +72,31 @@ def _month_start() -> pd.Timestamp:
     return pd.Timestamp(datetime(now.year, now.month, 1))
 
 
-def sync_local(recent_days: int, validate: bool, mode: str = "incremental") -> None:
+def geocode_step(limit: int) -> None:
+    """Geocodifica direcciones nuevas de domicilios (más frecuentes primero) para
+    alimentar el mapa de calor. Respeta el límite de 1 req/seg de Nominatim, por eso
+    se procesa un tope por corrida; lo demás se completa en siguientes sincronizaciones."""
+    if limit <= 0:
+        return
+    try:
+        from backend.services.geocoding import normalize_address, geocode_addresses
+    except Exception as exc:
+        logger.warning("Geocodificacion no disponible: %s", exc)
+        return
+    dom_path = output_path("HISTORICO_DOMICILIOS")
+    dom = read_local(dom_path)
+    if dom.empty or "Direccion" not in dom.columns:
+        logger.info("Geocodificacion omitida: no hay domicilios con direccion")
+        return
+    norm = dom["Direccion"].map(normalize_address).dropna()
+    ordered = norm.value_counts().index.tolist()
+    logger.info("Geocodificando hasta %s direcciones nuevas de domicilios", limit)
+    result = geocode_addresses(ordered, limit=limit)
+    logger.info("Geocodificacion completada: %s", result)
+
+
+def sync_local(recent_days: int, validate: bool, mode: str = "incremental",
+               geocode_limit: int = 200) -> None:
     if not is_db_configured():
         raise RuntimeError("Base de datos no configurada en .env")
 
@@ -137,6 +161,9 @@ def sync_local(recent_days: int, validate: bool, mode: str = "incremental") -> N
         logger.info("[%s/%s] Mezclando %s con historico local", current_dataset, total_datasets, config.name)
         df = merge_local(config, df)
         save_df(df, config.name)
+
+    logger.info("Paso 3.5/4: geocodificando direcciones nuevas de domicilios")
+    geocode_step(geocode_limit)
 
     if validate:
         start = min(validation_starts) if validation_starts else pd.Timestamp(datetime.now() - relativedelta(days=recent_days)).normalize()
@@ -225,13 +252,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--skip-upload", action="store_true", help="No sube archivos a Railway.")
     parser.add_argument("--skip-validate", action="store_true", help="No valida conteos contra SQL.")
+    parser.add_argument("--geocode-limit", type=int, default=200, help="Maximo de direcciones nuevas a geocodificar por corrida (0 = omitir).")
     return parser.parse_args()
 
 
 def main() -> None:
     script_start_time = datetime.now()
     args = parse_args()
-    sync_local(args.recent_days, validate=not args.skip_validate, mode=args.mode)
+    sync_local(args.recent_days, validate=not args.skip_validate, mode=args.mode, geocode_limit=args.geocode_limit)
     if not args.skip_upload:
         upload_to_railway(script_start_time)
     logger.info("Sincronizacion completa")

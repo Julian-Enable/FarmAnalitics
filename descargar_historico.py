@@ -157,6 +157,40 @@ DATASETS = {
               AND nc.Fecha < ?
         """,
     ),
+    "domicilios": DatasetConfig(
+        name="HISTORICO_DOMICILIOS",
+        date_column="Fecha",
+        dedupe_subset=("ID",),
+        count_sql="""
+            SELECT COUNT_BIG(*) AS filas
+            FROM FACTURAS_DOMICILIOS fd
+            WHERE fd.Fecha >= ?
+              AND fd.Fecha < ?
+        """,
+        select_sql="""
+            SELECT
+                fd.ID,
+                fd.ID_Factura,
+                fd.Fecha,
+                fd.ID_PuntoVenta,
+                fd.Factura,
+                fd.Cliente,
+                fd.Direccion,
+                fd.Zona,
+                fd.Total,
+                fd.Mensajero,
+                fd.Estado,
+                fd.Tipo,
+                fd.MetodoPago,
+                fd.FechaDespacho,
+                fd.FechaEntrega,
+                fd.CordX,
+                fd.CordY
+            FROM FACTURAS_DOMICILIOS fd
+            WHERE fd.Fecha >= ?
+              AND fd.Fecha < ?
+        """,
+    ),
     "notas_devolucion": DatasetConfig(
         name="HISTORICO_NOTAS_DEVOLUCION",
         date_column="Fecha",

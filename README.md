@@ -106,6 +106,29 @@ Output Directory: dist
 Environment: VITE_API_URL=https://farmanalitics-production.up.railway.app
 ```
 
+## Domicilios y mapa de calor
+
+El módulo de Domicilios usa la tabla `FACTURAS_DOMICILIOS` de SmartPOS, que se
+sincroniza a `data/historico/HISTORICO_DOMICILIOS.parquet` junto con el resto del
+histórico (ya está incluida en `DATASETS` de `descargar_historico.py`, así que la
+descarga y subida a Railway son automáticas).
+
+El mapa de calor geocodifica las direcciones de entrega a coordenadas con Nominatim
+(OpenStreetMap) y guarda el resultado en `data/historico/GEOCODE_CACHE.parquet`
+(también se sube a Railway). Como Nominatim permite ~1 petición por segundo, la
+geocodificación se hace por bloques:
+
+```powershell
+# Geocodificación masiva inicial (las direcciones más frecuentes primero).
+# Con ~5000 se cubre ~92% de los domicilios. Puede tardar; se puede ejecutar varias veces.
+python scripts/geocode_domicilios.py --limit 5000
+```
+
+Cada sincronización desde el PC geocodifica un tope de direcciones nuevas
+(`--geocode-limit`, por defecto 200) para mantener el mapa al día sin demorar la
+actualización. Las direcciones que no resuelven no se grafican en el mapa pero sí
+aparecen en las tablas.
+
 ## Notas
 
 - `.env`, `.venv`, `frontend/node_modules`, `frontend/dist`, logs y Parquet

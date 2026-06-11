@@ -46,7 +46,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     localStorage.setItem('farm_theme', theme.value)
   }
 
-  const status = reactive({ ventas: false, compras: false, inventario: false, notas_credito: false, metas: false })
+  const status = reactive({ ventas: false, compras: false, inventario: false, notas_credito: false, domicilios: false, metas: false })
   const uploading = ref(false)
   const exporting = ref(false)
   const refreshingLive = ref(false)
@@ -76,6 +76,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     devoluciones: null,
     metas: null,
     gerencia: null,
+    domicilios: null,
   })
 
   const loading = reactive({
@@ -88,6 +89,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     devoluciones: false,
     metas: false,
     gerencia: false,
+    domicilios: false,
   })
 
   const errors = reactive({
@@ -100,6 +102,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     devoluciones: null,
     metas: null,
     gerencia: null,
+    domicilios: null,
   })
 
   function fmt(n) {
@@ -416,12 +419,23 @@ export const useDashboardStore = defineStore('dashboard', () => {
     finally { loading.metas = false }
   }
 
-  async function fetchGerencia() {
+  async function fetchDomicilios(params = {}) {
+    if (!status.domicilios) return
+    loading.domicilios = true
+    clearModuleError('domicilios')
+    try {
+      const { data: d } = await axios.get('/api/domicilios', { params })
+      data.domicilios = d
+    } catch (e) { setModuleError('domicilios', e, 'No se pudo cargar domicilios') }
+    finally { loading.domicilios = false }
+  }
+
+  async function fetchGerencia(params = {}) {
     if (!status.ventas || !status.inventario) return
     loading.gerencia = true
     clearModuleError('gerencia')
     try {
-      const { data: d } = await axios.get('/api/gerencia')
+      const { data: d } = await axios.get('/api/gerencia', { params })
       data.gerencia = d
     } catch (e) { setModuleError('gerencia', e, 'No se pudo cargar gerencia operativa') }
     finally { loading.gerencia = false }
@@ -601,6 +615,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
     uploadFiles, checkStatus, resetSession, exportFullReport,
     fetchHistoricalStatus, refreshLiveInformation, checkLocalAgent,
     fetchResumen, fetchVentas, fetchRentabilidad,
-    fetchInventario, fetchCompras, fetchSedes, fetchDevoluciones, fetchMetas, fetchGerencia,
+    fetchInventario, fetchCompras, fetchSedes, fetchDevoluciones, fetchMetas, fetchGerencia, fetchDomicilios,
   }
 })

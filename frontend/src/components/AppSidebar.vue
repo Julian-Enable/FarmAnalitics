@@ -221,7 +221,7 @@
 import { ref, computed, shallowRef, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDashboardStore } from '../stores/dashboard'
-import { LayoutDashboard, TrendingUp, DollarSign, AlertCircle, Scale, Store, FileUp, Database, Activity, Download, Trash2, RotateCcw, Target, RefreshCw, BriefcaseBusiness, Sun, Moon } from 'lucide-vue-next'
+import { LayoutDashboard, TrendingUp, DollarSign, AlertCircle, Scale, Store, FileUp, Database, Activity, Download, Trash2, RotateCcw, Target, RefreshCw, BriefcaseBusiness, Sun, Moon, Bike } from 'lucide-vue-next'
 
 const store  = useDashboardStore()
 const router = useRouter()
@@ -274,6 +274,7 @@ const navItems = [
   { to: '/compras',      icon: shallowRef(Scale),           label: 'Compras vs Ventas'   },
   { to: '/sedes',        icon: shallowRef(Store),           label: 'Rendimiento Sedes'   },
   { to: '/devoluciones', icon: shallowRef(RotateCcw),       label: 'Devoluciones'        },
+  { to: '/domicilios',   icon: shallowRef(Bike),            label: 'Domicilios'          },
   { to: '/metas',        icon: shallowRef(Target),          label: 'Proyeccion y Metas'  },
   { to: '/gerencia',     icon: shallowRef(BriefcaseBusiness), label: 'Gerencia Operativa' },
 ]

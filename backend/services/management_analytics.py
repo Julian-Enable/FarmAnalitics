@@ -200,18 +200,34 @@ def _profit_by_product(ventas: pd.DataFrame, compras: pd.DataFrame, inventario: 
 
     base = base.merge(inv, on="Referencia", how="left", suffixes=("", "_inv"))
     
-    # 1. Obtener costo transaccional si existe en Ventas
+    # 1. Costo transaccional desde Ventas (columna Costo = costo POR UNIDAD).
+    #    Solo está poblada en una fracción mínima de las líneas, así que se calcula
+    #    como promedio ponderado por unidad sobre las filas que sí lo traen y solo
+    #    se confía cuando cubre la mayoría de las unidades vendidas. (Antes se sumaba
+    #    el costo unitario y se dividía entre TODAS las unidades, dando un costo
+    #    cercano a 0 y márgenes falsos del 95%+.)
     if "Costo" in sales.columns:
-        costo_real = sales.groupby("Referencia", as_index=False).agg(costo_real_total=("Costo", "sum"))
-        base = base.merge(costo_real, on="Referencia", how="left")
-        base["precio_compra_tx"] = np.where(
-            base["cant_vend"] > 0,
-            _num(base.get("costo_real_total", 0)) / base["cant_vend"],
-            0
-        )
-        base["precio_compra_tx"] = base["precio_compra_tx"].fillna(0)
+        s_cost = sales[["Referencia", "Cant", "Costo"]].copy()
+        s_cost["Costo"] = _num(s_cost["Costo"])
+        s_cost = s_cost[s_cost["Costo"] > 0]
+        if not s_cost.empty:
+            s_cost["_costo_linea"] = s_cost["Costo"] * _num(s_cost["Cant"])
+            tx = s_cost.groupby("Referencia", as_index=False).agg(
+                _costo_sum=("_costo_linea", "sum"),
+                _uds_con_costo=("Cant", "sum"),
+            )
+            tx["precio_compra_tx"] = tx["_costo_sum"] / tx["_uds_con_costo"].replace(0, np.nan)
+            base = base.merge(tx[["Referencia", "precio_compra_tx", "_uds_con_costo"]], on="Referencia", how="left")
+        else:
+            base["precio_compra_tx"] = 0.0
+            base["_uds_con_costo"] = 0.0
     else:
-        base["precio_compra_tx"] = 0
+        base["precio_compra_tx"] = 0.0
+        base["_uds_con_costo"] = 0.0
+    base["precio_compra_tx"] = _num(base.get("precio_compra_tx", 0))
+    base["_uds_con_costo"] = _num(base.get("_uds_con_costo", 0))
+    base["_tx_coverage"] = np.where(base["cant_vend"] > 0, base["_uds_con_costo"] / base["cant_vend"], 0)
+    base["precio_compra_tx"] = np.where(base["_tx_coverage"] >= 0.5, base["precio_compra_tx"], 0.0)
 
     # 2. Calcular costo promedio ponderado usando compras e historiales
     if compras is not None and not compras.empty and {"REFERENCIA", "PRECIO", "CANT"}.issubset(compras.columns):
@@ -263,6 +279,28 @@ def _profit_by_product(ventas: pd.DataFrame, compras: pd.DataFrame, inventario: 
             base["precio_compra_tx"],
             _num(base.get("Precio Compra", 0))
         )
+    # ── Fuente y confiabilidad del costo ──────────────────────────────────────
+    # Productos con costo 0 pueden ser legítimos (promos 2+1/3+1 donde el costo
+    # promedio ponderado ya diluye las unidades regaladas) o no tener ningún
+    # soporte de compra. Estos últimos producirían margen 100% falso o falsos
+    # "vendidos bajo costo": se marcan como costo no confiable para excluirlos
+    # de las alertas, sin contaminar las cifras.
+    base["precio_compra"] = _num(base.get("precio_compra", 0))
+    _cpp = _num(base["cpp_recent"]) if "cpp_recent" in base.columns else pd.Series(0.0, index=base.index)
+    _last_c = _num(base["precio_last_compra"]) if "precio_last_compra" in base.columns else pd.Series(0.0, index=base.index)
+    _catal = _num(base.get("Precio Compra", 0))
+    base["costo_fuente"] = np.select(
+        [
+            _num(base.get("precio_compra_tx", 0)) > 0,
+            _cpp > 0,
+            _last_c > 0,
+            _catal > 0,
+        ],
+        ["transaccional", "compras_90d", "ultima_compra", "catalogo"],
+        default="sin_costo",
+    )
+    base["costo_confiable"] = base["precio_compra"] > 0
+
     base["precio_venta_config"] = _num(base.get("Precio Venta", 0))
     base["stock_total"] = _num(base.get("Total", 0))
     base["precio_venta_prom"] = base["ingreso_total"] / base["cant_vend"].replace(0, np.nan)
@@ -283,22 +321,60 @@ def _profit_by_product(ventas: pd.DataFrame, compras: pd.DataFrame, inventario: 
     return base.replace([np.inf, -np.inf], np.nan).fillna(0), dias
 
 
+# Umbral de "fuga de margen": producto de alta venta con margen por debajo de esto.
+FUGA_MARGEN_PCT = 8.0
+
+
+def _sede_rentabilidad(ventas: pd.DataFrame, profit: pd.DataFrame, dias: int = 35) -> pd.DataFrame:
+    """Rentabilidad real por sede: agrupa las ventas reales por punto de venta y
+    les cruza el costo unitario de cada referencia. Reemplaza el cálculo anterior
+    que asignaba toda la utilidad de un producto a una sola sede (last())."""
+    sales, _, _ = _period_sales(ventas, dias)
+    if sales.empty or "Punto Venta" not in sales.columns or profit.empty:
+        return pd.DataFrame(columns=["sede", "ingreso_total", "utilidad_total", "margen_pct", "productos"])
+
+    costo = profit[["Referencia", "precio_compra", "costo_confiable"]].drop_duplicates("Referencia")
+    lines = sales.groupby(["Punto Venta", "Referencia"], as_index=False).agg(
+        ingreso=("Ingreso", "sum"),
+        cant=("Cant", "sum"),
+    )
+    lines = lines.merge(costo, on="Referencia", how="left")
+    lines["precio_compra"] = _num(lines["precio_compra"])
+    lines["costo_confiable"] = lines["costo_confiable"].fillna(False)
+    # Solo se descuenta costo de las líneas con costo confiable, para no inflar la
+    # utilidad con costos en 0 ni distorsionarla con costos sin soporte.
+    lines["costo_total"] = np.where(lines["costo_confiable"], lines["cant"] * lines["precio_compra"], 0.0)
+    sede = lines.groupby("Punto Venta", as_index=False).agg(
+        ingreso_total=("ingreso", "sum"),
+        costo_total=("costo_total", "sum"),
+        productos=("Referencia", "nunique"),
+    ).rename(columns={"Punto Venta": "sede"})
+    sede["utilidad_total"] = sede["ingreso_total"] - sede["costo_total"]
+    sede["margen_pct"] = np.where(sede["ingreso_total"] > 0, sede["utilidad_total"] / sede["ingreso_total"] * 100, 0)
+    return sede
+
+
 def rentabilidad_gerencial(ventas: pd.DataFrame, compras: pd.DataFrame, inventario: pd.DataFrame) -> dict[str, Any]:
     profit, dias = _profit_by_product(ventas, compras, inventario, 35)
     if profit.empty:
         return {
-            "kpis": {"fugas_margen": 0, "vendidos_bajo_costo": 0, "precio_desviado": 0, "sedes_baja_utilidad": 0},
+            "kpis": {"fugas_margen": 0, "vendidos_bajo_costo": 0, "precio_desviado": 0, "sedes_baja_utilidad": 0, "sin_costo": 0},
             "bajo_margen_alta_venta": [],
             "vendidos_bajo_costo": [],
             "precio_mal_configurado": [],
             "laboratorios_capital": [],
             "sedes_ingreso_baja_utilidad": [],
+            "sin_costo": [],
         }
 
     q_alta = max(float(profit["cant_vend"].quantile(0.8)), 5)
-    bajo_margen = profit[(profit["cant_vend"] >= q_alta) & (profit["margen_pct"] < 8)].copy()
-    bajo_costo = profit[profit["utilidad_unit"] < 0].copy()
+    # Las fugas de margen y los vendidos bajo costo solo aplican a productos con
+    # costo confiable; los de "sin_costo" se reportan aparte para cargarles costo.
+    confiable = profit["costo_confiable"]
+    bajo_margen = profit[(profit["cant_vend"] >= q_alta) & (profit["margen_pct"] < FUGA_MARGEN_PCT) & confiable].copy()
+    bajo_costo = profit[(profit["utilidad_unit"] < 0) & confiable].copy()
     precio_mal = profit[(profit["precio_venta_config"] > 0) & (profit["precio_desviado_pct"].abs() >= 15)].copy()
+    sin_costo = profit[(~confiable) & (profit["cant_vend"] >= q_alta)].copy()
 
     lab = profit.groupby("lab", as_index=False).agg(
         ingreso_total=("ingreso_total", "sum"),
@@ -309,12 +385,7 @@ def rentabilidad_gerencial(ventas: pd.DataFrame, compras: pd.DataFrame, inventar
     lab["margen_pct"] = np.where(lab["ingreso_total"] > 0, lab["utilidad_total"] / lab["ingreso_total"] * 100, 0)
     lab["utilidad_sobre_capital"] = np.where(lab["capital_actual"] > 0, lab["utilidad_total"] / lab["capital_actual"] * 100, 0)
 
-    sede = profit.groupby("sede", as_index=False).agg(
-        ingreso_total=("ingreso_total", "sum"),
-        utilidad_total=("utilidad_total", "sum"),
-        productos=("Referencia", "nunique"),
-    )
-    sede["margen_pct"] = np.where(sede["ingreso_total"] > 0, sede["utilidad_total"] / sede["ingreso_total"] * 100, 0)
+    sede = _sede_rentabilidad(ventas, profit, 35)
     ingreso_alto = sede["ingreso_total"].quantile(0.6) if len(sede) else 0
     sedes_fuga = sede[(sede["ingreso_total"] >= ingreso_alto) & (sede["margen_pct"] < 12)].copy()
 
@@ -324,6 +395,7 @@ def rentabilidad_gerencial(ventas: pd.DataFrame, compras: pd.DataFrame, inventar
             "vendidos_bajo_costo": int(len(bajo_costo)),
             "precio_desviado": int(len(precio_mal)),
             "sedes_baja_utilidad": int(len(sedes_fuga)),
+            "sin_costo": int(len(sin_costo)),
             "dias_periodo": int(dias),
         },
         "bajo_margen_alta_venta": _records(bajo_margen.sort_values(["cant_vend", "margen_pct"], ascending=[False, True]), 30),
@@ -331,6 +403,7 @@ def rentabilidad_gerencial(ventas: pd.DataFrame, compras: pd.DataFrame, inventar
         "precio_mal_configurado": _records(precio_mal.sort_values("precio_desviado_pct", key=lambda s: s.abs(), ascending=False), 30),
         "laboratorios_capital": _records(lab.sort_values("capital_actual", ascending=False), 30),
         "sedes_ingreso_baja_utilidad": _records(sedes_fuga.sort_values("ingreso_total", ascending=False), 20),
+        "sin_costo": _records(sin_costo.sort_values("cant_vend", ascending=False), 30),
     }
 
 

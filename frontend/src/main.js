@@ -16,6 +16,7 @@ import SedesView         from './views/SedesView.vue'
 import DevolucionesView  from './views/DevolucionesView.vue'
 import MetasView         from './views/MetasView.vue'
 import GerenciaView      from './views/GerenciaView.vue'
+import DomiciliosView    from './views/DomiciliosView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -27,6 +28,7 @@ const router = createRouter({
     { path: '/compras',       component: ComprasView,      name: 'compras' },
     { path: '/sedes',         component: SedesView,        name: 'sedes' },
     { path: '/devoluciones',  component: DevolucionesView, name: 'devoluciones' },
+    { path: '/domicilios',    component: DomiciliosView,   name: 'domicilios' },
     { path: '/metas',         component: MetasView,        name: 'metas' },
     { path: '/gerencia',      component: GerenciaView,     name: 'gerencia' },
   ]

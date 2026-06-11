@@ -22,10 +22,10 @@
       <div v-for="i in 4" :key="i" class="card skeleton" style="height: 100px;"></div>
     </div>
     <div v-else-if="data" class="kpi-grid kpi-grid-4">
+      <KpiCard :icon="ShoppingCart" label="Comprado ($)" :value="store.fmt(data.kpis.valor_comprado)" />
+      <KpiCard :icon="DollarSign" label="Vendido ($)" :value="store.fmt(data.kpis.valor_vendido)" />
       <KpiCard :icon="ShoppingCart" label="Total Comprado (Uds)" :value="store.fmtN(data.kpis.total_comprado)" />
       <KpiCard :icon="Package" label="Total Vendido (Uds)" :value="store.fmtN(data.kpis.total_vendido)" />
-      <KpiCard :icon="AlertTriangle" label="Items Sobrecomprados" :value="store.fmtN(data.kpis.n_sobre_compra)" />
-      <KpiCard :icon="Timer" label="Días del Periodo" :value="data.kpis.dias_periodo + ' días'" />
     </div>
     <div v-else class="empty-state">
       <div class="empty-icon"><Scale size="48" color="var(--border)" /></div>
@@ -146,6 +146,52 @@
         />
       </div>
 
+      <!-- Comprado vs Vendido por punto de venta -->
+      <div class="card" style="grid-column: span 2;" v-if="data.por_sede?.length">
+        <SectionTitle :icon="Store" title="Comprado vs Vendido por Punto de Venta (en pesos)" />
+        <BarChart
+          :categories="data.por_sede.map(s => s.sede)"
+          :series="[
+            { name: 'Comprado', data: data.por_sede.map(s => Math.round(s.valor_comprado)) },
+            { name: 'Vendido', data: data.por_sede.map(s => Math.round(s.valor_vendido)) }
+          ]"
+          formatTooltip="currency"
+        />
+        <div style="overflow-x:auto; margin-top:12px;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Punto de Venta</th>
+                <th>Comprado ($)</th>
+                <th>% Compras</th>
+                <th>Vendido ($)</th>
+                <th>% Ventas</th>
+                <th>Diferencia (V-C)</th>
+                <th>Venta/Compra</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="s in data.por_sede" :key="s.sede">
+                <td style="font-weight:600;">{{ s.sede }}</td>
+                <td>{{ store.fmt(s.valor_comprado) }}</td>
+                <td>{{ s.part_compra_pct?.toFixed(1) }}%</td>
+                <td>{{ store.fmt(s.valor_vendido) }}</td>
+                <td>{{ s.part_venta_pct?.toFixed(1) }}%</td>
+                <td :style="{ color: s.diferencia >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }">{{ store.fmt(s.diferencia) }}</td>
+                <td>
+                  <span class="badge" :class="s.ratio_venta_compra >= 1 ? 'badge-green' : (s.valor_vendido === 0 ? '' : 'badge-amber')">
+                    {{ s.ratio_venta_compra ? s.ratio_venta_compra.toFixed(2) + 'x' : '—' }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin-top:8px; color:var(--fg-muted); font-size:12px;">
+          La relación <strong>Venta/Compra</strong> indica cuánto se vendió por cada peso comprado en ese punto. Una bodega central puede comprar mucho y vender poco porque abastece a las demás sedes.
+        </p>
+      </div>
+
       <!-- Top Proveedores -->
       <div class="card" style="grid-column: span 2;">
         <SectionTitle :icon="Truck" title="Top 10 Proveedores (Unidades Compradas)" />
@@ -164,7 +210,7 @@ import BarChart from '../components/charts/BarChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
 import Paginator from '../components/ui/Paginator.vue'
 import { exportToCSV } from '../utils/export'
-import { Scale, ShoppingCart, Package, AlertTriangle, Timer, Calculator, Truck, Download, ArrowUpCircle, AlertCircle, CheckCircle2 } from 'lucide-vue-next'
+import { Scale, ShoppingCart, Package, AlertTriangle, Timer, Calculator, Truck, Download, ArrowUpCircle, AlertCircle, CheckCircle2, Store, DollarSign } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.compras)

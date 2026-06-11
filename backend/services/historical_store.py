@@ -145,6 +145,20 @@ class HistoricalStore:
                 )
             return df
 
+        if name == "HISTORICO_DOMICILIOS":
+            for col in ["Fecha", "FechaDespacho", "FechaEntrega"]:
+                if col in df.columns:
+                    df[col] = pd.to_datetime(df[col], errors="coerce")
+            if "Total" in df.columns:
+                df["Total"] = pd.to_numeric(df["Total"], errors="coerce").fillna(0)
+            sedes = self._lookup_map("LOOKUP_PUNTO_VENTA")
+            if "ID_PuntoVenta" in df.columns:
+                df["Punto Venta"] = df["ID_PuntoVenta"].astype(str).str.strip().map(sedes).fillna(df["ID_PuntoVenta"])
+            for col in ["Mensajero", "Estado", "Direccion", "Cliente", "Tipo"]:
+                if col in df.columns:
+                    df[col] = df[col].astype(str).str.strip()
+            return df
+
         if name == "INVENTARIO_ACTUAL":
             for col in [
                 "Total", "Precio Compra", "Precio Venta", "Stock Minimo",
@@ -212,6 +226,12 @@ class HistoricalStore:
 
     def get_inventario(self) -> pd.DataFrame:
         return self._read("INVENTARIO_ACTUAL").copy()
+
+    def domicilios_available(self) -> bool:
+        return self._path("HISTORICO_DOMICILIOS").exists()
+
+    def get_domicilios(self, fecha_ini=None, fecha_fin=None) -> pd.DataFrame:
+        return self._filter_dates(self._read("HISTORICO_DOMICILIOS"), "Fecha", fecha_ini, fecha_fin).copy()
 
     def max_date(self, name: str, column: str) -> pd.Timestamp | None:
         df = self._read(name)

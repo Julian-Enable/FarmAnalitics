@@ -39,10 +39,10 @@
     </div>
     <div v-else-if="data" class="kpi-grid kpi-grid-4">
       <KpiCard :icon="RotateCcw" label="Total Devuelto" :value="store.fmt(data.kpis.total_devuelto)" />
+      <KpiCard :icon="Package" label="Unidades Devueltas" :value="store.fmtN(data.kpis.unidades_devueltas)" />
       <KpiCard :icon="Activity" label="Tasa de Devolución" :value="data.kpis.tasa_pct + '%'" />
       <KpiCard :icon="Receipt" label="Notas Emitidas" :value="store.fmtN(data.kpis.n_notas)" />
       <KpiCard :icon="DollarSign" label="Ingreso Neto Real" :value="store.fmt(data.kpis.ingresos_netos)" />
-      <KpiCard :icon="Calendar" label="Dias del Periodo" :value="(data.kpis.dias_periodo || 1) + ' dias'" />
     </div>
     <div v-else class="empty-state">
       <div class="empty-icon"><RotateCcw size="48" color="var(--border)" /></div>
@@ -67,15 +67,27 @@
 
       <!-- Por Vendedor -->
       <div class="card">
-        <SectionTitle :icon="Users" title="Top 10 Vendedores con más devoluciones" />
-        <BarChart v-if="vendCat.length" :horizontal="true" formatTooltip="currency" :categories="vendCat" :series="[{name: 'Valor Devuelto', data: vendData}]" />
+        <div class="section-header-row">
+          <SectionTitle :icon="Users" title="Top 10 Vendedores con más devoluciones" />
+          <div class="metric-toggle">
+            <button :class="{ active: metric === 'valor' }" @click="metric = 'valor'">Valor</button>
+            <button :class="{ active: metric === 'unidades' }" @click="metric = 'unidades'">Unidades</button>
+          </div>
+        </div>
+        <BarChart v-if="vendCat.length" :horizontal="true" :formatTooltip="metric === 'valor' ? 'currency' : ''" :categories="vendCat" :series="[{name: metricLabel, data: vendData}]" />
         <p v-else style="padding: 10px; color: var(--fg-muted);">No hay datos por vendedor.</p>
       </div>
 
       <!-- Por Sede -->
       <div class="card">
-        <SectionTitle :icon="Store" title="Devoluciones por Sede" />
-        <BarChart v-if="sedeCat.length" :horizontal="true" formatTooltip="currency" :categories="sedeCat" :series="[{name: 'Valor Devuelto', data: sedeData}]" />
+        <div class="section-header-row">
+          <SectionTitle :icon="Store" title="Devoluciones por Sede" />
+          <div class="metric-toggle">
+            <button :class="{ active: metric === 'valor' }" @click="metric = 'valor'">Valor</button>
+            <button :class="{ active: metric === 'unidades' }" @click="metric = 'unidades'">Unidades</button>
+          </div>
+        </div>
+        <BarChart v-if="sedeCat.length" :horizontal="true" :formatTooltip="metric === 'valor' ? 'currency' : ''" :categories="sedeCat" :series="[{name: metricLabel, data: sedeData}]" />
         <p v-else style="padding: 10px; color: var(--fg-muted);">No hay datos por sede.</p>
       </div>
 
@@ -117,6 +129,9 @@
                 <th @click="sortBy('Factura')" style="cursor: pointer;">
                   Factura Orig. <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Factura' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
+                <th @click="sortBy('Unidades')" style="cursor: pointer;">
+                  Uds <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Unidades' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
                 <th @click="sortBy('Total Neto')" style="cursor: pointer;">
                   Total Devuelto (Sin IVA) <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Total Neto' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
@@ -132,6 +147,7 @@
                 <td>{{ row['Punto Venta'] || 'N/A' }}</td>
                 <td>{{ (row.Vendedor || row.Creada || 'N/A').substring(0, 24) }}</td>
                 <td>{{ row.Factura || 'N/A' }}</td>
+                <td>{{ store.fmtN(row.Unidades || 0) }}</td>
                 <td style="font-weight: 600; color: var(--red);">{{ store.fmt(row['Total Neto']) }}</td>
               </tr>
             </tbody>
@@ -159,12 +175,14 @@ import DonutChart from '../components/charts/DonutChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
 import Paginator from '../components/ui/Paginator.vue'
 import { exportToCSV } from '../utils/export'
-import { RotateCcw, Activity, Receipt, DollarSign, TrendingUp, PieChart as PieChartIcon, Users, Store, AlertTriangle, ClipboardList, Download, Calendar } from 'lucide-vue-next'
+import { RotateCcw, Activity, Receipt, DollarSign, TrendingUp, PieChart as PieChartIcon, Users, Store, AlertTriangle, ClipboardList, Download, Calendar, Package } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.devoluciones)
 const loading = computed(() => store.loading.devoluciones)
 const filters = ref({ fecha_ini: '', fecha_fin: '' })
+const metric = ref('valor')
+const metricLabel = computed(() => metric.value === 'valor' ? 'Valor Devuelto' : 'Unidades Devueltas')
 
 function applyFilters() {
   const params = {}
@@ -187,10 +205,10 @@ const motivoCat = computed(() => data.value?.por_motivo?.map(d => d.Motivo) || [
 const motivoData = computed(() => data.value?.por_motivo?.map(d => d.total) || [])
 
 const vendCat = computed(() => data.value?.por_vendedor?.slice(0,10).map(d => d.vendedor) || [])
-const vendData = computed(() => data.value?.por_vendedor?.slice(0,10).map(d => d.total_devuelto) || [])
+const vendData = computed(() => data.value?.por_vendedor?.slice(0,10).map(d => metric.value === 'valor' ? d.total_devuelto : (d.n_unidades || 0)) || [])
 
 const sedeCat = computed(() => data.value?.por_sede?.map(d => d.sede) || [])
-const sedeData = computed(() => data.value?.por_sede?.map(d => d.total_devuelto) || [])
+const sedeData = computed(() => data.value?.por_sede?.map(d => metric.value === 'valor' ? d.total_devuelto : (d.n_unidades || 0)) || [])
 
 // Table Sort & Paginate
 const sortCol = ref('Fecha')
@@ -244,9 +262,31 @@ function exportTable() {
     { key: 'Punto Venta', label: 'Sede' },
     { key: 'Vendedor', label: 'Vendedor' },
     { key: 'Factura', label: 'Factura Original' },
+    { key: 'Unidades', label: 'Unidades' },
     { key: 'Total Neto', label: 'Devuelto (Sin IVA)' },
     { key: 'Observaciones', label: 'Observaciones' }
   ]
   exportToCSV(sortedTabla.value, cols, 'Detalle_Notas_Credito')
 }
 </script>
+
+<style scoped>
+.metric-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.metric-toggle button {
+  background: transparent;
+  border: none;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--fg-muted);
+}
+.metric-toggle button.active {
+  background: var(--accent);
+  color: #fff;
+}
+</style>

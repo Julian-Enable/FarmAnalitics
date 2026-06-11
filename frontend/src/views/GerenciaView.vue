@@ -21,6 +21,20 @@
       </ul>
     </ModuleInfo>
 
+    <div class="filters-bar" style="margin-bottom:16px;">
+      <div class="filter-group">
+        <label>Fecha Inicio</label>
+        <input type="date" v-model="filters.fecha_ini" @change="applyFilters" />
+      </div>
+      <div class="filter-group">
+        <label>Fecha Fin</label>
+        <input type="date" v-model="filters.fecha_fin" @change="applyFilters" />
+      </div>
+      <div class="filter-group" style="justify-content:flex-end;">
+        <button class="btn-secondary" style="margin-top:18px;" @click="clearDates">Limpiar fechas</button>
+      </div>
+    </div>
+
     <div v-if="store.errors.gerencia" class="card" style="border-color:#fecdd3;color:#be123c;margin-bottom:16px;background:#fff1f2;">
       {{ store.errors.gerencia }}
     </div>
@@ -162,6 +176,14 @@
           <SimpleTable :rows="data.rentabilidad.sedes_ingreso_baja_utilidad" :cols="sedeCols" :limit="15" />
         </div>
       </div>
+
+      <div v-if="data.rentabilidad.sin_costo?.length" class="card" style="margin-top:16px;">
+        <SectionTitle :icon="AlertTriangle" :title="'Productos sin costo confiable (' + (data.rentabilidad.kpis.sin_costo || 0) + ') — cargar costo de compra'" />
+        <p style="padding:0 0 8px;color:var(--fg-muted);font-size:12px;">
+          Se venden bien pero no tienen registro de compra ni costo en el catálogo, así que se excluyen de los cálculos de margen y de las alertas de "vendido bajo costo" para no distorsionar las cifras. Cárgales el precio de compra para que entren al análisis.
+        </p>
+        <SimpleTable :rows="data.rentabilidad.sin_costo" :cols="sinCostoCols" :limit="15" />
+      </div>
     </template>
 
     <div v-else class="empty-state">
@@ -180,6 +202,7 @@ import SectionTitle from '../components/ui/SectionTitle.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
 import { exportToCSV } from '../utils/export'
 import {
+  AlertTriangle,
   ArrowLeftRight,
   Boxes,
   BriefcaseBusiness,
@@ -198,6 +221,21 @@ import {
 const store = useDashboardStore()
 const data = computed(() => store.data.gerencia)
 const loading = computed(() => store.loading.gerencia)
+
+const filters = ref({ fecha_ini: '', fecha_fin: '' })
+
+function applyFilters() {
+  const params = {}
+  if (filters.value.fecha_ini) params.fecha_ini = filters.value.fecha_ini
+  if (filters.value.fecha_fin) params.fecha_fin = filters.value.fecha_fin
+  store.fetchGerencia(params)
+}
+
+function clearDates() {
+  filters.value.fecha_ini = ''
+  filters.value.fecha_fin = ''
+  store.fetchGerencia()
+}
 
 const money = value => store.fmt(Number(value || 0))
 const number = value => store.fmtN(Math.round(Number(value || 0)))
@@ -324,6 +362,13 @@ const sedeCols = [
   { key: 'ingreso_total', label: 'Ingreso', formatter: money },
   { key: 'utilidad_total', label: 'Utilidad', formatter: money },
   { key: 'margen_pct', label: 'Margen', formatter: pct },
+]
+const sinCostoCols = [
+  { key: 'nombre', label: 'Producto' },
+  { key: 'cant_vend', label: 'Cant vendida', formatter: number },
+  { key: 'ingreso_total', label: 'Ingreso', formatter: money },
+  { key: 'precio_venta_prom', label: 'Venta Unit.', formatter: money },
+  { key: 'costo_fuente', label: 'Fuente costo' },
 ]
 
 const SimpleTable = defineComponent({

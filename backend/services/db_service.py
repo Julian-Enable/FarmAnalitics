@@ -437,6 +437,43 @@ class DatabaseService:
 
         return self._get_cached(cache_key, _fetch)
 
+    def get_domicilios(self, fecha_ini=None, fecha_fin=None) -> pd.DataFrame:
+        if self._historical_store.domicilios_available():
+            return self._historical_store.get_domicilios(fecha_ini, fecha_fin)
+
+        cache_key = f"domicilios_{fecha_ini}_{fecha_fin}"
+
+        def _fetch():
+            self._ensure_lookups()
+            where_clauses = []
+            params = []
+            if fecha_ini:
+                where_clauses.append("fd.Fecha >= ?")
+                params.append(fecha_ini)
+            if fecha_fin:
+                where_clauses.append("fd.Fecha <= ?")
+                params.append(fecha_fin)
+            if not fecha_ini and not fecha_fin:
+                dias_atras = (datetime.now() - relativedelta(days=30)).strftime('%Y-%m-%d')
+                where_clauses.append("fd.Fecha >= ?")
+                params.append(dias_atras)
+            where_str = " AND ".join(where_clauses)
+            sql = f"""
+            SELECT
+                fd.ID, fd.ID_Factura, fd.Fecha, fd.ID_PuntoVenta, fd.Factura,
+                fd.Cliente, fd.Direccion, fd.Zona, fd.Total, fd.Mensajero,
+                fd.Estado, fd.Tipo, fd.MetodoPago, fd.FechaDespacho, fd.FechaEntrega,
+                fd.CordX, fd.CordY
+            FROM FACTURAS_DOMICILIOS fd
+            WHERE {where_str}
+            """
+            df = self._executor.execute_read(sql, params=tuple(params) if params else None)
+            if not df.empty and "ID_PuntoVenta" in df.columns:
+                df["Punto Venta"] = df["ID_PuntoVenta"].astype(str).str.strip().map(self._punto_venta_map).fillna(df["ID_PuntoVenta"])
+            return df
+
+        return self._get_cached(cache_key, _fetch)
+
     # â”€â”€ Resumen Agregado (Optimizado) â”€â”€
 
     def get_resumen_kpis(self, fecha_ini=None, fecha_fin=None) -> dict:
