@@ -2,8 +2,8 @@
   <aside class="sidebar">
     <!-- Logo -->
     <div class="sidebar-logo">
-      <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 4px;">
-        <Activity color="var(--accent)" size="28" />
+      <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 4px;">
+        <img src="/logo.png" alt="Farmazion Logo" style="width: 36px; height: 36px; border-radius: 8px; object-fit: contain;" />
         <h1 style="margin: 0; font-size: 1.5rem; letter-spacing: -0.5px;">Farma Analytics</h1>
       </div>
       <p style="margin: 0; font-size: 0.85rem; color: var(--text);">Analisis de POS Farmaceutico</p>
