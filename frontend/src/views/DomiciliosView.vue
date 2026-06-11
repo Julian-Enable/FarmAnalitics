@@ -231,7 +231,7 @@ function updateHeat() {
   if (mapMode.value === 'calor' && L.heatLayer) {
     const maxC = Math.max(...pts.map(p => p.domicilios), 1)
     heatLayer = L.heatLayer(pts.map(p => [p.lat, p.lon, p.domicilios / maxC]), { radius: 22, blur: 18, maxZoom: 15 }).addTo(map)
-  } else {
+  }
     // Burbujas proporcionales: tamaño y color crecen con la cantidad de domicilios.
     const maxC = Math.max(...pts.map(p => p.domicilios), 1)
     const top = [...pts].sort((a, b) => b.domicilios - a.domicilios).slice(0, 10)
@@ -241,19 +241,18 @@ function updateHeat() {
       const ratio = p.domicilios / maxC
       const radius = 6 + 22 * Math.sqrt(ratio)
       const m = L.circleMarker([p.lat, p.lon], {
-        radius, color: '#ffffff', weight: 1.5, fillColor: colorFor(ratio), fillOpacity: 0.78,
+        radius, color: '#ffffff', weight: 1.5, fillColor: colorFor(ratio), fillOpacity: mapMode.value === 'calor' ? 0.38 : 0.78,
       })
       m.bindPopup(
         `<div style="font-size:13px;"><b>${p.domicilios.toLocaleString('es-CO')} domicilios</b><br>` +
         `$${Math.round(p.valor).toLocaleString('es-CO')}</div>`
       )
-      if (topSet.has(`${p.lat},${p.lon}`)) {
+      if (mapMode.value !== 'calor' && topSet.has(`${p.lat},${p.lon}`)) {
         m.bindTooltip(p.domicilios.toLocaleString('es-CO'), { permanent: true, direction: 'center', className: 'zone-label' })
       }
       m.addTo(markersLayer)
     }
     markersLayer.addTo(map)
-  }
 
   const bounds = L.latLngBounds(pts.map(p => [p.lat, p.lon]))
   if (bounds.isValid()) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 })
