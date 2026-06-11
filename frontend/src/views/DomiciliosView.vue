@@ -228,8 +228,7 @@ function updateHeat() {
     return
   }
 
-  if (mapMode.value === 'calor') {
-    if (!L.heatLayer) return
+  if (mapMode.value === 'calor' && L.heatLayer) {
     const maxC = Math.max(...pts.map(p => p.domicilios), 1)
     heatLayer = L.heatLayer(pts.map(p => [p.lat, p.lon, p.domicilios / maxC]), { radius: 22, blur: 18, maxZoom: 15 }).addTo(map)
   } else {
