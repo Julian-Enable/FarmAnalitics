@@ -191,7 +191,18 @@ function invalidateMapSize() {
 }
 
 function initMap() {
-  if (map || !mapEl.value) return
+  if (!mapEl.value) return
+  // Al filtrar, el bloque se re-renderiza y el <div> del mapa se recrea. Si la
+  // instancia de Leaflet quedó atada al contenedor viejo (ya destruido), se
+  // descarta y se vuelve a crear sobre el contenedor actual; si no, el mapa
+  // "desaparece" al cambiar la fecha.
+  if (map && map.getContainer() !== mapEl.value) {
+    map.remove()
+    map = null
+    heatLayer = null
+    markersLayer = null
+  }
+  if (map) return
   map = L.map(mapEl.value, { scrollWheelZoom: false }).setView([4.655, -74.08], 12)
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap', maxZoom: 19,
