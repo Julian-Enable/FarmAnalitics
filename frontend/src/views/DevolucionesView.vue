@@ -14,7 +14,8 @@
       <ul style="margin-left: 20px; margin-top: 8px;">
         <li><strong>Ingreso Neto:</strong> Ingreso Bruto - Total Devuelto.</li>
         <li><strong>Tasa de Devolución:</strong> Porcentaje de los ingresos que se devolvió (idealmente &lt; 2%).</li>
-        <li>Identifica qué productos se devuelven más y por qué, para tomar acciones correctivas con vendedores o clientes.</li>
+        <li>Identifica qué productos se devuelven más, para tomar acciones correctivas con vendedores o clientes.</li>
+        <li><strong>Observación:</strong> es el texto tal como lo escribió quien hizo la nota crédito en el POS (no se interpreta ni se clasifica, para evitar errores).</li>
         <li><strong>Autorizada por:</strong> las devoluciones (notas crédito) las crea un administrador o usuario autorizado, no el vendedor de la venta. Por eso el ranking muestra quién <em>procesa/autoriza</em> las devoluciones, útil para control interno.</li>
       </ul>
     </ModuleInfo>
@@ -53,17 +54,10 @@
 
     <div v-if="data" class="grid-2">
       <!-- Tendencia -->
-      <div class="card">
+      <div class="card" style="grid-column: span 2;">
         <SectionTitle :icon="TrendingUp" title="Tendencia de Devoluciones" />
         <LineChart v-if="tendCat.length" :categories="tendCat" :series="[{name: 'Devoluciones', data: tendData}]" />
         <p v-else style="padding: 10px; color: var(--fg-muted);">No hay datos suficientes para tendencia.</p>
-      </div>
-
-      <!-- Motivos -->
-      <div class="card">
-        <SectionTitle :icon="PieChartIcon" title="Motivos de Devolución" />
-        <DonutChart v-if="motivoCat.length" :labels="motivoCat" :series="motivoData" />
-        <p v-else style="padding: 10px; color: var(--fg-muted);">No hay motivos categorizados.</p>
       </div>
 
       <!-- Por usuario que autoriza/procesa la devolución -->
@@ -118,17 +112,14 @@
                 <th @click="sortBy('NotaCredito')" style="cursor: pointer;">
                   Nota <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'NotaCredito' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
-                <th @click="sortBy('Motivo')" style="cursor: pointer;">
-                  Motivo <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Motivo' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
-                </th>
                 <th @click="sortBy('Punto Venta')" style="cursor: pointer;">
                   Sede <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Punto Venta' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
                 <th @click="sortBy('Vendedor')" style="cursor: pointer;">
                   Autorizada por <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Vendedor' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
-                <th @click="sortBy('Factura')" style="cursor: pointer;">
-                  Factura Orig. <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Factura' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
+                <th @click="sortBy('Observaciones')" style="cursor: pointer;">
+                  Observación <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Observaciones' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
                 <th @click="sortBy('Unidades')" style="cursor: pointer;">
                   Uds <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Unidades' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
@@ -142,12 +133,11 @@
               <tr v-for="row in paginatedTabla" :key="row.NotaCredito">
                 <td>{{ formatDate(row.Fecha) }}</td>
                 <td>{{ row.NotaCredito }}</td>
-                <td>
-                  <span class="badge" :class="getMotivoClass(row.Motivo)">{{ row.Motivo }}</span>
-                </td>
                 <td>{{ row['Punto Venta'] || 'N/A' }}</td>
                 <td>{{ (row.Vendedor || row.Creada || 'N/A').substring(0, 24) }}</td>
-                <td>{{ row.Factura || 'N/A' }}</td>
+                <td :title="row.Observaciones || ''" style="max-width: 320px; white-space: normal; color: var(--fg-muted); font-size: 12px;">
+                  {{ row.Observaciones || '—' }}
+                </td>
                 <td>{{ store.fmtN(row.Unidades || 0) }}</td>
                 <td style="font-weight: 600; color: var(--red);">{{ store.fmt(row['Total Neto']) }}</td>
               </tr>
@@ -172,11 +162,10 @@ import KpiCard from '../components/ui/KpiCard.vue'
 import SectionTitle from '../components/ui/SectionTitle.vue'
 import BarChart from '../components/charts/BarChart.vue'
 import LineChart from '../components/charts/LineChart.vue'
-import DonutChart from '../components/charts/DonutChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
 import Paginator from '../components/ui/Paginator.vue'
 import { exportToCSV } from '../utils/export'
-import { RotateCcw, Activity, Receipt, DollarSign, TrendingUp, PieChart as PieChartIcon, Users, Store, AlertTriangle, ClipboardList, Download, Calendar, Package } from 'lucide-vue-next'
+import { RotateCcw, Activity, Receipt, DollarSign, TrendingUp, Users, Store, AlertTriangle, ClipboardList, Download, Calendar, Package } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.devoluciones)
@@ -201,9 +190,6 @@ onMounted(() => {
 // Charts data
 const tendCat = computed(() => data.value?.tendencia?.map(d => d.fecha) || [])
 const tendData = computed(() => data.value?.tendencia?.map(d => d.total) || [])
-
-const motivoCat = computed(() => data.value?.por_motivo?.map(d => d.Motivo) || [])
-const motivoData = computed(() => data.value?.por_motivo?.map(d => d.total) || [])
 
 const vendCat = computed(() => data.value?.por_vendedor?.slice(0,10).map(d => d.vendedor) || [])
 const vendData = computed(() => data.value?.por_vendedor?.slice(0,10).map(d => metric.value === 'valor' ? d.total_devuelto : (d.n_unidades || 0)) || [])
@@ -248,21 +234,12 @@ function formatDate(timestamp) {
   return d.toLocaleDateString()
 }
 
-function getMotivoClass(motivo) {
-  if (motivo === 'Solicitud del Cliente') return 'badge-amber'
-  if (motivo === 'Error de Facturación' || motivo === 'Error del Vendedor') return 'badge-red'
-  if (motivo === 'Cambio de Producto') return 'badge-green'
-  return ''
-}
-
 function exportTable() {
   const cols = [
     { key: 'Fecha', label: 'Fecha', formatter: formatDate },
     { key: 'NotaCredito', label: 'Nota' },
-    { key: 'Motivo', label: 'Motivo' },
     { key: 'Punto Venta', label: 'Sede' },
     { key: 'Vendedor', label: 'Autorizada por' },
-    { key: 'Factura', label: 'Factura Original' },
     { key: 'Unidades', label: 'Unidades' },
     { key: 'Total Neto', label: 'Devuelto (Sin IVA)' },
     { key: 'Observaciones', label: 'Observaciones' }

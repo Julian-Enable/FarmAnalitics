@@ -1298,7 +1298,6 @@ def endpoint_notas_credito(
             "tendencia": [],
             "por_sede": [],
             "por_vendedor": [],
-            "por_motivo": [],
             "top_productos_devueltos": [],
             "tabla": [],
         }
@@ -1348,17 +1347,6 @@ def endpoint_notas_credito(
         vend_df = vend_df.sort_values("total_devuelto", ascending=False)
         por_vendedor = json.loads(vend_df.to_json(orient="records"))
 
-    # Por motivo (valor + unidades)
-    por_motivo = []
-    if "Motivo" in notas_unicas.columns:
-        mot_df = (notas_unicas.groupby("Motivo", as_index=False)
-                  .agg(total=("Total Neto", "sum"), n=("Total Neto", "count")))
-        u = _units_by("Motivo")
-        mot_df = mot_df.merge(u, on="Motivo", how="left")
-        mot_df["n_unidades"] = mot_df["n_unidades"].fillna(0)
-        mot_df = mot_df.sort_values("total", ascending=False)
-        por_motivo = json.loads(mot_df.to_json(orient="records"))
-
     # Productos devueltos: usar las lineas reales de la nota credito.
     top_productos_devueltos = []
     if not lineas_producto.empty:
@@ -1402,7 +1390,6 @@ def endpoint_notas_credito(
         "tendencia":               tendencia,
         "por_sede":                por_sede,
         "por_vendedor":            por_vendedor,
-        "por_motivo":              por_motivo,
         "top_productos_devueltos": top_productos_devueltos,
         "tabla":                   tabla,
     }
