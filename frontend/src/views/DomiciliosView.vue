@@ -327,7 +327,9 @@ function exportMensajeros() {
   bottom: 14px;
   right: 14px;
   z-index: 1000;
-  background: var(--card, #fff);
+  background: var(--bg-card);
+  -webkit-backdrop-filter: var(--card-blur);
+  backdrop-filter: var(--card-blur);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;
