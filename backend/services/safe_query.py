@@ -17,6 +17,7 @@ Todas las consultas DEBEN pasar por SafeQueryExecutor.
 El usuario de BD es SPD_FARMAZION. La seguridad se aplica en el código
 porque este usuario podría tener permisos más amplios en el servidor.
 """
+import os
 import re
 import logging
 import pandas as pd
@@ -153,7 +154,12 @@ class SafeQueryExecutor:
             )
         conn_str = get_connection_string()
         conn = pyodbc.connect(conn_str, timeout=30)
-        conn.timeout = 60
+        # Timeout de consulta (segundos). Configurable para descargas pesadas via
+        # DB_QUERY_TIMEOUT sin afectar el valor por defecto de la API.
+        try:
+            conn.timeout = int(os.getenv("DB_QUERY_TIMEOUT", "60"))
+        except ValueError:
+            conn.timeout = 60
         # Marcar la conexión como readonly a nivel de driver
         conn.autocommit = True  # Sin transacciones abiertas
         return conn

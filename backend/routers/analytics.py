@@ -64,6 +64,7 @@ def get_status(session_id):
             "inventario": historical.inventory_available(),
             "notas_credito": not historical.get_notas_credito().empty,
             "domicilios": historical.domicilios_available(),
+            "comisiones": historical.comisiones_available(),
         }
     if is_db_configured():
         db = get_db_service()
@@ -81,9 +82,10 @@ def get_status(session_id):
                     "inventario": historical["datasets"].get("inventario", {}).get("exists", False) or connected,
                     "notas_credito": historical["datasets"].get("notas_credito", {}).get("exists", False),
                     "domicilios": get_historical_store().domicilios_available() or connected,
+                    "comisiones": get_historical_store().comisiones_available() or connected,
                 }
             if connected:
-                return {"ventas": True, "compras": True, "inventario": True, "notas_credito": True, "domicilios": True}
+                return {"ventas": True, "compras": True, "inventario": True, "notas_credito": True, "domicilios": True, "comisiones": True}
     return _store_get_status(session_id)
 from config import (
     SEDES_INVENTARIO, MAX_UPLOAD_SIZE, ALLOWED_EXTENSIONS, EXCLUDED_INVENTORY_COLUMNS,
@@ -1898,6 +1900,78 @@ def _get_domicilios(fecha_ini=None, fecha_fin=None) -> pd.DataFrame:
         if db:
             return db.get_domicilios(fecha_ini, fecha_fin)
     return pd.DataFrame()
+
+
+# ── Comisiones ────────────────────────────────────────────────────────────────
+
+@router.get("/comisiones")
+def comisiones(
+    fecha_ini: str = None,
+    fecha_fin: str = None,
+    sede: str = "Todas",
+    x_session_id: str = Header(default="default-session"),
+):
+    """Productos comisionables vendidos: cantidad y valor (ingreso) por vendedor.
+    No usa el monto/% de comision del POS; entrega cantidad y valor para que la
+    comision se calcule por fuera segun la regla del negocio."""
+    fecha_ini, fecha_fin = _normalize_optional_date_range(fecha_ini, fecha_fin)
+    historical = get_historical_store()
+    if not historical.comisiones_available():
+        raise HTTPException(404, "No hay datos de comisiones. Actualiza desde tu PC para descargarlos.")
+
+    df = historical.get_comisiones(fecha_ini, fecha_fin)
+    if df is None or df.empty:
+        raise HTTPException(404, "No hay comisiones para el periodo seleccionado")
+
+    df = df.copy()
+    sede_col = "Punto Venta" if "Punto Venta" in df.columns else "ID_PuntoVenta"
+    lista_sedes = sorted(df[sede_col].dropna().astype(str).unique().tolist()) if sede_col in df.columns else []
+    if sede and sede != "Todas" and sede_col in df.columns:
+        df = df[df[sede_col].astype(str) == sede]
+    if df.empty:
+        raise HTTPException(404, "No hay comisiones para los filtros seleccionados")
+
+    df["Cant"] = pd.to_numeric(df.get("Cant", 0), errors="coerce").fillna(0)
+    df["Ingreso"] = pd.to_numeric(df.get("Ingreso", 0), errors="coerce").fillna(0)
+    df["Vendedor"] = df.get("Vendedor", "").astype(str).str.strip().replace({"": "Sin vendedor", "nan": "Sin vendedor"})
+
+    dias_periodo = 1
+    if "Fecha" in df.columns and df["Fecha"].notna().any():
+        dias_periodo = _inclusive_days(df["Fecha"].min(), df["Fecha"].max())
+
+    # Por vendedor: cantidad de unidades comisionables y valor (ingreso) de esas ventas
+    pv = (df.groupby("Vendedor", as_index=False)
+          .agg(cantidad=("Cant", "sum"), valor=("Ingreso", "sum"), productos=("Referencia", "nunique"))
+          .sort_values("valor", ascending=False))
+    por_vendedor = json.loads(pv.to_json(orient="records"))
+
+    # Por producto comisionable (apoyo): unidades y valor
+    pp = (df.groupby(["Referencia", "Descripcion"], as_index=False)
+          .agg(cantidad=("Cant", "sum"), valor=("Ingreso", "sum"), vendedores=("Vendedor", "nunique"))
+          .sort_values("cantidad", ascending=False)
+          .head(100))
+    pp["nombre"] = pp["Descripcion"].astype(str).str[:40]
+    por_producto = json.loads(pp.to_json(orient="records"))
+
+    # Detalle vendedor x producto (para exportar)
+    det = (df.groupby(["Vendedor", "Referencia", "Descripcion"], as_index=False)
+           .agg(cantidad=("Cant", "sum"), valor=("Ingreso", "sum"))
+           .sort_values(["Vendedor", "valor"], ascending=[True, False]))
+    detalle = _df_to_records(det, max_rows=1000)
+
+    return {
+        "kpis": {
+            "valor_total": round(float(df["Ingreso"].sum()), 0),
+            "unidades_total": int(df["Cant"].sum()),
+            "n_vendedores": int(df["Vendedor"].nunique()),
+            "n_productos": int(df["Referencia"].nunique()),
+            "dias_periodo": int(dias_periodo),
+        },
+        "por_vendedor": por_vendedor,
+        "por_producto": por_producto,
+        "detalle": detalle,
+        "lista_sedes": lista_sedes,
+    }
 
 
 @router.get("/domicilios")

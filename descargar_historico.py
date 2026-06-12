@@ -13,6 +13,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Las descargas hacen scans pesados (ej. comisiones filtra FACTURAS_PRODUCTOS por
+# Comision sin indice). Se usa un timeout de consulta amplio solo para la descarga;
+# la API mantiene su valor por defecto (60s).
+os.environ.setdefault("DB_QUERY_TIMEOUT", "600")
+
 ROOT_DIR = Path(__file__).resolve().parent
 sys.path.append(str(ROOT_DIR))
 
@@ -172,6 +177,43 @@ DATASETS = {
             WHERE nc.Enabled = 1
               AND nc.Fecha >= ?
               AND nc.Fecha < ?
+        """,
+    ),
+    "comisiones": DatasetConfig(
+        name="HISTORICO_COMISIONES",
+        date_column="Fecha",
+        dedupe_subset=("FacturaID", "Referencia"),
+        count_sql="""
+            SELECT COUNT_BIG(*) AS filas
+            FROM FACTURAS f
+            INNER JOIN FACTURAS_PRODUCTOS fp ON f.ID = fp.ID_Factura
+            WHERE f.Enabled = 1
+              AND f.Anulada = 'N/A'
+              AND fp.Comision > 0
+              AND f.FechaFactura >= ?
+              AND f.FechaFactura < ?
+        """,
+        select_sql="""
+            SELECT
+                f.ID AS FacturaID,
+                f.FechaFactura AS Fecha,
+                f.ID_PuntoVenta,
+                f.Creada,
+                u.Nombre AS NombreVendedor,
+                fp.Referencia,
+                fp.Descripcion,
+                fp.Cantidad AS Cant,
+                fp.PrecioVenta AS [Precio Venta],
+                fp.Cantidad * fp.PrecioVenta AS Ingreso,
+                fp.Comision
+            FROM FACTURAS f
+            INNER JOIN FACTURAS_PRODUCTOS fp ON f.ID = fp.ID_Factura
+            LEFT JOIN USUARIOS u ON f.Creada = u.Login
+            WHERE f.Enabled = 1
+              AND f.Anulada = 'N/A'
+              AND fp.Comision > 0
+              AND f.FechaFactura >= ?
+              AND f.FechaFactura < ?
         """,
     ),
     "domicilios": DatasetConfig(

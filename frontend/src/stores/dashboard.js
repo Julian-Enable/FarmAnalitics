@@ -46,7 +46,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     localStorage.setItem('farm_theme', theme.value)
   }
 
-  const status = reactive({ ventas: false, compras: false, inventario: false, notas_credito: false, domicilios: false, metas: false })
+  const status = reactive({ ventas: false, compras: false, inventario: false, notas_credito: false, domicilios: false, comisiones: false, metas: false })
   const uploading = ref(false)
   const exporting = ref(false)
   const refreshingLive = ref(false)
@@ -77,6 +77,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     metas: null,
     gerencia: null,
     domicilios: null,
+    comisiones: null,
   })
 
   const loading = reactive({
@@ -90,6 +91,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     metas: false,
     gerencia: false,
     domicilios: false,
+    comisiones: false,
   })
 
   const errors = reactive({
@@ -103,6 +105,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     metas: null,
     gerencia: null,
     domicilios: null,
+    comisiones: null,
   })
 
   function fmt(n) {
@@ -419,6 +422,17 @@ export const useDashboardStore = defineStore('dashboard', () => {
     finally { loading.metas = false }
   }
 
+  async function fetchComisiones(params = {}) {
+    if (!status.comisiones) return
+    loading.comisiones = true
+    clearModuleError('comisiones')
+    try {
+      const { data: d } = await axios.get('/api/comisiones', { params })
+      data.comisiones = d
+    } catch (e) { setModuleError('comisiones', e, 'No se pudo cargar comisiones') }
+    finally { loading.comisiones = false }
+  }
+
   async function fetchDomicilios(params = {}) {
     if (!status.domicilios) return
     loading.domicilios = true
@@ -615,6 +629,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
     uploadFiles, checkStatus, resetSession, exportFullReport,
     fetchHistoricalStatus, refreshLiveInformation, checkLocalAgent,
     fetchResumen, fetchVentas, fetchRentabilidad,
-    fetchInventario, fetchCompras, fetchSedes, fetchDevoluciones, fetchMetas, fetchGerencia, fetchDomicilios,
+    fetchInventario, fetchCompras, fetchSedes, fetchDevoluciones, fetchMetas, fetchGerencia, fetchDomicilios, fetchComisiones,
   }
 })

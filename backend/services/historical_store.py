@@ -145,6 +145,22 @@ class HistoricalStore:
                 )
             return df
 
+        if name == "HISTORICO_COMISIONES":
+            if "Fecha" in df.columns:
+                df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce")
+            for col in ["Cant", "Precio Venta", "Ingreso", "Comision"]:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+            sedes = self._lookup_map("LOOKUP_PUNTO_VENTA")
+            if "ID_PuntoVenta" in df.columns:
+                df["Punto Venta"] = df["ID_PuntoVenta"].astype(str).str.strip().map(sedes).fillna(df["ID_PuntoVenta"])
+            # Vendedor: nombre comercial, con respaldo en Creada
+            nombre = df["NombreVendedor"].astype(str).str.strip() if "NombreVendedor" in df.columns else pd.Series("", index=df.index)
+            creada = df["Creada"].astype(str).str.strip() if "Creada" in df.columns else pd.Series("", index=df.index)
+            invalid = {"", "nan", "none"}
+            df["Vendedor"] = nombre.where(~nombre.str.lower().isin(invalid), creada).str.strip()
+            return df
+
         if name == "HISTORICO_DOMICILIOS":
             for col in ["Fecha", "FechaDespacho", "FechaEntrega"]:
                 if col in df.columns:
@@ -229,6 +245,12 @@ class HistoricalStore:
 
     def domicilios_available(self) -> bool:
         return self._path("HISTORICO_DOMICILIOS").exists()
+
+    def comisiones_available(self) -> bool:
+        return self._path("HISTORICO_COMISIONES").exists()
+
+    def get_comisiones(self, fecha_ini=None, fecha_fin=None) -> pd.DataFrame:
+        return self._filter_dates(self._read("HISTORICO_COMISIONES"), "Fecha", fecha_ini, fecha_fin).copy()
 
     def get_domicilios(self, fecha_ini=None, fecha_fin=None) -> pd.DataFrame:
         return self._filter_dates(self._read("HISTORICO_DOMICILIOS"), "Fecha", fecha_ini, fecha_fin).copy()
