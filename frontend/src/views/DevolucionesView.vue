@@ -15,6 +15,7 @@
         <li><strong>Ingreso Neto:</strong> Ingreso Bruto - Total Devuelto.</li>
         <li><strong>Tasa de Devolución:</strong> Porcentaje de los ingresos que se devolvió (idealmente &lt; 2%).</li>
         <li>Identifica qué productos se devuelven más y por qué, para tomar acciones correctivas con vendedores o clientes.</li>
+        <li><strong>Autorizada por:</strong> las devoluciones (notas crédito) las crea un administrador o usuario autorizado, no el vendedor de la venta. Por eso el ranking muestra quién <em>procesa/autoriza</em> las devoluciones, útil para control interno.</li>
       </ul>
     </ModuleInfo>
 
@@ -65,17 +66,17 @@
         <p v-else style="padding: 10px; color: var(--fg-muted);">No hay motivos categorizados.</p>
       </div>
 
-      <!-- Por Vendedor -->
+      <!-- Por usuario que autoriza/procesa la devolución -->
       <div class="card">
         <div class="section-header-row">
-          <SectionTitle :icon="Users" title="Top 10 Vendedores con más devoluciones" />
+          <SectionTitle :icon="Users" title="Top 10 usuarios con más devoluciones procesadas" />
           <div class="metric-toggle">
             <button :class="{ active: metric === 'valor' }" @click="metric = 'valor'">Valor</button>
             <button :class="{ active: metric === 'unidades' }" @click="metric = 'unidades'">Unidades</button>
           </div>
         </div>
         <BarChart v-if="vendCat.length" :horizontal="true" :formatTooltip="metric === 'valor' ? 'currency' : ''" :categories="vendCat" :series="[{name: metricLabel, data: vendData}]" />
-        <p v-else style="padding: 10px; color: var(--fg-muted);">No hay datos por vendedor.</p>
+        <p v-else style="padding: 10px; color: var(--fg-muted);">No hay datos por usuario.</p>
       </div>
 
       <!-- Por Sede -->
@@ -124,7 +125,7 @@
                   Sede <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Punto Venta' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
                 <th @click="sortBy('Vendedor')" style="cursor: pointer;">
-                  Vendedor <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Vendedor' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
+                  Autorizada por <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Vendedor' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
                 <th @click="sortBy('Factura')" style="cursor: pointer;">
                   Factura Orig. <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Factura' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
@@ -260,7 +261,7 @@ function exportTable() {
     { key: 'NotaCredito', label: 'Nota' },
     { key: 'Motivo', label: 'Motivo' },
     { key: 'Punto Venta', label: 'Sede' },
-    { key: 'Vendedor', label: 'Vendedor' },
+    { key: 'Vendedor', label: 'Autorizada por' },
     { key: 'Factura', label: 'Factura Original' },
     { key: 'Unidades', label: 'Unidades' },
     { key: 'Total Neto', label: 'Devuelto (Sin IVA)' },
