@@ -174,6 +174,17 @@ const mapMode = ref('burbujas')
 let map = null
 let heatLayer = null
 let markersLayer = null
+let tileLayer = null
+
+function tileConfig() {
+  const dark = store.theme === 'dark'
+  return {
+    url: dark
+      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    attribution: '© OpenStreetMap, © CARTO',
+  }
+}
 
 function applyFilters() {
   const params = {}
@@ -201,12 +212,19 @@ function initMap() {
     map = null
     heatLayer = null
     markersLayer = null
+    tileLayer = null
   }
   if (map) return
   map = L.map(mapEl.value, { scrollWheelZoom: false }).setView([4.655, -74.08], 12)
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap', maxZoom: 19,
-  }).addTo(map)
+  const t = tileConfig()
+  tileLayer = L.tileLayer(t.url, { attribution: t.attribution, subdomains: 'abcd', maxZoom: 19 }).addTo(map)
+}
+
+function applyMapTheme() {
+  if (!map) return
+  if (tileLayer) map.removeLayer(tileLayer)
+  const t = tileConfig()
+  tileLayer = L.tileLayer(t.url, { attribution: t.attribution, subdomains: 'abcd', maxZoom: 19 }).addTo(map)
 }
 
 function clearMapLayers() {
@@ -291,6 +309,7 @@ async function renderMap() {
 }
 
 watch(() => data.value?.mapa, () => { renderMap() }, { flush: 'post' })
+watch(() => store.theme, () => { applyMapTheme() })
 
 onMounted(async () => {
   if (store.status.domicilios && !data.value) applyFilters()
