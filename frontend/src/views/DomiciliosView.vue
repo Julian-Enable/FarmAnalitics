@@ -70,7 +70,7 @@
           {{ data.kpis.pct_ubicado }}% de los domicilios del periodo están ubicados en el mapa ({{ store.fmtN(data.kpis.ubicados_en_mapa) }} de {{ store.fmtN(data.kpis.total_domicilios) }}). El resto se ubica progresivamente en cada actualización.
         </div>
         <div class="map-wrap">
-          <div ref="mapEl" class="map-container"></div>
+          <div ref="mapEl" class="map-container" :class="{ 'map-dark': isDark }"></div>
           <div class="map-legend" v-if="mapMode === 'burbujas'">
             <div class="legend-title">Domicilios por zona</div>
             <div class="legend-row"><span class="legend-dot" style="background:#dc2626"></span> Muy alta</div>
@@ -175,13 +175,14 @@ let map = null
 let heatLayer = null
 let markersLayer = null
 let tileLayer = null
+const isDark = computed(() => store.theme === 'dark')
 
+// Se usan siempre las tiles claras (legibles, con calles y nombres) y en tema
+// oscuro se les aplica un filtro CSS para dejarlas azul oscuro sin afectar las
+// burbujas ni las etiquetas (que viven en otras capas del mapa).
 function tileConfig() {
-  const dark = store.theme === 'dark'
   return {
-    url: dark
-      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
     attribution: '© OpenStreetMap, © CARTO',
   }
 }
@@ -216,13 +217,6 @@ function initMap() {
   }
   if (map) return
   map = L.map(mapEl.value, { scrollWheelZoom: false }).setView([4.655, -74.08], 12)
-  const t = tileConfig()
-  tileLayer = L.tileLayer(t.url, { attribution: t.attribution, subdomains: 'abcd', maxZoom: 19 }).addTo(map)
-}
-
-function applyMapTheme() {
-  if (!map) return
-  if (tileLayer) map.removeLayer(tileLayer)
   const t = tileConfig()
   tileLayer = L.tileLayer(t.url, { attribution: t.attribution, subdomains: 'abcd', maxZoom: 19 }).addTo(map)
 }
@@ -309,7 +303,6 @@ async function renderMap() {
 }
 
 watch(() => data.value?.mapa, () => { renderMap() }, { flush: 'post' })
-watch(() => store.theme, () => { applyMapTheme() })
 
 onMounted(async () => {
   if (store.status.domicilios && !data.value) applyFilters()
@@ -340,6 +333,11 @@ function exportMensajeros() {
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid var(--border);
+}
+/* Tema oscuro: se tiñen SOLO las baldosas del mapa a un azul oscuro legible
+   (no negro). Las burbujas y etiquetas viven en otras capas y no se afectan. */
+.map-container.map-dark :deep(.leaflet-tile-pane) {
+  filter: invert(1) hue-rotate(190deg) brightness(0.95) contrast(0.9) saturate(0.85);
 }
 .map-legend {
   position: absolute;
