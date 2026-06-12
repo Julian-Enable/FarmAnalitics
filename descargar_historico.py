@@ -139,6 +139,14 @@ DATASETS = {
                 nc.Total AS TotalNota,
                 nc.Saldo,
                 nc.Observaciones,
+                fnc.ID_Factura AS OrigenFacturaID,
+                fv.Factura AS OrigenFactura,
+                COALESCE(uo.Nombre, fv.Creada) AS VendedorOriginal,
+                CASE
+                    WHEN fnc.ID_Factura IS NULL THEN 'Sin origen'
+                    WHEN fd.ID_Factura IS NOT NULL THEN 'Domicilio'
+                    ELSE 'POS'
+                END AS OrigenVenta,
                 ncp.Referencia,
                 r.Descripcion1 AS Descripcion,
                 r.ID_Laboratorio,
@@ -152,6 +160,15 @@ DATASETS = {
              AND nc.ID_PuntoVenta = ncp.ID_PuntoVenta
             LEFT JOIN REFERENCIAS r ON ncp.Referencia = r.Referencia
             LEFT JOIN USUARIOS u ON nc.Creada = u.Login
+            LEFT JOIN (
+                SELECT ID_NotaCredito, ID_PuntoVenta, MAX(ID_Factura) AS ID_Factura
+                FROM FACTURAS_NOTAS_CREDITO
+                GROUP BY ID_NotaCredito, ID_PuntoVenta
+            ) fnc ON nc.ID = fnc.ID_NotaCredito AND nc.ID_PuntoVenta = fnc.ID_PuntoVenta
+            LEFT JOIN FACTURAS fv ON fnc.ID_Factura = fv.ID
+            LEFT JOIN USUARIOS uo ON fv.Creada = uo.Login
+            LEFT JOIN (SELECT DISTINCT ID_Factura FROM FACTURAS_DOMICILIOS) fd
+              ON fnc.ID_Factura = fd.ID_Factura
             WHERE nc.Enabled = 1
               AND nc.Fecha >= ?
               AND nc.Fecha < ?

@@ -16,6 +16,7 @@
         <li><strong>Tasa de Devolución:</strong> Porcentaje de los ingresos que se devolvió (idealmente &lt; 2%).</li>
         <li>Identifica qué productos se devuelven más, para tomar acciones correctivas con vendedores o clientes.</li>
         <li><strong>Observación:</strong> es el texto tal como lo escribió quien hizo la nota crédito en el POS (no se interpreta ni se clasifica, para evitar errores).</li>
+        <li><strong>Origen y Vendedor (venta):</strong> se obtienen cruzando la nota crédito con su <em>factura de venta original</em>, así se sabe si la devolución vino de POS o domicilio y quién fue el vendedor real (no quien procesó la nota).</li>
         <li><strong>Autorizada por:</strong> las devoluciones (notas crédito) las crea un administrador o usuario autorizado, no el vendedor de la venta. Por eso el ranking muestra quién <em>procesa/autoriza</em> las devoluciones, útil para control interno.</li>
       </ul>
     </ModuleInfo>
@@ -45,6 +46,7 @@
       <KpiCard :icon="Activity" label="Tasa de Devolución" :value="data.kpis.tasa_pct + '%'" />
       <KpiCard :icon="Receipt" label="Notas Emitidas" :value="store.fmtN(data.kpis.n_notas)" />
       <KpiCard :icon="DollarSign" label="Ingreso Neto Real" :value="store.fmt(data.kpis.ingresos_netos)" />
+      <KpiCard :icon="Bike" label="% Devuelto de Domicilio" :value="(data.kpis.pct_domicilio ?? 0) + '%'" />
     </div>
     <div v-else class="empty-state">
       <div class="empty-icon"><RotateCcw size="48" color="var(--border)" /></div>
@@ -58,6 +60,26 @@
         <SectionTitle :icon="TrendingUp" title="Tendencia de Devoluciones" />
         <LineChart v-if="tendCat.length" :categories="tendCat" :series="[{name: 'Devoluciones', data: tendData}]" />
         <p v-else style="padding: 10px; color: var(--fg-muted);">No hay datos suficientes para tendencia.</p>
+      </div>
+
+      <!-- POS vs Domicilio (según la venta original) -->
+      <div class="card" v-if="origenLabels.length">
+        <SectionTitle :icon="Bike" title="Devoluciones por origen: POS vs Domicilio" />
+        <DonutChart :labels="origenLabels" :series="origenData" />
+        <p style="margin-top:8px;color:var(--fg-muted);font-size:12px;">Según de qué venta vino la devolución (vía la factura original).</p>
+      </div>
+
+      <!-- Por vendedor REAL de la venta -->
+      <div class="card" v-if="vorCat.length">
+        <div class="section-header-row">
+          <SectionTitle :icon="Users" title="Top 10 vendedores con más devoluciones (de su venta)" />
+          <div class="metric-toggle">
+            <button :class="{ active: metric === 'valor' }" @click="metric = 'valor'">Valor</button>
+            <button :class="{ active: metric === 'unidades' }" @click="metric = 'unidades'">Unidades</button>
+          </div>
+        </div>
+        <BarChart :horizontal="true" :formatTooltip="metric === 'valor' ? 'currency' : ''" :categories="vorCat" :series="[{name: metricLabel, data: vorData}]" />
+        <p style="margin-top:8px;color:var(--fg-muted);font-size:12px;">El vendedor de la venta original que terminó devuelta (no quien procesó la nota).</p>
       </div>
 
       <!-- Por usuario que autoriza/procesa la devolución -->
@@ -115,6 +137,15 @@
                 <th @click="sortBy('Punto Venta')" style="cursor: pointer;">
                   Sede <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Punto Venta' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
+                <th @click="sortBy('OrigenVenta')" style="cursor: pointer;">
+                  Origen <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'OrigenVenta' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortBy('OrigenFactura')" style="cursor: pointer;">
+                  Factura orig. <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'OrigenFactura' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
+                <th @click="sortBy('VendedorOriginal')" style="cursor: pointer;">
+                  Vendedor (venta) <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'VendedorOriginal' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
+                </th>
                 <th @click="sortBy('Vendedor')" style="cursor: pointer;">
                   Autorizada por <span style="opacity: 0.5; font-size: 10px;">{{ sortCol === 'Vendedor' ? (sortDesc ? '▼' : '▲') : '↕' }}</span>
                 </th>
@@ -134,8 +165,13 @@
                 <td>{{ formatDate(row.Fecha) }}</td>
                 <td>{{ row.NotaCredito }}</td>
                 <td>{{ row['Punto Venta'] || 'N/A' }}</td>
-                <td>{{ (row.Vendedor || row.Creada || 'N/A').substring(0, 24) }}</td>
-                <td :title="row.Observaciones || ''" style="max-width: 320px; white-space: normal; color: var(--fg-muted); font-size: 12px;">
+                <td>
+                  <span class="badge" :class="row.OrigenVenta === 'Domicilio' ? 'badge-amber' : (row.OrigenVenta === 'POS' ? 'badge-green' : '')">{{ row.OrigenVenta || '—' }}</span>
+                </td>
+                <td>{{ row.OrigenFactura || '—' }}</td>
+                <td>{{ (row.VendedorOriginal || '—').substring(0, 22) }}</td>
+                <td>{{ (row.Vendedor || row.Creada || 'N/A').substring(0, 22) }}</td>
+                <td :title="row.Observaciones || ''" style="max-width: 280px; white-space: normal; color: var(--fg-muted); font-size: 12px;">
                   {{ row.Observaciones || '—' }}
                 </td>
                 <td>{{ store.fmtN(row.Unidades || 0) }}</td>
@@ -162,10 +198,11 @@ import KpiCard from '../components/ui/KpiCard.vue'
 import SectionTitle from '../components/ui/SectionTitle.vue'
 import BarChart from '../components/charts/BarChart.vue'
 import LineChart from '../components/charts/LineChart.vue'
+import DonutChart from '../components/charts/DonutChart.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
 import Paginator from '../components/ui/Paginator.vue'
 import { exportToCSV } from '../utils/export'
-import { RotateCcw, Activity, Receipt, DollarSign, TrendingUp, Users, Store, AlertTriangle, ClipboardList, Download, Calendar, Package } from 'lucide-vue-next'
+import { RotateCcw, Activity, Receipt, DollarSign, TrendingUp, Users, Store, AlertTriangle, ClipboardList, Download, Calendar, Package, Bike } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.devoluciones)
@@ -196,6 +233,14 @@ const vendData = computed(() => data.value?.por_vendedor?.slice(0,10).map(d => m
 
 const sedeCat = computed(() => data.value?.por_sede?.map(d => d.sede) || [])
 const sedeData = computed(() => data.value?.por_sede?.map(d => metric.value === 'valor' ? d.total_devuelto : (d.n_unidades || 0)) || [])
+
+// POS vs Domicilio (origen de la venta)
+const origenLabels = computed(() => data.value?.por_origen?.map(d => d.origen) || [])
+const origenData = computed(() => data.value?.por_origen?.map(d => d.total_devuelto) || [])
+
+// Vendedor REAL de la venta original
+const vorCat = computed(() => data.value?.por_vendedor_original?.slice(0,10).map(d => d.vendedor) || [])
+const vorData = computed(() => data.value?.por_vendedor_original?.slice(0,10).map(d => metric.value === 'valor' ? d.total_devuelto : (d.n_unidades || 0)) || [])
 
 // Table Sort & Paginate
 const sortCol = ref('Fecha')
@@ -239,6 +284,9 @@ function exportTable() {
     { key: 'Fecha', label: 'Fecha', formatter: formatDate },
     { key: 'NotaCredito', label: 'Nota' },
     { key: 'Punto Venta', label: 'Sede' },
+    { key: 'OrigenVenta', label: 'Origen (POS/Domicilio)' },
+    { key: 'OrigenFactura', label: 'Factura Origen' },
+    { key: 'VendedorOriginal', label: 'Vendedor (venta)' },
     { key: 'Vendedor', label: 'Autorizada por' },
     { key: 'Unidades', label: 'Unidades' },
     { key: 'Total Neto', label: 'Devuelto (Sin IVA)' },

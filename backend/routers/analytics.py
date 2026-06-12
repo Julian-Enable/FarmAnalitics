@@ -1347,6 +1347,30 @@ def endpoint_notas_credito(
         vend_df = vend_df.sort_values("total_devuelto", ascending=False)
         por_vendedor = json.loads(vend_df.to_json(orient="records"))
 
+    # Valor + unidades por una columna de la nota (vendedor original, origen, etc.)
+    def _breakdown_by(col: str) -> pd.DataFrame:
+        vdf = (notas_unicas.groupby(col, as_index=False)
+               .agg(total_devuelto=("Total Neto", "sum"), n_notas=("Total Neto", "count")))
+        u = _units_by(col)
+        vdf = vdf.merge(u, on=col, how="left")
+        vdf["n_unidades"] = vdf["n_unidades"].fillna(0)
+        return vdf.sort_values("total_devuelto", ascending=False)
+
+    # Por VENDEDOR ORIGINAL de la venta (via FACTURAS_NOTAS_CREDITO -> factura origen)
+    por_vendedor_original = []
+    if "VendedorOriginal" in notas_unicas.columns:
+        vo = _breakdown_by("VendedorOriginal").rename(columns={"VendedorOriginal": "vendedor"})
+        por_vendedor_original = json.loads(vo.to_json(orient="records"))
+
+    # Por origen de la venta (POS / Domicilio / Sin origen)
+    por_origen = []
+    pct_domicilio = 0
+    if "OrigenVenta" in notas_unicas.columns:
+        oo = _breakdown_by("OrigenVenta").rename(columns={"OrigenVenta": "origen"})
+        por_origen = json.loads(oo.to_json(orient="records"))
+        if n_notas:
+            pct_domicilio = round((notas_unicas["OrigenVenta"].astype(str) == "Domicilio").sum() / n_notas * 100, 1)
+
     # Productos devueltos: usar las lineas reales de la nota credito.
     top_productos_devueltos = []
     if not lineas_producto.empty:
@@ -1371,7 +1395,8 @@ def endpoint_notas_credito(
 
     # Tabla detalle
     cols_tabla = [c for c in ["Fecha", "NotaCredito", "Punto Venta", "Total Neto", "Unidades",
-                               "Vendedor", "Creada", "Motivo", "Factura", "Observaciones", "Saldo"]
+                               "Vendedor", "Creada", "OrigenFactura", "VendedorOriginal", "OrigenVenta",
+                               "Observaciones", "Saldo"]
                   if c in notas_unicas.columns]
     tabla = _df_to_records(notas_unicas[cols_tabla].sort_values("Fecha", ascending=False), max_rows=300)
 
@@ -1385,11 +1410,14 @@ def endpoint_notas_credito(
             "ingresos_brutos": round(ing_bruto, 0),
             "ingresos_netos":  ingresos_netos,
             "saldo_pendiente": round(total_saldo, 0),
+            "pct_domicilio":   pct_domicilio,
             "dias_periodo":    int(dias_periodo),
         },
         "tendencia":               tendencia,
         "por_sede":                por_sede,
         "por_vendedor":            por_vendedor,
+        "por_vendedor_original":   por_vendedor_original,
+        "por_origen":              por_origen,
         "top_productos_devueltos": top_productos_devueltos,
         "tabla":                   tabla,
     }
