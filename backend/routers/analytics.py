@@ -947,12 +947,22 @@ def gerencia_operativa(
     rentabilidad = rentabilidad_gerencial(df_v, df_c, df_i)
     anomalias = detector_anomalias(df_v, df_c, df_i, df_n)
     diario = reporte_diario(df_v, df_c, df_i, df_n)
+
+    # Descuentos atípicos / poco comunes (para revisión)
+    descuentos_atipicos = {"kpis": {}, "lineas": [], "planes_raros": []}
+    historical = get_historical_store()
+    if historical.descuentos_available():
+        from backend.services.insights import anomalias_descuentos
+        df_desc = historical.get_descuentos(fecha_ini, fecha_fin)
+        descuentos_atipicos = anomalias_descuentos(df_desc)
+
     return {
         "periodo": {"fecha_ini": fecha_ini, "fecha_fin": fecha_fin},
         "traslados": traslados,
         "pedidos": pedidos,
         "rentabilidad": rentabilidad,
         "anomalias": anomalias,
+        "descuentos_atipicos": descuentos_atipicos,
         "reporte_diario": diario,
     }
 

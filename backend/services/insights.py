@@ -180,6 +180,76 @@ def analisis_descuentos(df: pd.DataFrame) -> dict[str, Any]:
     }
 
 
+# ── Anomalías de descuentos (para Gerencia) ──────────────────────────────────
+
+def anomalias_descuentos(df: pd.DataFrame, max_lineas: int = 60) -> dict[str, Any]:
+    """Descuentos poco comunes o fuera de lo normal, para revisión gerencial:
+    - planes raros (uso poco frecuente = descuentos especiales/manuales),
+    - % de descuento atípicamente alto frente a lo habitual."""
+    vacio = {"kpis": {"n_atipicos": 0, "valor_atipico": 0, "n_planes_raros": 0}, "planes_raros": [], "lineas": []}
+    if df is None or df.empty:
+        return vacio
+
+    d = df.copy()
+    d["Valor"] = pd.to_numeric(d.get("Valor", 0), errors="coerce").fillna(0)
+    d["PrecioVenta"] = pd.to_numeric(d.get("PrecioVenta", 0), errors="coerce").fillna(0)
+    d = d[d["Valor"] > 0]
+    if d.empty or "Plan" not in d.columns:
+        return vacio
+
+    # % real del descuento sobre el precio
+    d["pct"] = np.where(d["PrecioVenta"] > 0, (d["Valor"] / d["PrecioVenta"] * 100).round(1), np.nan)
+    # % declarado por el propio plan (el Tipo empieza con "NN%*..."), para detectar
+    # descuentos que NO coinciden con lo que su plan dice (sobre-descuento/error).
+    tipo = d["Tipo"].astype(str) if "Tipo" in d.columns else pd.Series("", index=d.index)
+    d["declarado"] = pd.to_numeric(tipo.str.extract(r"^(\d+)%", expand=False), errors="coerce")
+    # Solo sobre-descuento marcado: dieron al menos 25 puntos más de lo que dice el
+    # plan (evita falsos por líneas multi-unidad donde el % sobre el precio unitario sube).
+    d["pct_inconsistente"] = (d["declarado"].notna() & d["pct"].notna()
+                              & ((d["pct"] - d["declarado"]) >= 25))
+    # Plan casi nunca usado (uso esporádico, no las promos recurrentes)
+    plan_n = d["Plan"].value_counts()
+    d["plan_raro"] = d["Plan"].isin(set(plan_n[plan_n < 25].index))
+    # Descuento de un solo golpe extremadamente grande (caso raro a revisar)
+    umbral_valor = max(float(d["Valor"].quantile(0.9995)), 500000)
+    d["valor_alto"] = d["Valor"] >= umbral_valor
+
+    anom = d[d["pct_inconsistente"] | d["plan_raro"] | d["valor_alto"]].copy()
+    if anom.empty:
+        return vacio
+
+    def _motivo(r):
+        ms = []
+        if r["pct_inconsistente"]:
+            ms.append("No coincide con su plan (%.0f%% vs %.0f%%)" % (r["pct"], r["declarado"]))
+        if r["valor_alto"]:
+            ms.append("Valor alto")
+        if r["plan_raro"]:
+            ms.append("Plan casi no usado")
+        return " · ".join(ms)
+    anom["motivo"] = anom.apply(_motivo, axis=1)
+
+    raros = pd.DataFrame()
+    if d["plan_raro"].any():
+        raros = (d[d["plan_raro"]].groupby("Plan", as_index=False)
+                 .agg(n=("Valor", "count"), valor=("Valor", "sum"),
+                      ultimo=("Fecha", "max"))
+                 .sort_values("valor", ascending=False).head(25))
+
+    cols = [c for c in ["Fecha", "Punto Venta", "Cajero", "Descripcion", "Plan", "Valor", "pct", "motivo"] if c in anom.columns]
+    lineas = anom.sort_values(["Valor"], ascending=False)[cols].head(max_lineas)
+
+    return {
+        "kpis": {
+            "n_atipicos": int(len(anom)),
+            "valor_atipico": round(float(anom["Valor"].sum()), 0),
+            "n_planes_raros": int(len(raros)),
+        },
+        "planes_raros": _records(raros),
+        "lineas": _records(lineas, max_lineas),
+    }
+
+
 # ── 3. CLIENTES CRÓNICOS ─────────────────────────────────────────────────────
 
 def analisis_cronicos(ventas: pd.DataFrame, clientes: pd.DataFrame,

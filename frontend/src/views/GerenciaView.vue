@@ -166,6 +166,20 @@
         </div>
       </div>
 
+      <div class="card" style="margin-top:16px;" v-if="data.descuentos_atipicos">
+        <div class="section-header-row">
+          <SectionTitle :icon="TicketPercent" :title="'Descuentos atípicos / poco comunes' + (data.descuentos_atipicos.kpis?.n_atipicos ? ' (' + store.fmtN(data.descuentos_atipicos.kpis.n_atipicos) + ' · ' + store.fmt(data.descuentos_atipicos.kpis.valor_atipico) + ')' : '')" />
+          <button class="export-btn" @click="exportRows(data.descuentos_atipicos.lineas, descAtipCols, 'Descuentos_Atipicos')">
+            <Download size="16" /> CSV
+          </button>
+        </div>
+        <p style="padding:0 0 8px;color:var(--fg-muted);font-size:12px;">
+          Descuentos que no coinciden con lo que dice su plan (sobre-descuento), de planes casi nunca usados, o de un valor inusualmente alto. Para revisar/controlar.
+        </p>
+        <SimpleTable v-if="data.descuentos_atipicos.lineas?.length" :rows="data.descuentos_atipicos.lineas" :cols="descAtipCols" :limit="20" />
+        <p v-else style="padding:10px;color:var(--fg-muted);">Sin descuentos atípicos en el periodo. 👍</p>
+      </div>
+
       <div class="grid-2" style="margin-top:16px;">
         <div class="card">
           <SectionTitle :icon="Factory" title="Laboratorios: utilidad vs capital" />
@@ -215,6 +229,7 @@ import {
   ShoppingCart,
   Store,
   SunMedium,
+  TicketPercent,
   TrendingDown,
 } from 'lucide-vue-next'
 
@@ -362,6 +377,16 @@ const sedeCols = [
   { key: 'ingreso_total', label: 'Ingreso', formatter: money },
   { key: 'utilidad_total', label: 'Utilidad', formatter: money },
   { key: 'margen_pct', label: 'Margen', formatter: pct },
+]
+const fmtFecha = (v) => { if (!v) return '—'; try { return new Date(v).toLocaleDateString('es-CO') } catch { return v } }
+const descAtipCols = [
+  { key: 'Fecha', label: 'Fecha', formatter: fmtFecha },
+  { key: 'Punto Venta', label: 'Sede' },
+  { key: 'Cajero', label: 'Cajero' },
+  { key: 'Descripcion', label: 'Producto', formatter: (v) => String(v || '').substring(0, 28) },
+  { key: 'Plan', label: 'Plan', formatter: (v) => String(v || '').substring(0, 26) },
+  { key: 'Valor', label: 'Descuento', formatter: money },
+  { key: 'motivo', label: 'Motivo' },
 ]
 const sinCostoCols = [
   { key: 'nombre', label: 'Producto' },
