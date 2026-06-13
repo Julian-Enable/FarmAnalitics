@@ -30,7 +30,7 @@
         <KpiCard :icon="Users" label="Cajeros" :value="store.fmtN(data.kpis.n_cajeros)" />
       </div>
 
-      <div v-if="data.outliers?.length" class="card" style="margin-bottom:16px;border-color:#fecdd3;background:#fff8f8;">
+      <div v-if="data.outliers?.length" class="card alert-card" style="margin-bottom:16px;">
         <SectionTitle :icon="AlertTriangle" title="⚠️ Cajeros con descuentos anormalmente altos" />
         <div style="overflow-x:auto;">
           <table class="data-table">
@@ -141,3 +141,12 @@ function exportProductos() {
 
 onMounted(() => { if (store.status.descuentos && !data.value) applyFilters() })
 </script>
+
+<style scoped>
+/* Tarjeta de alerta con tinte rojo que funciona en tema claro y oscuro
+   (el fondo translúcido deja ver el fondo del tema, así el texto es legible). */
+.alert-card {
+  border-color: rgba(244, 63, 94, 0.45) !important;
+  background: rgba(244, 63, 94, 0.08) !important;
+}
+</style>
