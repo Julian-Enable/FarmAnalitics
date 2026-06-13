@@ -236,7 +236,7 @@ def anomalias_descuentos(df: pd.DataFrame, max_lineas: int = 60) -> dict[str, An
                       ultimo=("Fecha", "max"))
                  .sort_values("valor", ascending=False).head(25))
 
-    cols = [c for c in ["Fecha", "Punto Venta", "Cajero", "Descripcion", "Plan", "Valor", "pct", "motivo"] if c in anom.columns]
+    cols = [c for c in ["Fecha", "Factura", "Punto Venta", "Cajero", "Descripcion", "Plan", "Valor", "pct", "motivo"] if c in anom.columns]
     lineas = anom.sort_values(["Valor"], ascending=False)[cols].head(max_lineas)
 
     return {

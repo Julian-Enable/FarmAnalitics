@@ -381,6 +381,7 @@ const sedeCols = [
 const fmtFecha = (v) => { if (!v) return '—'; try { return new Date(v).toLocaleDateString('es-CO') } catch { return v } }
 const descAtipCols = [
   { key: 'Fecha', label: 'Fecha', formatter: fmtFecha },
+  { key: 'Factura', label: 'Factura' },
   { key: 'Punto Venta', label: 'Sede' },
   { key: 'Cajero', label: 'Cajero' },
   { key: 'Descripcion', label: 'Producto', formatter: (v) => String(v || '').substring(0, 28) },

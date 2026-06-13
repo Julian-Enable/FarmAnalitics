@@ -226,6 +226,7 @@ DATASETS = {
         select_sql="""
             SELECT
                 d.ID_Factura,
+                f.Factura,
                 f.FechaFactura AS Fecha,
                 f.ID_PuntoVenta,
                 f.Creada,
