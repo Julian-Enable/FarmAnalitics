@@ -65,6 +65,9 @@ def get_status(session_id):
             "notas_credito": not historical.get_notas_credito().empty,
             "domicilios": historical.domicilios_available(),
             "comisiones": historical.comisiones_available(),
+            "mermas": historical.ajustes_available(),
+            "descuentos": historical.descuentos_available(),
+            "cronicos": True,
         }
     if is_db_configured():
         db = get_db_service()
@@ -1900,6 +1903,45 @@ def _get_domicilios(fecha_ini=None, fecha_fin=None) -> pd.DataFrame:
         if db:
             return db.get_domicilios(fecha_ini, fecha_fin)
     return pd.DataFrame()
+
+
+# ── Análisis avanzados: Mermas, Descuentos, Crónicos ──────────────────────────
+
+@router.get("/mermas")
+def mermas(fecha_ini: str = None, fecha_fin: str = None, x_session_id: str = Header(default="default-session")):
+    from backend.services.insights import analisis_mermas
+    fecha_ini, fecha_fin = _normalize_optional_date_range(fecha_ini, fecha_fin)
+    historical = get_historical_store()
+    if not historical.ajustes_available():
+        raise HTTPException(404, "No hay datos de ajustes/mermas. Actualiza desde tu PC.")
+    df = historical.get_ajustes(fecha_ini, fecha_fin)
+    if df is None or df.empty:
+        raise HTTPException(404, "No hay ajustes para el periodo seleccionado")
+    return analisis_mermas(df)
+
+
+@router.get("/descuentos")
+def descuentos(fecha_ini: str = None, fecha_fin: str = None, x_session_id: str = Header(default="default-session")):
+    from backend.services.insights import analisis_descuentos
+    fecha_ini, fecha_fin = _normalize_optional_date_range(fecha_ini, fecha_fin)
+    historical = get_historical_store()
+    if not historical.descuentos_available():
+        raise HTTPException(404, "No hay datos de descuentos. Actualiza desde tu PC.")
+    df = historical.get_descuentos(fecha_ini, fecha_fin)
+    if df is None or df.empty:
+        raise HTTPException(404, "No hay descuentos para el periodo seleccionado")
+    return analisis_descuentos(df)
+
+
+@router.get("/cronicos")
+def cronicos(x_session_id: str = Header(default="default-session")):
+    from backend.services.insights import analisis_cronicos
+    historical = get_historical_store()
+    if not historical.available():
+        raise HTTPException(404, "No hay datos de ventas para el análisis de crónicos")
+    ventas = historical.get_ventas()
+    clientes = historical.get_clientes()
+    return analisis_cronicos(ventas, clientes)
 
 
 # ── Comisiones ────────────────────────────────────────────────────────────────

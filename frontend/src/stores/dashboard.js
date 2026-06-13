@@ -46,7 +46,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     localStorage.setItem('farm_theme', theme.value)
   }
 
-  const status = reactive({ ventas: false, compras: false, inventario: false, notas_credito: false, domicilios: false, comisiones: false, metas: false })
+  const status = reactive({ ventas: false, compras: false, inventario: false, notas_credito: false, domicilios: false, comisiones: false, mermas: false, descuentos: false, cronicos: false, metas: false })
   const uploading = ref(false)
   const exporting = ref(false)
   const refreshingLive = ref(false)
@@ -78,6 +78,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
     gerencia: null,
     domicilios: null,
     comisiones: null,
+    mermas: null,
+    descuentos: null,
+    cronicos: null,
   })
 
   const loading = reactive({
@@ -92,6 +95,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
     gerencia: false,
     domicilios: false,
     comisiones: false,
+    mermas: false,
+    descuentos: false,
+    cronicos: false,
   })
 
   const errors = reactive({
@@ -106,6 +112,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
     gerencia: null,
     domicilios: null,
     comisiones: null,
+    mermas: null,
+    descuentos: null,
+    cronicos: null,
   })
 
   function fmt(n) {
@@ -422,6 +431,38 @@ export const useDashboardStore = defineStore('dashboard', () => {
     finally { loading.metas = false }
   }
 
+  async function fetchMermas(params = {}) {
+    if (!status.mermas) return
+    loading.mermas = true
+    clearModuleError('mermas')
+    try {
+      const { data: d } = await axios.get('/api/mermas', { params })
+      data.mermas = d
+    } catch (e) { setModuleError('mermas', e, 'No se pudo cargar mermas') }
+    finally { loading.mermas = false }
+  }
+
+  async function fetchDescuentos(params = {}) {
+    if (!status.descuentos) return
+    loading.descuentos = true
+    clearModuleError('descuentos')
+    try {
+      const { data: d } = await axios.get('/api/descuentos', { params })
+      data.descuentos = d
+    } catch (e) { setModuleError('descuentos', e, 'No se pudo cargar descuentos') }
+    finally { loading.descuentos = false }
+  }
+
+  async function fetchCronicos() {
+    loading.cronicos = true
+    clearModuleError('cronicos')
+    try {
+      const { data: d } = await axios.get('/api/cronicos')
+      data.cronicos = d
+    } catch (e) { setModuleError('cronicos', e, 'No se pudo cargar clientes crónicos') }
+    finally { loading.cronicos = false }
+  }
+
   async function fetchComisiones(params = {}) {
     if (!status.comisiones) return
     loading.comisiones = true
@@ -630,5 +671,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
     fetchHistoricalStatus, refreshLiveInformation, checkLocalAgent,
     fetchResumen, fetchVentas, fetchRentabilidad,
     fetchInventario, fetchCompras, fetchSedes, fetchDevoluciones, fetchMetas, fetchGerencia, fetchDomicilios, fetchComisiones,
+    fetchMermas, fetchDescuentos, fetchCronicos,
   }
 })

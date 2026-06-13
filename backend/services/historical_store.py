@@ -145,6 +145,43 @@ class HistoricalStore:
                 )
             return df
 
+        if name == "HISTORICO_AJUSTES":
+            if "Fecha" in df.columns:
+                df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce")
+            for col in ["Cantidad", "PrecioCompra", "PrecioVenta", "ValorCosto"]:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+            sedes = self._lookup_map("LOOKUP_PUNTO_VENTA")
+            niveles = self._lookup_map("LOOKUP_NIVELES")
+            if "ID_PuntoVenta" in df.columns:
+                df["Punto Venta"] = df["ID_PuntoVenta"].astype(str).str.strip().map(sedes).fillna(df["ID_PuntoVenta"])
+            if "ID_Nivel" in df.columns:
+                df["Nivel"] = df["ID_Nivel"].astype(str).str.strip().map(niveles).fillna("Sin Nivel")
+            if "Motivo" in df.columns:
+                df["Motivo"] = df["Motivo"].astype(str).str.strip().replace({"": "Sin motivo", "nan": "Sin motivo"})
+            return df
+
+        if name == "HISTORICO_DESCUENTOS":
+            if "Fecha" in df.columns:
+                df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce")
+            for col in ["PrecioVenta", "Valor"]:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+            sedes = self._lookup_map("LOOKUP_PUNTO_VENTA")
+            if "ID_PuntoVenta" in df.columns:
+                df["Punto Venta"] = df["ID_PuntoVenta"].astype(str).str.strip().map(sedes).fillna(df["ID_PuntoVenta"])
+            nombre = df["NombreVendedor"].astype(str).str.strip() if "NombreVendedor" in df.columns else pd.Series("", index=df.index)
+            creada = df["Creada"].astype(str).str.strip() if "Creada" in df.columns else pd.Series("", index=df.index)
+            invalid = {"", "nan", "none"}
+            df["Cajero"] = nombre.where(~nombre.str.lower().isin(invalid), creada).str.strip()
+            if "Plan" in df.columns:
+                # Limpiar prefijos repetitivos del nombre del plan
+                df["Plan"] = (df["Plan"].astype(str)
+                              .str.replace(r"^Informaci[oó]n\s+", "", regex=True)
+                              .str.replace(r"\s*\(Todos los medios de pago\)\s*$", "", regex=True)
+                              .str.strip())
+            return df
+
         if name == "HISTORICO_COMISIONES":
             if "Fecha" in df.columns:
                 df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce")
@@ -251,6 +288,24 @@ class HistoricalStore:
 
     def get_comisiones(self, fecha_ini=None, fecha_fin=None) -> pd.DataFrame:
         return self._filter_dates(self._read("HISTORICO_COMISIONES"), "Fecha", fecha_ini, fecha_fin).copy()
+
+    def ajustes_available(self) -> bool:
+        return self._path("HISTORICO_AJUSTES").exists()
+
+    def get_ajustes(self, fecha_ini=None, fecha_fin=None) -> pd.DataFrame:
+        return self._filter_dates(self._read("HISTORICO_AJUSTES"), "Fecha", fecha_ini, fecha_fin).copy()
+
+    def descuentos_available(self) -> bool:
+        return self._path("HISTORICO_DESCUENTOS").exists()
+
+    def get_descuentos(self, fecha_ini=None, fecha_fin=None) -> pd.DataFrame:
+        return self._filter_dates(self._read("HISTORICO_DESCUENTOS"), "Fecha", fecha_ini, fecha_fin).copy()
+
+    def get_clientes(self) -> pd.DataFrame:
+        return self._read("LOOKUP_CLIENTES").copy()
+
+    def ventas_available(self) -> bool:
+        return self.available()
 
     def get_domicilios(self, fecha_ini=None, fecha_fin=None) -> pd.DataFrame:
         return self._filter_dates(self._read("HISTORICO_DOMICILIOS"), "Fecha", fecha_ini, fecha_fin).copy()

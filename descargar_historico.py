@@ -179,6 +179,73 @@ DATASETS = {
               AND nc.Fecha < ?
         """,
     ),
+    "ajustes": DatasetConfig(
+        name="HISTORICO_AJUSTES",
+        date_column="Fecha",
+        dedupe_subset=("ID",),
+        count_sql="""
+            SELECT COUNT_BIG(*) AS filas
+            FROM INVENTARIO_MOVIMIENTOS im
+            WHERE im.Movimiento = 'AJUSTE'
+              AND im.Fecha >= ?
+              AND im.Fecha < ?
+        """,
+        select_sql="""
+            SELECT
+                im.ID,
+                im.Fecha,
+                im.ID_PuntoVenta,
+                im.Referencia,
+                r.Descripcion1 AS Descripcion,
+                r.ID_Nivel,
+                im.Cantidad,
+                im.Documento AS Motivo,
+                im.PrecioCompra,
+                im.PrecioVenta,
+                im.Cantidad * im.PrecioCompra AS ValorCosto
+            FROM INVENTARIO_MOVIMIENTOS im
+            LEFT JOIN REFERENCIAS r ON im.Referencia = r.Referencia
+            WHERE im.Movimiento = 'AJUSTE'
+              AND im.Fecha >= ?
+              AND im.Fecha < ?
+        """,
+    ),
+    "descuentos": DatasetConfig(
+        name="HISTORICO_DESCUENTOS",
+        date_column="Fecha",
+        dedupe_subset=("ID_Factura", "Referencia", "Tipo", "Valor"),
+        count_sql="""
+            SELECT COUNT_BIG(*) AS filas
+            FROM FACTURAS_PRODUCTOS_DESCUENTOS_ESPECIALES d
+            INNER JOIN FACTURAS f ON d.ID_Factura = f.ID
+            WHERE f.Enabled = 1
+              AND f.Anulada = 'N/A'
+              AND f.FechaFactura >= ?
+              AND f.FechaFactura < ?
+        """,
+        select_sql="""
+            SELECT
+                d.ID_Factura,
+                f.FechaFactura AS Fecha,
+                f.ID_PuntoVenta,
+                f.Creada,
+                u.Nombre AS NombreVendedor,
+                d.Referencia,
+                r.Descripcion1 AS Descripcion,
+                d.PrecioVenta,
+                d.Nombre AS [Plan],
+                d.Tipo,
+                d.Valor
+            FROM FACTURAS_PRODUCTOS_DESCUENTOS_ESPECIALES d
+            INNER JOIN FACTURAS f ON d.ID_Factura = f.ID
+            LEFT JOIN REFERENCIAS r ON d.Referencia = r.Referencia
+            LEFT JOIN USUARIOS u ON f.Creada = u.Login
+            WHERE f.Enabled = 1
+              AND f.Anulada = 'N/A'
+              AND f.FechaFactura >= ?
+              AND f.FechaFactura < ?
+        """,
+    ),
     "comisiones": DatasetConfig(
         name="HISTORICO_COMISIONES",
         date_column="Fecha",
@@ -288,6 +355,8 @@ LOOKUP_QUERIES = {
     "LOOKUP_LABORATORIOS": "SELECT ID, Nombre FROM LABORATORIOS",
     "LOOKUP_NIVELES": "SELECT ID, Nombre FROM NIVELES",
     "LOOKUP_PROVEEDORES": "SELECT ID, Nombre FROM PROVEEDORES",
+    # Clientes con contacto, para los listados de llamadas de cronicos.
+    "LOOKUP_CLIENTES": "SELECT ID, Nombre, Movil, Mail FROM CLIENTES WHERE Enabled = 1",
 }
 
 
@@ -553,7 +622,8 @@ def download_dataset(executor, config: DatasetConfig, start: pd.Timestamp, end: 
 
 def download_lookups(executor) -> None:
     for name, sql in LOOKUP_QUERIES.items():
-        df = executor.execute_read(sql, max_rows=5_000)
+        # LOOKUP_CLIENTES tiene ~40k filas; el resto son catalogos pequenos.
+        df = executor.execute_read(sql, max_rows=200_000)
         save_df(df, name)
 
 

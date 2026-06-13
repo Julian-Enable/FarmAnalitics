@@ -18,6 +18,9 @@ import MetasView         from './views/MetasView.vue'
 import GerenciaView      from './views/GerenciaView.vue'
 import DomiciliosView    from './views/DomiciliosView.vue'
 import ComisionesView    from './views/ComisionesView.vue'
+import MermasView        from './views/MermasView.vue'
+import DescuentosView    from './views/DescuentosView.vue'
+import CronicosView      from './views/CronicosView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -31,6 +34,9 @@ const router = createRouter({
     { path: '/devoluciones',  component: DevolucionesView, name: 'devoluciones' },
     { path: '/domicilios',    component: DomiciliosView,   name: 'domicilios' },
     { path: '/comisiones',    component: ComisionesView,   name: 'comisiones' },
+    { path: '/mermas',        component: MermasView,       name: 'mermas' },
+    { path: '/descuentos',    component: DescuentosView,   name: 'descuentos' },
+    { path: '/cronicos',      component: CronicosView,     name: 'cronicos' },
     { path: '/metas',         component: MetasView,        name: 'metas' },
     { path: '/gerencia',      component: GerenciaView,     name: 'gerencia' },
   ]
