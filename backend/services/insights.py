@@ -183,7 +183,8 @@ def analisis_descuentos(df: pd.DataFrame) -> dict[str, Any]:
 # ── 3. CLIENTES CRÓNICOS ─────────────────────────────────────────────────────
 
 def analisis_cronicos(ventas: pd.DataFrame, clientes: pd.DataFrame,
-                      min_compras: int = 3, intervalo_min: int = 15, intervalo_max: int = 75,
+                      min_compras: int = 3, meses_min: int = 3,
+                      intervalo_min: int = 15, intervalo_max: int = 75,
                       vencidos_max: int = 180, proximos_dias: int = 7) -> dict[str, Any]:
     if ventas is None or ventas.empty:
         return {"kpis": {}, "recuperar": [], "proximos": []}
@@ -208,14 +209,22 @@ def analisis_cronicos(ventas: pd.DataFrame, clientes: pd.DataFrame,
         desc=("Descripcion", "last"))
     diario = diario.sort_values("dia")
 
-    # Intervalo mediano entre compras consecutivas por cliente-producto
+    # Intervalo mediano y meses distintos por cliente-producto.
+    # "meses" exige que el hábito esté SOSTENIDO en el tiempo (al menos 3 meses
+    # distintos con compra), no 3 compras juntas en pocos días.
     grp = diario.groupby(["ID_Cliente", "Referencia"])
-    base = grp.agg(compras=("dia", "nunique"), ultima=("dia", "max"),
-                   primera=("dia", "min"), desc=("desc", "last")).reset_index()
+    base = grp.agg(
+        compras=("dia", "nunique"),
+        meses=("dia", lambda s: s.dt.to_period("M").nunique()),
+        ultima=("dia", "max"),
+        primera=("dia", "min"),
+        desc=("desc", "last"),
+    ).reset_index()
     intervalo = grp["dia"].apply(lambda s: s.diff().dt.days.median()).reset_index(name="intervalo")
     base = base.merge(intervalo, on=["ID_Cliente", "Referencia"], how="left")
 
     cron = base[(base["compras"] >= min_compras)
+                & (base["meses"] >= meses_min)
                 & (base["intervalo"] >= intervalo_min)
                 & (base["intervalo"] <= intervalo_max)].copy()
     if cron.empty:

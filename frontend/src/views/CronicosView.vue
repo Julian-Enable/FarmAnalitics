@@ -10,7 +10,7 @@
     </div>
 
     <ModuleInfo>
-      <p><strong>Los dos listados son clientes que compran el mismo medicamento de forma recurrente</strong> (≥3 compras con frecuencia regular de 15–75 días). La diferencia es el momento, no el tipo de cliente. Para cada uno se estima cuándo se le acaba según <em>su</em> ritmo de compra:</p>
+      <p><strong>Los dos listados son clientes que compran el mismo medicamento de forma recurrente y sostenida</strong> (compraron en al menos <strong>3 meses distintos</strong>, con frecuencia regular de 15–75 días — no 3 compras juntas en pocos días). La diferencia es el momento, no el tipo de cliente. Para cada uno se estima cuándo se le acaba según <em>su</em> ritmo de compra:</p>
       <ul style="margin-left:20px;margin-top:8px;">
         <li><strong>Recurrentes por agotarse:</strong> aún tienen medicamento pero se les acaba en los próximos días → llamarlos <em>antes</em> para asegurar la recompra.</li>
         <li><strong>Abandonaron:</strong> ya pasaron su fecha esperada y no han vuelto (hasta 180 días vencidos = abandono del año actual) → llamarlos para recuperarlos.</li>
