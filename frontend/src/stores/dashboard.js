@@ -453,11 +453,11 @@ export const useDashboardStore = defineStore('dashboard', () => {
     finally { loading.descuentos = false }
   }
 
-  async function fetchCronicos() {
+  async function fetchCronicos(params = {}) {
     loading.cronicos = true
     clearModuleError('cronicos')
     try {
-      const { data: d } = await axios.get('/api/cronicos')
+      const { data: d } = await axios.get('/api/cronicos', { params })
       data.cronicos = d
     } catch (e) { setModuleError('cronicos', e, 'No se pudo cargar clientes crónicos') }
     finally { loading.cronicos = false }

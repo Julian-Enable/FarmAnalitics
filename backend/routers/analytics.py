@@ -1934,14 +1934,17 @@ def descuentos(fecha_ini: str = None, fecha_fin: str = None, x_session_id: str =
 
 
 @router.get("/cronicos")
-def cronicos(x_session_id: str = Header(default="default-session")):
+def cronicos(fecha_ini: str = None, fecha_fin: str = None, x_session_id: str = Header(default="default-session")):
     from backend.services.insights import analisis_cronicos
+    # Validar formato si vienen; None = todo el historial.
+    _parse_iso_date(fecha_ini, "fecha_ini")
+    _parse_iso_date(fecha_fin, "fecha_fin")
     historical = get_historical_store()
     if not historical.available():
         raise HTTPException(404, "No hay datos de ventas para el análisis de crónicos")
     ventas = historical.get_ventas()
     clientes = historical.get_clientes()
-    return analisis_cronicos(ventas, clientes)
+    return analisis_cronicos(ventas, clientes, fecha_ini=fecha_ini, fecha_fin=fecha_fin)
 
 
 # ── Comisiones ────────────────────────────────────────────────────────────────

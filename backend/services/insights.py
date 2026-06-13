@@ -183,6 +183,7 @@ def analisis_descuentos(df: pd.DataFrame) -> dict[str, Any]:
 # ── 3. CLIENTES CRÓNICOS ─────────────────────────────────────────────────────
 
 def analisis_cronicos(ventas: pd.DataFrame, clientes: pd.DataFrame,
+                      fecha_ini: str | None = None, fecha_fin: str | None = None,
                       min_compras: int = 3, meses_min: int = 3,
                       intervalo_min: int = 15, intervalo_max: int = 75,
                       vencidos_max: int = 180, proximos_dias: int = 7) -> dict[str, Any]:
@@ -197,13 +198,19 @@ def analisis_cronicos(ventas: pd.DataFrame, clientes: pd.DataFrame,
 
     v["Fecha"] = pd.to_datetime(v["Fecha"], errors="coerce")
     v = v[v["Fecha"].notna()]
+    # Ventana de ventas a considerar: fecha_ini limita desde cuándo se mira el
+    # historial; fecha_fin define el corte ("hoy") para evaluar si ya se le acabó.
+    if fecha_ini:
+        v = v[v["Fecha"] >= pd.Timestamp(fecha_ini)]
+    if fecha_fin:
+        v = v[v["Fecha"] < pd.Timestamp(fecha_fin) + pd.Timedelta(days=1)]
     # Excluir servicios/domicilios (no son medicamentos)
     nivel = v["Nivel"] if "Nivel" in v.columns else None
     v = v[~_es_servicio(v["Descripcion"], nivel)]
     if v.empty:
         return {"kpis": {}, "recuperar": [], "proximos": []}
 
-    hoy = v["Fecha"].max().normalize()
+    hoy = pd.Timestamp(fecha_fin).normalize() if fecha_fin else v["Fecha"].max().normalize()
     v["dia"] = v["Fecha"].dt.normalize()
     diario = v.groupby(["ID_Cliente", "Referencia", "dia"], as_index=False).agg(
         desc=("Descripcion", "last"))

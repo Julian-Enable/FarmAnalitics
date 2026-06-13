@@ -17,6 +17,20 @@
       </ul>
     </ModuleInfo>
 
+    <div class="filters-bar" style="margin-bottom:16px;">
+      <div class="filter-group">
+        <label>Ventas desde</label>
+        <input type="date" v-model="filters.fecha_ini" @change="applyFilters" />
+      </div>
+      <div class="filter-group">
+        <label>Corte (hasta)</label>
+        <input type="date" v-model="filters.fecha_fin" @change="applyFilters" />
+      </div>
+      <div class="filter-group" style="justify-content:flex-end;">
+        <button class="btn-secondary" style="margin-top:18px;" @click="clearDates">Todo el historial</button>
+      </div>
+    </div>
+
     <div v-if="store.errors.cronicos" class="card" style="border-color:#fecdd3;color:#be123c;margin-bottom:16px;background:#fff1f2;">
       {{ store.errors.cronicos }}
     </div>
@@ -102,6 +116,19 @@ const loading = computed(() => store.loading.cronicos)
 const tab = ref('proximos')
 const buscar = ref('')
 const page = ref(1)
+const filters = ref({ fecha_ini: '', fecha_fin: '' })
+
+function applyFilters() {
+  const p = {}
+  if (filters.value.fecha_ini) p.fecha_ini = filters.value.fecha_ini
+  if (filters.value.fecha_fin) p.fecha_fin = filters.value.fecha_fin
+  store.fetchCronicos(p)
+}
+function clearDates() {
+  filters.value.fecha_ini = ''
+  filters.value.fecha_fin = ''
+  store.fetchCronicos()
+}
 
 const lista = computed(() => (tab.value === 'recuperar' ? data.value?.recuperar : data.value?.proximos) || [])
 const filtrada = computed(() => {
