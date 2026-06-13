@@ -10,10 +10,10 @@
     </div>
 
     <ModuleInfo>
-      <p><strong>¿Cómo se calcula?</strong> Se detectan clientes que compran el mismo medicamento varias veces con una frecuencia regular (cada 15–75 días). Para cada uno se estima cuándo se le acaba según <em>su</em> ritmo de compra.</p>
+      <p><strong>Los dos listados son clientes que compran el mismo medicamento de forma recurrente</strong> (≥3 compras con frecuencia regular de 15–75 días). La diferencia es el momento, no el tipo de cliente. Para cada uno se estima cuándo se le acaba según <em>su</em> ritmo de compra:</p>
       <ul style="margin-left:20px;margin-top:8px;">
-        <li><strong>Recuperar:</strong> ya se pasaron de su fecha esperada y no han vuelto → llamarlos para que regresen.</li>
-        <li><strong>Proactivo:</strong> están por quedarse sin medicamento en los próximos días → llamarlos <em>antes</em> para asegurar la venta.</li>
+        <li><strong>Recurrentes por agotarse:</strong> aún tienen medicamento pero se les acaba en los próximos días → llamarlos <em>antes</em> para asegurar la recompra.</li>
+        <li><strong>Abandonaron:</strong> ya pasaron su fecha esperada y no han vuelto (hasta 180 días vencidos = abandono del año actual) → llamarlos para recuperarlos.</li>
       </ul>
     </ModuleInfo>
 
@@ -27,25 +27,25 @@
 
     <template v-else-if="data">
       <div class="kpi-grid kpi-grid-4" style="margin-bottom:16px;">
-        <KpiCard :icon="Users" label="Pacientes Crónicos" :value="store.fmtN(data.kpis.clientes_cronicos)" />
-        <KpiCard :icon="PhoneCall" label="Para Recuperar" :value="store.fmtN(data.kpis.n_recuperar)" />
-        <KpiCard :icon="CalendarClock" label="Llamar Antes (proactivo)" :value="store.fmtN(data.kpis.n_proximos)" />
+        <KpiCard :icon="Users" label="Pacientes Crónicos (recurrentes)" :value="store.fmtN(data.kpis.clientes_cronicos)" />
+        <KpiCard :icon="CalendarClock" label="Recurrentes por agotarse" :value="store.fmtN(data.kpis.n_proximos)" />
+        <KpiCard :icon="PhoneCall" label="Abandonaron (recuperar)" :value="store.fmtN(data.kpis.n_recuperar)" />
         <KpiCard :icon="Calendar" label="Fecha de corte" :value="data.kpis.fecha_corte" />
       </div>
 
       <div class="tabs" style="margin-bottom:12px;">
-        <button :class="{ active: tab === 'recuperar' }" @click="tab = 'recuperar'">
-          📞 Recuperar ({{ data.recuperar.length }})
-        </button>
         <button :class="{ active: tab === 'proximos' }" @click="tab = 'proximos'">
-          ⏰ Llamar antes ({{ data.proximos.length }})
+          ⏰ Recurrentes por agotarse ({{ data.proximos.length }})
+        </button>
+        <button :class="{ active: tab === 'recuperar' }" @click="tab = 'recuperar'">
+          📞 Abandonaron — recuperar ({{ data.recuperar.length }})
         </button>
       </div>
 
       <div class="card">
         <div class="section-header-row">
           <SectionTitle :icon="tab === 'recuperar' ? PhoneCall : CalendarClock"
-                        :title="tab === 'recuperar' ? 'Clientes que no volvieron por su medicamento' : 'Clientes por quedarse sin medicamento'" />
+                        :title="tab === 'recuperar' ? 'Recurrentes que abandonaron (no volvieron por su medicamento)' : 'Recurrentes activos por quedarse sin medicamento'" />
           <button class="export-btn" @click="exportLista"><Download size="16" /> Exportar lista de llamadas</button>
         </div>
         <input v-model="buscar" placeholder="🔍 Buscar por nombre o medicamento..." style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:12px;" />
@@ -99,7 +99,7 @@ import { PhoneCall, CalendarClock, Users, Calendar, Download } from 'lucide-vue-
 const store = useDashboardStore()
 const data = computed(() => store.data.cronicos)
 const loading = computed(() => store.loading.cronicos)
-const tab = ref('recuperar')
+const tab = ref('proximos')
 const buscar = ref('')
 const page = ref(1)
 

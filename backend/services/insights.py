@@ -184,7 +184,7 @@ def analisis_descuentos(df: pd.DataFrame) -> dict[str, Any]:
 
 def analisis_cronicos(ventas: pd.DataFrame, clientes: pd.DataFrame,
                       min_compras: int = 3, intervalo_min: int = 15, intervalo_max: int = 75,
-                      vencidos_max: int = 90, proximos_dias: int = 7) -> dict[str, Any]:
+                      vencidos_max: int = 180, proximos_dias: int = 7) -> dict[str, Any]:
     if ventas is None or ventas.empty:
         return {"kpis": {}, "recuperar": [], "proximos": []}
 
@@ -243,12 +243,16 @@ def analisis_cronicos(ventas: pd.DataFrame, clientes: pd.DataFrame,
 
     out_cols = ["Nombre", "telefono", "medicamento", "intervalo", "ultima", "fecha_esperada", "dias_vs_esperada", "compras", "ID_Cliente"]
 
-    # Lista A: recuperar (vencidos entre 7 y vencidos_max días)
-    recuperar = cron[(cron["dias_vs_esperada"] >= 7) & (cron["dias_vs_esperada"] <= vencidos_max)].copy()
+    # Corte claro en 0 (su fecha esperada de recompra):
+    #  - dias_vs_esperada < 0  -> AÚN tiene medicamento, se le acaba pronto -> PROACTIVO.
+    #  - dias_vs_esperada > 0   -> YA pasó su fecha y no volvió -> ABANDONÓ (recuperar).
+
+    # Lista A: ABANDONARON (vencidos entre 1 y vencidos_max días = abandono reciente del año)
+    recuperar = cron[(cron["dias_vs_esperada"] >= 1) & (cron["dias_vs_esperada"] <= vencidos_max)].copy()
     recuperar = recuperar.sort_values("dias_vs_esperada")[out_cols]
 
-    # Lista B: proactivo (se les acaba en los próximos N días o ya justo)
-    proximos = cron[(cron["dias_vs_esperada"] >= -proximos_dias) & (cron["dias_vs_esperada"] < 7)].copy()
+    # Lista B: RECURRENTES ACTIVOS por agotarse (se les acaba en los próximos N días)
+    proximos = cron[(cron["dias_vs_esperada"] >= -proximos_dias) & (cron["dias_vs_esperada"] <= 0)].copy()
     proximos["dias_para_acabar"] = (-proximos["dias_vs_esperada"]).clip(lower=0)
     proximos = proximos.sort_values("dias_vs_esperada", ascending=False)[out_cols + ["dias_para_acabar"]]
 
@@ -259,6 +263,6 @@ def analisis_cronicos(ventas: pd.DataFrame, clientes: pd.DataFrame,
             "n_proximos": int(proximos["ID_Cliente"].nunique()),
             "fecha_corte": hoy.strftime("%Y-%m-%d"),
         },
-        "recuperar": _records(recuperar, 1000),
-        "proximos": _records(proximos, 1000),
+        "recuperar": _records(recuperar, 8000),
+        "proximos": _records(proximos, 8000),
     }
