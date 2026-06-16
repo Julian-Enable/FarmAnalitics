@@ -46,11 +46,15 @@
 
     <template v-else-if="data">
       <div class="kpi-grid kpi-grid-4" style="margin-bottom:16px;">
-        <KpiCard :icon="DollarSign" label="Valor Comisionable" :value="store.fmt(data.kpis.valor_total)" />
-        <KpiCard :icon="Package" label="Unidades Comisionables" :value="store.fmtN(data.kpis.unidades_total)" />
-        <KpiCard :icon="Users" label="Vendedores" :value="store.fmtN(data.kpis.n_vendedores)" />
-        <KpiCard :icon="BadgePercent" label="Productos Comisionables" :value="store.fmtN(data.kpis.n_productos)" />
+        <KpiCard :icon="BadgePercent" label="Productos en comisión HOY" :value="store.fmtN(data.kpis.productos_comision_hoy)" />
+        <KpiCard :icon="DollarSign" label="Valor Comisionable (periodo)" :value="store.fmt(data.kpis.valor_total)" />
+        <KpiCard :icon="Package" label="Unidades Comisionables (periodo)" :value="store.fmtN(data.kpis.unidades_total)" />
+        <KpiCard :icon="Users" label="Vendedores (periodo)" :value="store.fmtN(data.kpis.n_vendedores)" />
       </div>
+      <p style="margin:-8px 0 16px;color:var(--fg-muted);font-size:12px;">
+        <strong>Productos en comisión HOY</strong> es la foto actual (no cambia con el filtro de fechas; la comisión varía a diario).
+        El resto corresponde a lo vendido <strong>con comisión</strong> en el periodo seleccionado.
+      </p>
 
       <div class="grid-2">
         <!-- Tendencia mensual (ultimos 12 meses) -->

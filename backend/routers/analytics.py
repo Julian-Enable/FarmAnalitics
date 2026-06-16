@@ -1990,6 +1990,27 @@ def comisiones(
     df["Ingreso"] = pd.to_numeric(df.get("Ingreso", 0), errors="coerce").fillna(0)
     df["Vendedor"] = df.get("Vendedor", "").astype(str).str.strip().replace({"": "Sin vendedor", "nan": "Sin vendedor"})
 
+    # Canonicalizar nombres de vendedor: mismo nombre escrito en distinto orden
+    # (ej. "NADIN RICARDO BEYEH QUINTANA" vs "BEYEH QUINTANA NADIN RICARDO") se
+    # unifica en una sola persona, mostrando la variante más frecuente.
+    import re as _re
+    def _canon_vend(n):
+        toks = _re.findall(r"[A-Za-zÁÉÍÓÚÑáéíóúñ]+", str(n).upper())
+        return " ".join(sorted(toks))
+    df["_vk"] = df["Vendedor"].map(_canon_vend)
+    rep = df.groupby("_vk")["Vendedor"].agg(lambda s: s.value_counts().idxmax())
+    df["Vendedor"] = df["_vk"].map(rep)
+    df = df.drop(columns=["_vk"])
+
+    # Productos en comisión HOY (foto actual del inventario, NO depende del filtro de fechas)
+    productos_comision_hoy = 0
+    try:
+        inv = get_historical_store().get_inventario()
+        if inv is not None and not inv.empty and "Comision" in inv.columns:
+            productos_comision_hoy = int((pd.to_numeric(inv["Comision"], errors="coerce").fillna(0) > 0).sum())
+    except Exception:
+        productos_comision_hoy = 0
+
     dias_periodo = 1
     if "Fecha" in df.columns and df["Fecha"].notna().any():
         dias_periodo = _inclusive_days(df["Fecha"].min(), df["Fecha"].max())
@@ -2033,6 +2054,7 @@ def comisiones(
             "unidades_total": int(df["Cant"].sum()),
             "n_vendedores": int(df["Vendedor"].nunique()),
             "n_productos": int(df["Referencia"].nunique()),
+            "productos_comision_hoy": productos_comision_hoy,
             "dias_periodo": int(dias_periodo),
         },
         "por_vendedor": por_vendedor,
