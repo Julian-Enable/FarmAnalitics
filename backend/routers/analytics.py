@@ -2014,6 +2014,19 @@ def comisiones(
            .sort_values(["Vendedor", "valor"], ascending=[True, False]))
     detalle = _df_to_records(det, max_rows=1000)
 
+    # Tendencia mensual (valor y cantidad de productos comisionables por mes)
+    tendencia = []
+    if "Fecha" in df.columns and df["Fecha"].notna().any():
+        s = df.copy()
+        s["Fecha"] = pd.to_datetime(s["Fecha"], errors="coerce")
+        s = (s.dropna(subset=["Fecha"]).set_index("Fecha")
+             .resample("ME").agg(valor=("Ingreso", "sum"), cantidad=("Cant", "sum")).reset_index())
+        tendencia = [{"mes": r["Fecha"].strftime("%Y-%m"),
+                      "mes_label": r["Fecha"].strftime("%b %Y"),
+                      "valor": round(float(r["valor"]), 0),
+                      "cantidad": int(r["cantidad"])}
+                     for _, r in s.iterrows()]
+
     return {
         "kpis": {
             "valor_total": round(float(df["Ingreso"].sum()), 0),
@@ -2024,6 +2037,7 @@ def comisiones(
         },
         "por_vendedor": por_vendedor,
         "por_producto": por_producto,
+        "tendencia": tendencia,
         "detalle": detalle,
         "lista_sedes": lista_sedes,
     }

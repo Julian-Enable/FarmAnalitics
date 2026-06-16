@@ -53,6 +53,19 @@
       </div>
 
       <div class="grid-2">
+        <!-- Tendencia mensual (ultimos 12 meses) -->
+        <div class="card" style="grid-column: span 2;" v-if="tendCat.length">
+          <div class="section-header-row">
+            <SectionTitle :icon="TrendingUp" title="Histórico de comisionable por mes (últimos 12 meses)" />
+            <div class="metric-toggle">
+              <button :class="{ active: metric === 'valor' }" @click="metric = 'valor'">Valor</button>
+              <button :class="{ active: metric === 'cantidad' }" @click="metric = 'cantidad'">Cantidad</button>
+            </div>
+          </div>
+          <BarChart :categories="tendCat" :formatTooltip="metric === 'valor' ? 'currency' : ''"
+                    :series="[{ name: metric === 'valor' ? 'Valor' : 'Cantidad', data: tendData }]" />
+        </div>
+
         <!-- Por vendedor (grafico) -->
         <div class="card" style="grid-column: span 2;">
           <div class="section-header-row">
@@ -133,7 +146,7 @@ import SectionTitle from '../components/ui/SectionTitle.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
 import BarChart from '../components/charts/BarChart.vue'
 import { exportToCSV } from '../utils/export'
-import { BadgePercent, DollarSign, Package, Users, ClipboardList, Download } from 'lucide-vue-next'
+import { BadgePercent, DollarSign, Package, Users, ClipboardList, Download, TrendingUp } from 'lucide-vue-next'
 
 const store = useDashboardStore()
 const data = computed(() => store.data.comisiones)
@@ -152,6 +165,11 @@ function applyFilters() {
 
 const vendCat = computed(() => (data.value?.por_vendedor || []).slice(0, 15).map(v => v.Vendedor))
 const vendData = computed(() => (data.value?.por_vendedor || []).slice(0, 15).map(v => metric.value === 'valor' ? Math.round(v.valor) : v.cantidad))
+
+// Tendencia: últimos 12 meses
+const tend12 = computed(() => (data.value?.tendencia || []).slice(-12))
+const tendCat = computed(() => tend12.value.map(t => t.mes_label))
+const tendData = computed(() => tend12.value.map(t => metric.value === 'valor' ? Math.round(t.valor) : t.cantidad))
 
 onMounted(() => {
   if (store.status.comisiones && !data.value) applyFilters()
