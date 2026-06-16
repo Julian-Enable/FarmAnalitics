@@ -34,6 +34,11 @@ class HistoricalStore:
             return parquet_path
         return self.data_dir / f"{name}.csv"
 
+    # Datasets grandes que NO se mantienen en memoria de forma permanente: se leen
+    # bajo demanda y se liberan, para no inflar la RAM del servicio 24/7. (DESCUENTOS
+    # son ~1.5M filas / ~440 MB y se usa de forma ocasional.)
+    _NO_CACHE = {"HISTORICO_DESCUENTOS"}
+
     def _read(self, name: str) -> pd.DataFrame:
         if name in self._cache:
             return self._cache[name].copy()
@@ -50,6 +55,9 @@ class HistoricalStore:
                 df = pd.read_csv(f)
 
         df = self._normalize(name, df)
+        if name in self._NO_CACHE:
+            # No se cachea: se devuelve directamente (se libera al terminar el request).
+            return df
         self._cache[name] = df
         return df.copy()
 
