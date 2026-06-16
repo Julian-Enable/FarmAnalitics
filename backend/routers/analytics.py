@@ -2002,14 +2002,29 @@ def comisiones(
     df["Vendedor"] = df["_vk"].map(rep)
     df = df.drop(columns=["_vk"])
 
-    # Productos en comisión HOY (foto actual del inventario, NO depende del filtro de fechas)
+    # Catálogo de productos en comisión HOY + stock actual (foto del inventario,
+    # NO depende del filtro de fechas).
     productos_comision_hoy = 0
+    catalogo = []
+    sedes_catalogo = []
     try:
         inv = get_historical_store().get_inventario()
         if inv is not None and not inv.empty and "Comision" in inv.columns:
-            productos_comision_hoy = int((pd.to_numeric(inv["Comision"], errors="coerce").fillna(0) > 0).sum())
+            cat = inv[pd.to_numeric(inv["Comision"], errors="coerce").fillna(0) > 0].copy()
+            productos_comision_hoy = int(len(cat))
+            cat["comision"] = pd.to_numeric(cat["Comision"], errors="coerce").fillna(0)
+            cat["stock_total"] = pd.to_numeric(cat.get("Total", 0), errors="coerce").fillna(0)
+            cat["precio_venta"] = pd.to_numeric(cat.get("Precio Venta", 0), errors="coerce").fillna(0)
+            if "Laboratorio" not in cat.columns:
+                cat["Laboratorio"] = ""
+            sedes_catalogo = [s for s in SEDES if s in cat.columns]
+            for s in sedes_catalogo:
+                cat[s] = pd.to_numeric(cat[s], errors="coerce").fillna(0).astype(int)
+            base_cols = ["Referencia", "Descripcion", "Laboratorio", "comision", "precio_venta", "stock_total"]
+            cat = cat[[c for c in base_cols if c in cat.columns] + sedes_catalogo].sort_values("stock_total", ascending=False)
+            catalogo = json.loads(cat.to_json(orient="records"))
     except Exception:
-        productos_comision_hoy = 0
+        productos_comision_hoy = productos_comision_hoy or 0
 
     dias_periodo = 1
     if "Fecha" in df.columns and df["Fecha"].notna().any():
@@ -2061,6 +2076,8 @@ def comisiones(
         "por_producto": por_producto,
         "tendencia": tendencia,
         "detalle": detalle,
+        "catalogo": catalogo,
+        "sedes_catalogo": sedes_catalogo,
         "lista_sedes": lista_sedes,
     }
 

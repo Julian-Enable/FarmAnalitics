@@ -106,6 +106,39 @@
           </div>
         </div>
 
+        <!-- Catalogo de productos en comision HOY + stock actual -->
+        <div class="card" style="grid-column: span 2;" v-if="data.catalogo?.length">
+          <div class="section-header-row">
+            <SectionTitle :icon="BadgePercent" :title="'Catálogo de productos en comisión HOY (' + store.fmtN(data.catalogo.length) + ') — stock actual'" />
+            <button class="export-btn" @click="exportCatalogo"><Download size="16" /> Exportar catálogo</button>
+          </div>
+          <input v-model="buscarCat" placeholder="🔍 Buscar por producto, referencia o laboratorio..." style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:12px;" />
+          <p style="margin:0 0 10px;color:var(--fg-muted);font-size:12px;">Foto de hoy: lo que está en comisión y cuántas unidades hay para vender. No cambia con el filtro de fechas.</p>
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Referencia</th><th>Producto</th><th>Laboratorio</th>
+                  <th>Comisión</th><th>Precio Venta</th><th>Stock Total</th>
+                  <th v-for="s in data.sedes_catalogo" :key="s">{{ s }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="p in catalogoPag" :key="p.Referencia">
+                  <td style="font-size:11px;font-variant-numeric:tabular-nums;">{{ p.Referencia }}</td>
+                  <td :title="p.Descripcion">{{ (p.Descripcion || '').substring(0, 38) }}</td>
+                  <td style="font-size:11px;">{{ (p.Laboratorio || '').substring(0, 18) }}</td>
+                  <td style="font-weight:600;color:var(--accent);">{{ store.fmt(p.comision) }}</td>
+                  <td>{{ store.fmt(p.precio_venta) }}</td>
+                  <td style="font-weight:700;" :style="{ color: p.stock_total > 0 ? 'var(--green)' : 'var(--red)' }">{{ store.fmtN(p.stock_total) }}</td>
+                  <td v-for="s in data.sedes_catalogo" :key="s">{{ store.fmtN(p[s] || 0) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <Paginator v-model="pageCat" :totalItems="catalogoFiltrado.length" :itemsPerPage="20" />
+        </div>
+
         <!-- Top productos comisionables -->
         <div class="card" style="grid-column: span 2;">
           <div class="section-header-row">
@@ -143,12 +176,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
 import KpiCard from '../components/ui/KpiCard.vue'
 import SectionTitle from '../components/ui/SectionTitle.vue'
 import ModuleInfo from '../components/ui/ModuleInfo.vue'
 import BarChart from '../components/charts/BarChart.vue'
+import Paginator from '../components/ui/Paginator.vue'
 import { exportToCSV } from '../utils/export'
 import { BadgePercent, DollarSign, Package, Users, ClipboardList, Download, TrendingUp } from 'lucide-vue-next'
 
@@ -158,6 +192,33 @@ const loading = computed(() => store.loading.comisiones)
 const filters = ref({ fecha_ini: '', fecha_fin: '', sede: 'Todas' })
 const metric = ref('valor')
 const paginaProductos = ref(1)
+const buscarCat = ref('')
+const pageCat = ref(1)
+
+const catalogoFiltrado = computed(() => {
+  const q = buscarCat.value.trim().toLowerCase()
+  const list = data.value?.catalogo || []
+  if (!q) return list
+  return list.filter(p =>
+    (p.Descripcion || '').toLowerCase().includes(q) ||
+    String(p.Referencia || '').toLowerCase().includes(q) ||
+    (p.Laboratorio || '').toLowerCase().includes(q))
+})
+const catalogoPag = computed(() => catalogoFiltrado.value.slice((pageCat.value - 1) * 20, pageCat.value * 20))
+watch(buscarCat, () => { pageCat.value = 1 })
+
+function exportCatalogo() {
+  const base = [
+    { key: 'Referencia', label: 'Referencia' },
+    { key: 'Descripcion', label: 'Producto' },
+    { key: 'Laboratorio', label: 'Laboratorio' },
+    { key: 'comision', label: 'Comision' },
+    { key: 'precio_venta', label: 'Precio Venta' },
+    { key: 'stock_total', label: 'Stock Total' },
+  ]
+  const sedes = (data.value?.sedes_catalogo || []).map(s => ({ key: s, label: s }))
+  exportToCSV(catalogoFiltrado.value, [...base, ...sedes], 'Catalogo_Productos_Comision')
+}
 
 function applyFilters() {
   const params = {}
