@@ -20,11 +20,11 @@
     <div class="filters-bar" style="margin-bottom:16px;">
       <div class="filter-group">
         <label>Ventas desde</label>
-        <input type="date" v-model="filters.fecha_ini" @change="applyFilters" />
+        <input type="date" v-model="filters.fecha_ini" min="2024-01-01" :max="todayIso" @change="applyFilters" />
       </div>
       <div class="filter-group">
         <label>Corte (hasta)</label>
-        <input type="date" v-model="filters.fecha_fin" @change="applyFilters" />
+        <input type="date" v-model="filters.fecha_fin" min="2024-01-01" :max="todayIso" @change="applyFilters" />
       </div>
       <div class="filter-group" style="justify-content:flex-end;">
         <button class="btn-secondary" style="margin-top:18px;" @click="clearDates">Todo el historial</button>
@@ -117,11 +117,20 @@ const tab = ref('proximos')
 const buscar = ref('')
 const page = ref(1)
 const filters = ref({ fecha_ini: '', fecha_fin: '' })
+const todayIso = new Date().toISOString().slice(0, 10)
+
+function isValidDateFilter(value) {
+  if (!value) return true
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  return value >= '2024-01-01' && value <= todayIso
+}
 
 function applyFilters() {
+  if (!isValidDateFilter(filters.value.fecha_ini) || !isValidDateFilter(filters.value.fecha_fin)) return
   const p = {}
   if (filters.value.fecha_ini) p.fecha_ini = filters.value.fecha_ini
   if (filters.value.fecha_fin) p.fecha_fin = filters.value.fecha_fin
+  if (p.fecha_ini && p.fecha_fin && p.fecha_ini > p.fecha_fin) return
   store.fetchCronicos(p)
 }
 function clearDates() {
