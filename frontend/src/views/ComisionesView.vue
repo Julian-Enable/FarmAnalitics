@@ -119,7 +119,7 @@
               <thead>
                 <tr>
                   <th>Referencia</th><th>Producto</th><th>Laboratorio</th>
-                  <th>Comisión</th><th>Precio Venta</th><th>Stock Total</th>
+                  <th>Precio Venta</th><th>Stock Total</th>
                   <th v-for="s in data.sedes_catalogo" :key="s">{{ s }}</th>
                 </tr>
               </thead>
@@ -128,7 +128,6 @@
                   <td style="font-size:11px;font-variant-numeric:tabular-nums;">{{ p.Referencia }}</td>
                   <td :title="p.Descripcion">{{ (p.Descripcion || '').substring(0, 38) }}</td>
                   <td style="font-size:11px;">{{ (p.Laboratorio || '').substring(0, 18) }}</td>
-                  <td style="font-weight:600;color:var(--accent);">{{ store.fmt(p.comision) }}</td>
                   <td>{{ store.fmt(p.precio_venta) }}</td>
                   <td style="font-weight:700;" :style="{ color: p.stock_total > 0 ? 'var(--green)' : 'var(--red)' }">{{ store.fmtN(p.stock_total) }}</td>
                   <td v-for="s in data.sedes_catalogo" :key="s">{{ store.fmtN(p[s] || 0) }}</td>
@@ -212,7 +211,6 @@ function exportCatalogo() {
     { key: 'Referencia', label: 'Referencia' },
     { key: 'Descripcion', label: 'Producto' },
     { key: 'Laboratorio', label: 'Laboratorio' },
-    { key: 'comision', label: 'Comision' },
     { key: 'precio_venta', label: 'Precio Venta' },
     { key: 'stock_total', label: 'Stock Total' },
   ]
