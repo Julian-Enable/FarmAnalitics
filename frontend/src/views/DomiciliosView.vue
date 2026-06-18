@@ -35,6 +35,13 @@
           <option v-for="s in data?.lista_sedes || []" :key="s" :value="s">{{ s }}</option>
         </select>
       </div>
+      <div class="filter-group">
+        <label>Visualizar venta</label>
+        <div class="metric-toggle">
+          <button :class="{ active: ivaMode === 'con_iva' }" @click="ivaMode = 'con_iva'">Con IVA</button>
+          <button :class="{ active: ivaMode === 'sin_iva' }" @click="ivaMode = 'sin_iva'">Sin IVA</button>
+        </div>
+      </div>
     </div>
 
     <div v-if="store.errors.domicilios" class="card" style="border-color:#fecdd3;color:#be123c;margin-bottom:16px;background:#fff1f2;">
@@ -49,10 +56,10 @@
       <div class="kpi-grid kpi-grid-4" style="margin-bottom:16px;">
         <KpiCard :icon="Bike" label="Domicilios" :value="store.fmtN(data.kpis.total_domicilios)" />
         <KpiCard :icon="CheckCircle2" label="% Entregados" :value="data.kpis.pct_entregado + '%'" />
-        <KpiCard :icon="DollarSign" label="Valor Movido" :value="store.fmt(data.kpis.valor_movido)" />
-        <KpiCard :icon="Receipt" label="Tarifa Servicio" :value="store.fmt(data.kpis.tarifa_servicio)" />
+        <KpiCard :icon="DollarSign" :label="'Valor Movido ' + ivaLabel" :value="store.fmt(valorMovido)" />
+        <KpiCard :icon="Receipt" :label="'Tarifa Servicio ' + ivaLabel" :value="store.fmt(tarifaServicio)" />
         <KpiCard :icon="Users" label="Mensajeros" :value="store.fmtN(data.kpis.n_mensajeros)" />
-        <KpiCard :icon="Wallet" label="Ticket Promedio" :value="store.fmt(data.kpis.ticket_promedio)" />
+        <KpiCard :icon="Wallet" :label="'Ticket Promedio ' + ivaLabel" :value="store.fmt(ticketPromedio)" />
         <KpiCard :icon="Package" label="Servicios Domicilio" :value="store.fmtN(data.kpis.n_servicios_domicilio)" />
         <KpiCard :icon="MapPin" label="Ubicados en Mapa" :value="data.kpis.pct_ubicado + '%'" />
       </div>
@@ -117,7 +124,7 @@
           <div style="overflow-x:auto;">
             <table class="data-table">
               <thead>
-                <tr><th>Domiciliario</th><th>Domicilios</th><th>Entregados</th><th>% Entregado</th><th>Valor</th></tr>
+                <tr><th>Domiciliario</th><th>Domicilios</th><th>Entregados</th><th>% Entregado</th><th>Valor {{ ivaLabel }}</th></tr>
               </thead>
               <tbody>
                 <tr v-for="m in data.por_mensajero" :key="m.Mensajero">
@@ -127,7 +134,7 @@
                   <td>
                     <span class="badge" :class="m.pct_entregado >= 95 ? 'badge-green' : (m.pct_entregado >= 85 ? 'badge-amber' : 'badge-red')">{{ m.pct_entregado }}%</span>
                   </td>
-                  <td style="font-weight:600;color:var(--green);">{{ store.fmt(m.valor) }}</td>
+                  <td style="font-weight:600;color:var(--green);">{{ store.fmt(valorDomicilio(m)) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -168,6 +175,8 @@ const data = computed(() => store.data.domicilios)
 const loading = computed(() => store.loading.domicilios)
 const filters = ref({ fecha_ini: '', fecha_fin: '', sede: 'Todas' })
 const mMetric = ref('domicilios')
+const ivaMode = ref('con_iva')
+const ivaLabel = computed(() => ivaMode.value === 'con_iva' ? 'con IVA' : 'sin IVA')
 
 const mapEl = ref(null)
 const mapMode = ref('burbujas')
@@ -176,6 +185,10 @@ let heatLayer = null
 let markersLayer = null
 let tileLayer = null
 const isDark = computed(() => store.theme === 'dark')
+const valorDomicilio = (item) => ivaMode.value === 'con_iva' ? (item.valor_con_iva ?? item.valor) : (item.valor_sin_iva ?? item.valor)
+const valorMovido = computed(() => ivaMode.value === 'con_iva' ? (data.value?.kpis?.valor_movido_con_iva ?? data.value?.kpis?.valor_movido ?? 0) : (data.value?.kpis?.valor_movido_sin_iva ?? data.value?.kpis?.valor_movido ?? 0))
+const tarifaServicio = computed(() => ivaMode.value === 'con_iva' ? (data.value?.kpis?.tarifa_servicio_con_iva ?? data.value?.kpis?.tarifa_servicio ?? 0) : (data.value?.kpis?.tarifa_servicio_sin_iva ?? data.value?.kpis?.tarifa_servicio ?? 0))
+const ticketPromedio = computed(() => ivaMode.value === 'con_iva' ? (data.value?.kpis?.ticket_promedio_con_iva ?? data.value?.kpis?.ticket_promedio ?? 0) : (data.value?.kpis?.ticket_promedio_sin_iva ?? data.value?.kpis?.ticket_promedio ?? 0))
 
 // Se usan siempre las tiles claras (legibles, con calles y nombres) y en tema
 // oscuro se les aplica un filtro CSS para dejarlas azul oscuro sin afectar las
@@ -269,7 +282,7 @@ function updateHeat() {
       })
       m.bindPopup(
         `<div style="font-size:13px;"><b>${p.domicilios.toLocaleString('es-CO')} domicilios</b><br>` +
-        `$${Math.round(p.valor).toLocaleString('es-CO')}</div>`
+        `$${Math.round(valorDomicilio(p)).toLocaleString('es-CO')} ${ivaLabel.value}</div>`
       )
       if (topSet.has(`${p.lat},${p.lon}`)) {
         m.bindTooltip(p.domicilios.toLocaleString('es-CO'), { permanent: true, direction: 'center', className: 'zone-label' })
@@ -290,7 +303,7 @@ function setMapMode(mode) {
 }
 
 const mensCat = computed(() => (data.value?.por_mensajero || []).slice(0, 12).map(m => m.Mensajero))
-const mensData = computed(() => (data.value?.por_mensajero || []).slice(0, 12).map(m => mMetric.value === 'valor' ? Math.round(m.valor) : m.domicilios))
+const mensData = computed(() => (data.value?.por_mensajero || []).slice(0, 12).map(m => mMetric.value === 'valor' ? Math.round(valorDomicilio(m)) : m.domicilios))
 const estadoCat = computed(() => (data.value?.por_estado || []).map(e => e.estado || e.Estado))
 const estadoData = computed(() => (data.value?.por_estado || []).map(e => e.domicilios))
 const tendCat = computed(() => (data.value?.tendencia || []).map(t => t.fecha))
@@ -305,6 +318,7 @@ async function renderMap() {
 }
 
 watch(() => data.value?.mapa, () => { renderMap() }, { flush: 'post' })
+watch(ivaMode, () => { updateHeat() })
 
 onMounted(async () => {
   if (store.status.domicilios && !data.value) applyFilters()
@@ -319,7 +333,8 @@ function exportMensajeros() {
     { key: 'domicilios', label: 'Domicilios' },
     { key: 'entregados', label: 'Entregados' },
     { key: 'pct_entregado', label: '% Entregado' },
-    { key: 'valor', label: 'Valor' },
+    { key: 'valor_sin_iva', label: 'Valor Sin IVA' },
+    { key: 'valor_con_iva', label: 'Valor Con IVA' },
   ]
   exportToCSV(data.value?.por_mensajero || [], cols, 'Domicilios_por_Mensajero')
 }

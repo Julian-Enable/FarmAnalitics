@@ -50,6 +50,13 @@
         <label>Fecha Fin</label>
         <input type="date" v-model="filters.fecha_fin" @change="applyFilters" />
       </div>
+      <div class="filter-group">
+        <label>Visualizar venta</label>
+        <div class="metric-toggle">
+          <button :class="{ active: ivaMode === 'con_iva' }" @click="ivaMode = 'con_iva'">Con IVA</button>
+          <button :class="{ active: ivaMode === 'sin_iva' }" @click="ivaMode = 'sin_iva'">Sin IVA</button>
+        </div>
+      </div>
     </div>
 
     <div v-if="loading" class="kpi-grid kpi-grid-4">
@@ -57,8 +64,8 @@
     </div>
     <div v-else-if="data" class="kpi-grid kpi-grid-4">
       <KpiCard :icon="FileText" label="Registros Filtrados" :value="store.fmtN(data.registros)" />
-      <KpiCard :icon="DollarSign" label="Ingreso Total" :value="store.fmt(data.ingreso_total)" />
-      <KpiCard :icon="BarChart2" label="Promedio Diario" :value="store.fmt(data.promedio_diario)" />
+      <KpiCard :icon="DollarSign" :label="'Ingreso Total ' + ivaLabel" :value="store.fmt(totalIngreso)" />
+      <KpiCard :icon="BarChart2" :label="'Promedio Diario ' + ivaLabel" :value="store.fmt(promedioDiario)" />
       <KpiCard :icon="Calendar" label="Días del Periodo" :value="data.dias_periodo + ' días'" />
     </div>
     <div v-else class="empty-state">
@@ -73,15 +80,15 @@
         <BarChart v-if="topProdCat.length" :horizontal="true" :categories="topProdCat" :series="[{name: 'Unidades', data: topProdData}]" />
       </div>
       <div class="card">
-        <SectionTitle :icon="Building2" title="Top 10 Laboratorios (Ingresos)" />
+        <SectionTitle :icon="Building2" :title="'Top 10 Laboratorios (Ingresos ' + ivaLabel + ')'" />
         <BarChart v-if="topLabCat.length" :horizontal="true" formatTooltip="currency" :categories="topLabCat" :series="[{name: 'Ingresos', data: topLabData}]" />
       </div>
     </div>
 
     <!-- Tendencia Mensual -->
     <div v-if="data && data.tendencia_mensual?.length" class="card" style="margin-top: 16px;">
-      <SectionTitle :icon="LineChartIcon" title="Tendencia Mensual de Ingresos" />
-      <LineChart :categories="tendMesCat" :series="[{name: 'Ingresos', data: tendMesData}]" />
+      <SectionTitle :icon="LineChartIcon" :title="'Tendencia Mensual de Ingresos ' + ivaLabel" />
+      <LineChart :categories="tendMesCat" :series="[{name: 'Ingresos ' + ivaLabel, data: tendMesData}]" />
     </div>
 
     <!-- Vendedores -->
@@ -114,7 +121,7 @@
             <tr v-for="v in paginatedVendedores" :key="v.vendedor">
               <td style="font-weight: 600;">{{ v.vendedor }}</td>
               <td>{{ store.fmtN(v.unidades) }}</td>
-              <td>{{ store.fmt(v.ingresos) }}</td>
+              <td>{{ store.fmt(vendedorIngreso(v)) }}</td>
               <td>{{ store.fmtN(v.facturas) }}</td>
             </tr>
           </tbody>
@@ -172,7 +179,7 @@
               <td>{{ row.Descripcion?.substring(0, 35) }}</td>
               <td>{{ row.Laboratorio?.substring(0, 25) }}</td>
               <td>{{ store.fmtN(row.unidades) }}</td>
-              <td>{{ store.fmt(row.ingreso) }}</td>
+              <td>{{ store.fmt(detalleIngreso(row)) }}</td>
             </tr>
           </tbody>
         </table>
@@ -203,6 +210,8 @@ const store = useDashboardStore()
 const data = computed(() => store.data.ventas)
 const loading = computed(() => store.loading.ventas)
 const searchDetalle = ref('')
+const ivaMode = ref('con_iva')
+const ivaLabel = computed(() => ivaMode.value === 'con_iva' ? 'con IVA' : 'sin IVA')
 
 const filters = ref({
   sede: 'Todas',
@@ -226,11 +235,15 @@ onMounted(() => {
 const topProdCat = computed(() => data.value?.top_productos?.map(d => d.nombre) || [])
 const topProdData = computed(() => data.value?.top_productos?.map(d => d.Cant) || [])
 const topLabCat = computed(() => data.value?.top_labs?.map(d => d.lab) || [])
-const topLabData = computed(() => data.value?.top_labs?.map(d => d.Ingreso) || [])
+const topLabData = computed(() => data.value?.top_labs?.map(d => ivaMode.value === 'con_iva' ? (d.IngresoConIva ?? d.Ingreso) : (d.IngresoSinIva ?? d.Ingreso)) || [])
 const catLabels = computed(() => data.value?.por_categoria?.map(d => d.Nivel) || [])
-const catSeries = computed(() => data.value?.por_categoria?.map(d => d.Ingreso) || [])
+const catSeries = computed(() => data.value?.por_categoria?.map(d => ivaMode.value === 'con_iva' ? (d.IngresoConIva ?? d.Ingreso) : (d.IngresoSinIva ?? d.Ingreso)) || [])
 const tendMesCat = computed(() => data.value?.tendencia_mensual?.map(d => d.mes) || [])
-const tendMesData = computed(() => data.value?.tendencia_mensual?.map(d => d.ingreso) || [])
+const tendMesData = computed(() => data.value?.tendencia_mensual?.map(d => ivaMode.value === 'con_iva' ? (d.ingreso_con_iva ?? d.ingreso) : (d.ingreso_sin_iva ?? d.ingreso)) || [])
+const totalIngreso = computed(() => ivaMode.value === 'con_iva' ? (data.value?.ingreso_total_con_iva ?? data.value?.ingreso_total ?? 0) : (data.value?.ingreso_total_sin_iva ?? data.value?.ingreso_total ?? 0))
+const promedioDiario = computed(() => ivaMode.value === 'con_iva' ? (data.value?.promedio_diario_con_iva ?? data.value?.promedio_diario ?? 0) : (data.value?.promedio_diario_sin_iva ?? data.value?.promedio_diario ?? 0))
+const vendedorIngreso = (v) => ivaMode.value === 'con_iva' ? (v.ingresos_con_iva ?? v.ingresos) : (v.ingresos_sin_iva ?? v.ingresos)
+const detalleIngreso = (r) => ivaMode.value === 'con_iva' ? (r.ingreso_con_iva ?? r.ingreso) : (r.ingreso_sin_iva ?? r.ingreso)
 
 const sortDetalleCol = ref('ingreso')
 const sortDetalleDesc = ref(true)
@@ -260,8 +273,8 @@ const filteredDetalle = computed(() => {
   
   if (sortDetalleCol.value) {
     result.sort((a, b) => {
-      let valA = a[sortDetalleCol.value]
-      let valB = b[sortDetalleCol.value]
+      let valA = sortDetalleCol.value === 'ingreso' ? detalleIngreso(a) : a[sortDetalleCol.value]
+      let valB = sortDetalleCol.value === 'ingreso' ? detalleIngreso(b) : b[sortDetalleCol.value]
       if (typeof valA === 'string') valA = valA.toLowerCase()
       if (typeof valB === 'string') valB = valB.toLowerCase()
       if (valA < valB) return sortDetalleDesc.value ? 1 : -1
@@ -276,8 +289,8 @@ const sortedVendedores = computed(() => {
   const list = data.value?.vendedores ? [...data.value.vendedores] : []
   if (sortVendCol.value) {
     list.sort((a, b) => {
-      let valA = a[sortVendCol.value]
-      let valB = b[sortVendCol.value]
+      let valA = sortVendCol.value === 'ingresos' ? vendedorIngreso(a) : a[sortVendCol.value]
+      let valB = sortVendCol.value === 'ingresos' ? vendedorIngreso(b) : b[sortVendCol.value]
       if (typeof valA === 'string') valA = valA.toLowerCase()
       if (typeof valB === 'string') valB = valB.toLowerCase()
       if (valA < valB) return sortVendDesc.value ? 1 : -1
@@ -308,7 +321,8 @@ function exportVendedores() {
   const cols = [
     { key: 'vendedor', label: 'Vendedor' },
     { key: 'unidades', label: 'Unidades Vendidas' },
-    { key: 'ingresos', label: 'Ingresos Totales' },
+    { key: 'ingresos_sin_iva', label: 'Ingresos Sin IVA' },
+    { key: 'ingresos_con_iva', label: 'Ingresos Con IVA' },
     { key: 'facturas', label: 'Transacciones' },
   ]
   exportToCSV(sortedVendedores.value, cols, 'Rendimiento_Vendedores')
@@ -320,8 +334,31 @@ function exportDetalle() {
     { key: 'Descripcion', label: 'Descripción' },
     { key: 'Laboratorio', label: 'Laboratorio' },
     { key: 'unidades', label: 'Unidades' },
-    { key: 'ingreso', label: 'Ingreso Total' },
+    { key: 'ingreso_sin_iva', label: 'Ingreso Sin IVA' },
+    { key: 'ingreso_con_iva', label: 'Ingreso Con IVA' },
   ]
   exportToCSV(filteredDetalle.value, cols, 'Detalle_Ventas')
 }
 </script>
+
+<style scoped>
+.metric-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 36px;
+}
+.metric-toggle button {
+  background: transparent;
+  border: none;
+  padding: 0 12px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--fg-muted);
+}
+.metric-toggle button.active {
+  background: var(--accent);
+  color: #fff;
+}
+</style>

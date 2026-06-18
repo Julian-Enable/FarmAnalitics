@@ -180,6 +180,49 @@ def _apply_date_filter(
     return filtered
 
 
+def _num_col(df: pd.DataFrame, col: str, default=0) -> pd.Series:
+    if df is None or col not in df.columns:
+        return pd.Series(default, index=df.index if df is not None else None, dtype="float64")
+    return pd.to_numeric(df[col], errors="coerce").fillna(default)
+
+
+def _add_iva_amounts(
+    df: pd.DataFrame,
+    net_col: str,
+    gross_col: str | None,
+    out_net: str,
+    out_gross: str,
+) -> pd.DataFrame:
+    """Agrega columnas neto/sin IVA y bruto/con IVA sin eliminar las originales."""
+    df[out_net] = _num_col(df, net_col)
+    if gross_col and gross_col in df.columns:
+        gross = _num_col(df, gross_col)
+        df[out_gross] = np.where(gross > 0, gross, df[out_net])
+    else:
+        df[out_gross] = df[out_net]
+    return df
+
+
+def _add_sales_invoice_iva_amounts(df: pd.DataFrame) -> pd.DataFrame:
+    df["IngresoSinIva"] = _num_col(df, "Ingreso")
+    if "FacturaID" not in df.columns or "Total" not in df.columns:
+        return _add_iva_amounts(df, "Ingreso", None, "IngresoSinIva", "IngresoConIva")
+
+    tmp = df.assign(_fact_key=_str_key(df["FacturaID"]))
+    inv = (tmp.groupby("_fact_key", as_index=False)
+           .agg(factura_sin_iva=("IngresoSinIva", "sum"), factura_con_iva=("Total", "max")))
+    inv["factor_iva"] = np.where(inv["factura_sin_iva"] > 0, inv["factura_con_iva"] / inv["factura_sin_iva"], 1)
+    df["_fact_key"] = tmp["_fact_key"]
+    df = df.merge(inv[["_fact_key", "factor_iva"]], on="_fact_key", how="left")
+    df["factor_iva"] = pd.to_numeric(df["factor_iva"], errors="coerce").fillna(1)
+    df["IngresoConIva"] = df["IngresoSinIva"] * df["factor_iva"]
+    return df.drop(columns=[c for c in ["_fact_key", "factor_iva"] if c in df.columns])
+
+
+def _str_key(series: pd.Series) -> pd.Series:
+    return series.astype(str).str.strip().str.replace(r"\.0$", "", regex=True)
+
+
 def _preferred_vendedor_series(df: pd.DataFrame) -> pd.Series | None:
     """Nombre comercial del vendedor; usa Creada solo como respaldo."""
     if df is None or df.empty:
@@ -1473,26 +1516,31 @@ def ventas(sede: str = "Todas", nivel: str = "Todos",
     if laboratorio != "Todos" and "Laboratorio" in df.columns:
         df = df[df["Laboratorio"] == laboratorio]
 
-    ing_total = float(df["Ingreso"].sum())
+    df = _add_sales_invoice_iva_amounts(df)
+    ing_total = float(df["IngresoSinIva"].sum())
+    ing_total_con_iva = float(df["IngresoConIva"].sum())
     dias_periodo = 1
     if df["Fecha"].notna().any():
         dias_periodo = _inclusive_days(df["Fecha"].min(), df["Fecha"].max())
     promedio_diario = round(ing_total / dias_periodo, 0)
+    promedio_diario_con_iva = round(ing_total_con_iva / dias_periodo, 0)
 
     top_prod = (df.groupby(["Referencia","Descripcion"], as_index=False)["Cant"]
                 .sum().nlargest(15,"Cant").sort_values("Cant", ascending=True)
                 .assign(nombre=lambda x: x["Descripcion"].str[:35]))
     top_prod = json.loads(top_prod.to_json(orient="records"))
 
-    top_labs = (df.groupby("Laboratorio", as_index=False)["Ingreso"]
-                .sum().nlargest(10,"Ingreso").sort_values("Ingreso", ascending=True)
+    top_labs = (df.groupby("Laboratorio", as_index=False)
+                .agg(Ingreso=("IngresoSinIva", "sum"), IngresoSinIva=("IngresoSinIva", "sum"), IngresoConIva=("IngresoConIva", "sum"))
+                .nlargest(10,"IngresoConIva").sort_values("IngresoConIva", ascending=True)
                 .assign(lab=lambda x: x["Laboratorio"].str[:28]))
     top_labs = json.loads(top_labs.to_json(orient="records"))
 
     por_cat = []
     if "Nivel" in df.columns:
-        por_cat = (df.groupby("Nivel", as_index=False)["Ingreso"]
-                   .sum().sort_values("Ingreso", ascending=True))
+        por_cat = (df.groupby("Nivel", as_index=False)
+                   .agg(Ingreso=("IngresoSinIva", "sum"), IngresoSinIva=("IngresoSinIva", "sum"), IngresoConIva=("IngresoConIva", "sum"))
+                   .sort_values("IngresoConIva", ascending=True))
         por_cat = json.loads(por_cat.to_json(orient="records"))
 
     vendedores = []
@@ -1501,26 +1549,28 @@ def ventas(sede: str = "Todas", nivel: str = "Todos",
         df["__VendedorVenta"] = vendedor_series
         agg_map = {
             "unidades": ("Cant", "sum"),
-            "ingresos": ("Ingreso", "sum"),
+            "ingresos": ("IngresoSinIva", "sum"),
+            "ingresos_sin_iva": ("IngresoSinIva", "sum"),
+            "ingresos_con_iva": ("IngresoConIva", "sum"),
         }
         agg_map["facturas"] = ("Factura", "nunique") if "Factura" in df.columns else ("Referencia", "count")
         vendedores = (df.groupby("__VendedorVenta", as_index=False)
                       .agg(**agg_map)
-                      .sort_values("ingresos", ascending=False)
+                      .sort_values("ingresos_con_iva", ascending=False)
                       .rename(columns={"__VendedorVenta":"vendedor"}))
         vendedores = json.loads(vendedores.to_json(orient="records"))
 
     # Tendencia mensual
     tend_mensual = []
     if df["Fecha"].notna().any():
-        s = df.set_index("Fecha").resample("ME")["Ingreso"].sum().reset_index()
-        tend_mensual = [{"mes": r["Fecha"].strftime("%b %Y"), "ingreso": round(r["Ingreso"], 0)}
+        s = df.set_index("Fecha").resample("ME").agg(ingreso=("IngresoSinIva", "sum"), ingreso_sin_iva=("IngresoSinIva", "sum"), ingreso_con_iva=("IngresoConIva", "sum")).reset_index()
+        tend_mensual = [{"mes": r["Fecha"].strftime("%b %Y"), "ingreso": round(r["ingreso"], 0), "ingreso_sin_iva": round(r["ingreso_sin_iva"], 0), "ingreso_con_iva": round(r["ingreso_con_iva"], 0)}
                         for _, r in s.iterrows()]
 
     # Tabla detalle de productos
     detalle = (df.groupby(["Referencia","Descripcion","Laboratorio"], as_index=False)
-               .agg(unidades=("Cant","sum"), ingreso=("Ingreso","sum"))
-               .sort_values("ingreso", ascending=False))
+               .agg(unidades=("Cant","sum"), ingreso=("IngresoSinIva","sum"), ingreso_sin_iva=("IngresoSinIva","sum"), ingreso_con_iva=("IngresoConIva","sum"))
+               .sort_values("ingreso_con_iva", ascending=False))
     detalle = json.loads(detalle.to_json(orient="records"))
 
     sedes_opts  = sorted(get_df(x_session_id, "ventas")["Punto Venta"].dropna().unique().tolist())
@@ -1530,7 +1580,11 @@ def ventas(sede: str = "Todas", nivel: str = "Todos",
     return {
         "registros": len(df),
         "ingreso_total": round(ing_total, 0),
+        "ingreso_total_sin_iva": round(ing_total, 0),
+        "ingreso_total_con_iva": round(ing_total_con_iva, 0),
         "promedio_diario": promedio_diario,
+        "promedio_diario_sin_iva": promedio_diario,
+        "promedio_diario_con_iva": promedio_diario_con_iva,
         "dias_periodo": dias_periodo,
         "top_productos": top_prod,
         "top_labs": top_labs,
@@ -1988,6 +2042,25 @@ def comisiones(
 
     df["Cant"] = pd.to_numeric(df.get("Cant", 0), errors="coerce").fillna(0)
     df["Ingreso"] = pd.to_numeric(df.get("Ingreso", 0), errors="coerce").fillna(0)
+    df["IngresoSinIva"] = df["Ingreso"]
+    df["IngresoConIva"] = df["Ingreso"]
+    try:
+        ventas_tax = get_df(x_session_id, "ventas", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
+        if ventas_tax is not None and not ventas_tax.empty and {"FacturaID", "Referencia", "Ingreso"}.issubset(ventas_tax.columns):
+            ventas_tax = _add_sales_invoice_iva_amounts(ventas_tax.copy())
+            ventas_tax["_fact_key"] = _str_key(ventas_tax["FacturaID"])
+            ventas_tax["_ref_key"] = _str_key(ventas_tax["Referencia"])
+            tax_factor = (ventas_tax.groupby(["_fact_key", "_ref_key"], as_index=False)
+                          .agg(v_sin=("IngresoSinIva", "sum"), v_con=("IngresoConIva", "sum")))
+            tax_factor["factor_iva"] = np.where(tax_factor["v_sin"] > 0, tax_factor["v_con"] / tax_factor["v_sin"], 1)
+            df["_fact_key"] = _str_key(df["FacturaID"]) if "FacturaID" in df.columns else ""
+            df["_ref_key"] = _str_key(df["Referencia"]) if "Referencia" in df.columns else ""
+            df = df.merge(tax_factor[["_fact_key", "_ref_key", "factor_iva"]], on=["_fact_key", "_ref_key"], how="left")
+            df["factor_iva"] = pd.to_numeric(df["factor_iva"], errors="coerce").fillna(1)
+            df["IngresoConIva"] = df["IngresoSinIva"] * df["factor_iva"]
+            df = df.drop(columns=[c for c in ["_fact_key", "_ref_key", "factor_iva"] if c in df.columns])
+    except Exception:
+        df["IngresoConIva"] = df["IngresoSinIva"]
     df["Vendedor"] = df.get("Vendedor", "").astype(str).str.strip().replace({"": "Sin vendedor", "nan": "Sin vendedor"})
 
     # Canonicalizar nombres de vendedor: mismo nombre escrito en distinto orden
@@ -2032,13 +2105,13 @@ def comisiones(
 
     # Por vendedor: cantidad de unidades comisionables y valor (ingreso) de esas ventas
     pv = (df.groupby("Vendedor", as_index=False)
-          .agg(cantidad=("Cant", "sum"), valor=("Ingreso", "sum"), productos=("Referencia", "nunique"))
-          .sort_values("valor", ascending=False))
+          .agg(cantidad=("Cant", "sum"), valor=("IngresoSinIva", "sum"), valor_sin_iva=("IngresoSinIva", "sum"), valor_con_iva=("IngresoConIva", "sum"), productos=("Referencia", "nunique"))
+          .sort_values("valor_con_iva", ascending=False))
     por_vendedor = json.loads(pv.to_json(orient="records"))
 
     # Por producto comisionable (apoyo): unidades y valor
     pp = (df.groupby(["Referencia", "Descripcion"], as_index=False)
-          .agg(cantidad=("Cant", "sum"), valor=("Ingreso", "sum"), vendedores=("Vendedor", "nunique"))
+          .agg(cantidad=("Cant", "sum"), valor=("IngresoSinIva", "sum"), valor_sin_iva=("IngresoSinIva", "sum"), valor_con_iva=("IngresoConIva", "sum"), vendedores=("Vendedor", "nunique"))
           .sort_values("cantidad", ascending=False)
           .head(100))
     pp["nombre"] = pp["Descripcion"].astype(str).str[:40]
@@ -2046,8 +2119,8 @@ def comisiones(
 
     # Detalle vendedor x producto (para exportar)
     det = (df.groupby(["Vendedor", "Referencia", "Descripcion"], as_index=False)
-           .agg(cantidad=("Cant", "sum"), valor=("Ingreso", "sum"))
-           .sort_values(["Vendedor", "valor"], ascending=[True, False]))
+           .agg(cantidad=("Cant", "sum"), valor=("IngresoSinIva", "sum"), valor_sin_iva=("IngresoSinIva", "sum"), valor_con_iva=("IngresoConIva", "sum"))
+           .sort_values(["Vendedor", "valor_con_iva"], ascending=[True, False]))
     detalle = _df_to_records(det, max_rows=1000)
 
     # Tendencia mensual (valor y cantidad de productos comisionables por mes)
@@ -2056,16 +2129,20 @@ def comisiones(
         s = df.copy()
         s["Fecha"] = pd.to_datetime(s["Fecha"], errors="coerce")
         s = (s.dropna(subset=["Fecha"]).set_index("Fecha")
-             .resample("ME").agg(valor=("Ingreso", "sum"), cantidad=("Cant", "sum")).reset_index())
+             .resample("ME").agg(valor=("IngresoSinIva", "sum"), valor_sin_iva=("IngresoSinIva", "sum"), valor_con_iva=("IngresoConIva", "sum"), cantidad=("Cant", "sum")).reset_index())
         tendencia = [{"mes": r["Fecha"].strftime("%Y-%m"),
                       "mes_label": r["Fecha"].strftime("%b %Y"),
                       "valor": round(float(r["valor"]), 0),
+                      "valor_sin_iva": round(float(r["valor_sin_iva"]), 0),
+                      "valor_con_iva": round(float(r["valor_con_iva"]), 0),
                       "cantidad": int(r["cantidad"])}
                      for _, r in s.iterrows()]
 
     return {
         "kpis": {
-            "valor_total": round(float(df["Ingreso"].sum()), 0),
+            "valor_total": round(float(df["IngresoSinIva"].sum()), 0),
+            "valor_total_sin_iva": round(float(df["IngresoSinIva"].sum()), 0),
+            "valor_total_con_iva": round(float(df["IngresoConIva"].sum()), 0),
             "unidades_total": int(df["Cant"].sum()),
             "n_vendedores": int(df["Vendedor"].nunique()),
             "n_productos": int(df["Referencia"].nunique()),
@@ -2106,33 +2183,53 @@ def domicilios(
         raise HTTPException(404, "No hay domicilios para los filtros seleccionados")
 
     dom["Total"] = pd.to_numeric(dom.get("Total", 0), errors="coerce").fillna(0)
+    dom["ValorConIva"] = dom["Total"]
+    dom["ValorSinIva"] = dom["Total"]
     dom["Estado"] = dom.get("Estado", "").astype(str)
     estado_norm = dom["Estado"].str.strip().str.lower()
     dom["Mensajero"] = dom.get("Mensajero", "").astype(str).str.strip().replace({"": "Sin mensajero", "nan": "Sin mensajero"})
 
-    n_dom = int(len(dom))
-    n_entregados = int((estado_norm == "entregado").sum())
-    valor_movido = float(dom["Total"].sum())
-    ticket_prom = round(valor_movido / n_dom, 0) if n_dom else 0
-
-    # Tarifa de servicio de domicilio: líneas de venta de servicio de domicilio.
     df_v = get_df(x_session_id, "ventas", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
-    tarifa_servicio = 0.0
-    n_servicios = 0
-    if df_v is not None and not df_v.empty and "Descripcion" in df_v.columns:
-        df_v = _apply_date_filter(df_v, "Fecha", fecha_ini, fecha_fin)
+    if df_v is not None and not df_v.empty:
+        df_v = _apply_date_filter(df_v.copy(), "Fecha", fecha_ini, fecha_fin)
         if sede and sede != "Todas" and "Punto Venta" in df_v.columns:
             df_v = df_v[df_v["Punto Venta"].astype(str) == sede]
+        df_v = _add_sales_invoice_iva_amounts(df_v)
+        if "ID_Factura" in dom.columns and "FacturaID" in df_v.columns:
+            inv_totals = (df_v.assign(_fact_key=_str_key(df_v["FacturaID"]))
+                          .groupby("_fact_key", as_index=False)
+                          .agg(valor_sin_iva=("IngresoSinIva", "sum"), valor_con_iva_ventas=("IngresoConIva", "sum")))
+            dom["_fact_key"] = _str_key(dom["ID_Factura"])
+            dom = dom.merge(inv_totals, on="_fact_key", how="left")
+            dom["ValorSinIva"] = pd.to_numeric(dom["valor_sin_iva"], errors="coerce").fillna(dom["ValorSinIva"])
+            dom["ValorConIva"] = pd.to_numeric(dom["valor_con_iva_ventas"], errors="coerce").fillna(dom["ValorConIva"])
+            dom = dom.drop(columns=[c for c in ["_fact_key", "valor_sin_iva", "valor_con_iva_ventas"] if c in dom.columns])
+
+    n_dom = int(len(dom))
+    n_entregados = int((estado_norm == "entregado").sum())
+    valor_movido = float(dom["ValorConIva"].sum())
+    valor_movido_sin_iva = float(dom["ValorSinIva"].sum())
+    ticket_prom = round(valor_movido / n_dom, 0) if n_dom else 0
+    ticket_prom_sin_iva = round(valor_movido_sin_iva / n_dom, 0) if n_dom else 0
+
+    # Tarifa de servicio de domicilio: líneas de venta de servicio de domicilio.
+    tarifa_servicio = 0.0
+    tarifa_servicio_sin_iva = 0.0
+    n_servicios = 0
+    if df_v is not None and not df_v.empty and "Descripcion" in df_v.columns:
         serv = df_v[df_v["Descripcion"].astype(str).str.contains("SERVICIO DOMICILIO|DOMICILIO POLIGONO|POLIGONO", case=False, na=False, regex=True)]
         if not serv.empty:
-            tarifa_servicio = float(serv["Ingreso"].sum())
+            tarifa_servicio_sin_iva = float(serv["IngresoSinIva"].sum()) if "IngresoSinIva" in serv.columns else float(serv["Ingreso"].sum())
+            tarifa_servicio = float(serv["IngresoConIva"].sum()) if "IngresoConIva" in serv.columns else tarifa_servicio_sin_iva
             n_servicios = int(serv["Cant"].sum())
 
     # Por mensajero (cantidad, valor, % entregados)
     g = dom.assign(_entregado=(estado_norm == "entregado").astype(int))
     por_mensajero_df = (g.groupby("Mensajero", as_index=False)
                         .agg(domicilios=("ID", "count") if "ID" in g.columns else ("Total", "count"),
-                             valor=("Total", "sum"),
+                             valor=("ValorConIva", "sum"),
+                             valor_sin_iva=("ValorSinIva", "sum"),
+                             valor_con_iva=("ValorConIva", "sum"),
                              entregados=("_entregado", "sum"))
                         .sort_values("domicilios", ascending=False))
     por_mensajero_df["pct_entregado"] = np.where(por_mensajero_df["domicilios"] > 0,
@@ -2143,7 +2240,7 @@ def domicilios(
     por_sede = []
     if sede_col in dom.columns:
         ps = (dom.groupby(sede_col, as_index=False)
-              .agg(domicilios=("Total", "count"), valor=("Total", "sum"))
+              .agg(domicilios=("Total", "count"), valor=("ValorConIva", "sum"), valor_sin_iva=("ValorSinIva", "sum"), valor_con_iva=("ValorConIva", "sum"))
               .sort_values("domicilios", ascending=False)
               .rename(columns={sede_col: "sede"}))
         por_sede = json.loads(ps.to_json(orient="records"))
@@ -2164,8 +2261,8 @@ def domicilios(
         d["Fecha"] = pd.to_datetime(d["Fecha"], errors="coerce")
         d = d[d["Fecha"].notna()]
         if not d.empty:
-            s = d.set_index("Fecha").resample("W").agg(domicilios=("Total", "count"), valor=("Total", "sum")).reset_index()
-            tendencia = [{"fecha": str(r["Fecha"].date()), "domicilios": int(r["domicilios"]), "valor": round(float(r["valor"]), 0)} for _, r in s.iterrows()]
+            s = d.set_index("Fecha").resample("W").agg(domicilios=("Total", "count"), valor=("ValorConIva", "sum"), valor_sin_iva=("ValorSinIva", "sum"), valor_con_iva=("ValorConIva", "sum")).reset_index()
+            tendencia = [{"fecha": str(r["Fecha"].date()), "domicilios": int(r["domicilios"]), "valor": round(float(r["valor"]), 0), "valor_sin_iva": round(float(r["valor_sin_iva"]), 0), "valor_con_iva": round(float(r["valor_con_iva"]), 0)} for _, r in s.iterrows()]
 
     # Mapa: geocodificar direcciones y agregar por coordenada (heatmap)
     mapa = []
@@ -2178,12 +2275,12 @@ def domicilios(
             geo_ok["lat_r"] = geo_ok["lat"].round(4)
             geo_ok["lon_r"] = geo_ok["lon"].round(4)
             pts = (geo_ok.groupby(["lat_r", "lon_r"], as_index=False)
-                   .agg(domicilios=("Total", "count"), valor=("Total", "sum")))
+                   .agg(domicilios=("Total", "count"), valor=("ValorConIva", "sum"), valor_sin_iva=("ValorSinIva", "sum"), valor_con_iva=("ValorConIva", "sum")))
             pts = pts.sort_values("domicilios", ascending=False).head(3000)
-            mapa = [{"lat": float(r["lat_r"]), "lon": float(r["lon_r"]), "domicilios": int(r["domicilios"]), "valor": round(float(r["valor"]), 0)} for _, r in pts.iterrows()]
+            mapa = [{"lat": float(r["lat_r"]), "lon": float(r["lon_r"]), "domicilios": int(r["domicilios"]), "valor": round(float(r["valor"]), 0), "valor_sin_iva": round(float(r["valor_sin_iva"]), 0), "valor_con_iva": round(float(r["valor_con_iva"]), 0)} for _, r in pts.iterrows()]
 
     # Tabla detalle
-    cols_tabla = [c for c in ["Fecha", "Factura", "Punto Venta", "Cliente", "Direccion", "Mensajero", "Estado", "Total"] if c in dom.columns]
+    cols_tabla = [c for c in ["Fecha", "Factura", "Punto Venta", "Cliente", "Direccion", "Mensajero", "Estado", "Total", "ValorSinIva", "ValorConIva"] if c in dom.columns]
     tabla = _df_to_records(dom[cols_tabla].sort_values("Fecha", ascending=False), max_rows=300)
 
     return {
@@ -2192,8 +2289,14 @@ def domicilios(
             "entregados": n_entregados,
             "pct_entregado": round(n_entregados / n_dom * 100, 1) if n_dom else 0,
             "valor_movido": round(valor_movido, 0),
+            "valor_movido_sin_iva": round(valor_movido_sin_iva, 0),
+            "valor_movido_con_iva": round(valor_movido, 0),
             "ticket_promedio": ticket_prom,
+            "ticket_promedio_sin_iva": ticket_prom_sin_iva,
+            "ticket_promedio_con_iva": ticket_prom,
             "tarifa_servicio": round(tarifa_servicio, 0),
+            "tarifa_servicio_sin_iva": round(tarifa_servicio_sin_iva, 0),
+            "tarifa_servicio_con_iva": round(tarifa_servicio, 0),
             "n_servicios_domicilio": n_servicios,
             "n_mensajeros": int(por_mensajero_df.shape[0]),
             "ubicados_en_mapa": n_ubicados,

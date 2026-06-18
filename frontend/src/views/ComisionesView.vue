@@ -34,6 +34,13 @@
           <option v-for="s in data?.lista_sedes || []" :key="s" :value="s">{{ s }}</option>
         </select>
       </div>
+      <div class="filter-group">
+        <label>Visualizar venta</label>
+        <div class="metric-toggle">
+          <button :class="{ active: ivaMode === 'con_iva' }" @click="ivaMode = 'con_iva'">Con IVA</button>
+          <button :class="{ active: ivaMode === 'sin_iva' }" @click="ivaMode = 'sin_iva'">Sin IVA</button>
+        </div>
+      </div>
     </div>
 
     <div v-if="store.errors.comisiones" class="card" style="border-color:#fecdd3;color:#be123c;margin-bottom:16px;background:#fff1f2;">
@@ -51,7 +58,7 @@
       </p>
       <div class="kpi-grid kpi-grid-4" style="margin-bottom:16px;">
         <KpiCard :icon="BadgePercent" label="Productos en comisión HOY" :value="store.fmtN(data.kpis.productos_comision_hoy)" />
-        <KpiCard :icon="DollarSign" label="Valor Comisionable (periodo)" :value="store.fmt(data.kpis.valor_total)" />
+        <KpiCard :icon="DollarSign" :label="'Valor Comisionable ' + ivaLabel" :value="store.fmt(valorTotal)" />
         <KpiCard :icon="Package" label="Unidades Comisionables (periodo)" :value="store.fmtN(data.kpis.unidades_total)" />
         <KpiCard :icon="Users" label="Vendedores (periodo)" :value="store.fmtN(data.kpis.n_vendedores)" />
       </div>
@@ -96,13 +103,13 @@
           <div style="overflow-x:auto;">
             <table class="data-table">
               <thead>
-                <tr><th>Vendedor</th><th>Cantidad (uds)</th><th>Valor</th><th>Productos</th></tr>
+                <tr><th>Vendedor</th><th>Cantidad (uds)</th><th>Valor {{ ivaLabel }}</th><th>Productos</th></tr>
               </thead>
               <tbody>
                 <tr v-for="v in data.por_vendedor" :key="v.Vendedor">
                   <td style="font-weight:600;">{{ v.Vendedor }}</td>
                   <td>{{ store.fmtN(v.cantidad) }}</td>
-                  <td style="font-weight:600;color:var(--green);">{{ store.fmt(v.valor) }}</td>
+                  <td style="font-weight:600;color:var(--green);">{{ store.fmt(valorComision(v)) }}</td>
                   <td>{{ store.fmtN(v.productos) }}</td>
                 </tr>
               </tbody>
@@ -151,14 +158,14 @@
           <div style="overflow-x:auto;">
             <table class="data-table">
               <thead>
-                <tr><th>Referencia</th><th>Producto</th><th>Cantidad (uds)</th><th>Valor</th><th>Vendedores</th></tr>
+                <tr><th>Referencia</th><th>Producto</th><th>Cantidad (uds)</th><th>Valor {{ ivaLabel }}</th><th>Vendedores</th></tr>
               </thead>
               <tbody>
                 <tr v-for="p in (data.por_producto || []).slice(0, paginaProductos * 15)" :key="p.Referencia">
                   <td style="font-size:11px;font-variant-numeric:tabular-nums;">{{ p.Referencia }}</td>
                   <td :title="p.Descripcion">{{ p.nombre }}</td>
                   <td>{{ store.fmtN(p.cantidad) }}</td>
-                  <td style="color:var(--green);">{{ store.fmt(p.valor) }}</td>
+                  <td style="color:var(--green);">{{ store.fmt(valorComision(p)) }}</td>
                   <td>{{ store.fmtN(p.vendedores) }}</td>
                 </tr>
               </tbody>
@@ -196,6 +203,8 @@ const todayIso = new Date().toISOString().slice(0, 10)
 const yearStartIso = `${new Date().getFullYear()}-01-01`
 const filters = ref({ fecha_ini: yearStartIso, fecha_fin: todayIso, sede: 'Todas' })
 const metric = ref('valor')
+const ivaMode = ref('con_iva')
+const ivaLabel = computed(() => ivaMode.value === 'con_iva' ? 'con IVA' : 'sin IVA')
 const paginaProductos = ref(1)
 const buscarCat = ref('')
 const pageCat = ref(1)
@@ -246,12 +255,14 @@ function applyFilters() {
 }
 
 const vendCat = computed(() => (data.value?.por_vendedor || []).slice(0, 15).map(v => v.Vendedor))
-const vendData = computed(() => (data.value?.por_vendedor || []).slice(0, 15).map(v => metric.value === 'valor' ? Math.round(v.valor) : v.cantidad))
+const valorComision = (item) => ivaMode.value === 'con_iva' ? (item.valor_con_iva ?? item.valor) : (item.valor_sin_iva ?? item.valor)
+const valorTotal = computed(() => ivaMode.value === 'con_iva' ? (data.value?.kpis?.valor_total_con_iva ?? data.value?.kpis?.valor_total ?? 0) : (data.value?.kpis?.valor_total_sin_iva ?? data.value?.kpis?.valor_total ?? 0))
+const vendData = computed(() => (data.value?.por_vendedor || []).slice(0, 15).map(v => metric.value === 'valor' ? Math.round(valorComision(v)) : v.cantidad))
 
 // Tendencia: últimos 12 meses
 const tend12 = computed(() => (data.value?.tendencia || []).slice(-12))
 const tendCat = computed(() => tend12.value.map(t => t.mes_label))
-const tendData = computed(() => tend12.value.map(t => metric.value === 'valor' ? Math.round(t.valor) : t.cantidad))
+const tendData = computed(() => tend12.value.map(t => metric.value === 'valor' ? Math.round(ivaMode.value === 'con_iva' ? (t.valor_con_iva ?? t.valor) : (t.valor_sin_iva ?? t.valor)) : t.cantidad))
 
 onMounted(() => {
   if (store.status.comisiones && !data.value) applyFilters()
@@ -261,7 +272,8 @@ function exportVendedores() {
   const cols = [
     { key: 'Vendedor', label: 'Vendedor' },
     { key: 'cantidad', label: 'Cantidad (uds)' },
-    { key: 'valor', label: 'Valor' },
+    { key: 'valor_sin_iva', label: 'Valor Sin IVA' },
+    { key: 'valor_con_iva', label: 'Valor Con IVA' },
     { key: 'productos', label: 'Productos' },
   ]
   exportToCSV(data.value?.por_vendedor || [], cols, 'Comisiones_por_Vendedor')
@@ -273,7 +285,8 @@ function exportDetalle() {
     { key: 'Referencia', label: 'Referencia' },
     { key: 'Descripcion', label: 'Producto' },
     { key: 'cantidad', label: 'Cantidad (uds)' },
-    { key: 'valor', label: 'Valor' },
+    { key: 'valor_sin_iva', label: 'Valor Sin IVA' },
+    { key: 'valor_con_iva', label: 'Valor Con IVA' },
   ]
   exportToCSV(data.value?.detalle || [], cols, 'Comisiones_Detalle_Vendedor_Producto')
 }
