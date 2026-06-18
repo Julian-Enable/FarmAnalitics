@@ -1967,7 +1967,9 @@ def comisiones(
     """Productos comisionables vendidos: cantidad y valor (ingreso) por vendedor.
     No usa el monto/% de comision del POS; entrega cantidad y valor para que la
     comision se calcule por fuera segun la regla del negocio."""
-    fecha_ini, fecha_fin = _normalize_optional_date_range(fecha_ini, fecha_fin)
+    f_ini, f_fin = _effective_summary_range(fecha_ini, fecha_fin)
+    fecha_ini = f_ini.strftime("%Y-%m-%d")
+    fecha_fin = f_fin.strftime("%Y-%m-%d")
     historical = get_historical_store()
     if not historical.comisiones_available():
         raise HTTPException(404, "No hay datos de comisiones. Actualiza desde tu PC para descargarlos.")
@@ -2070,6 +2072,7 @@ def comisiones(
             "productos_comision_hoy": productos_comision_hoy,
             "dias_periodo": int(dias_periodo),
         },
+        "periodo": {"fecha_ini": fecha_ini, "fecha_fin": fecha_fin},
         "por_vendedor": por_vendedor,
         "por_producto": por_producto,
         "tendencia": tendencia,

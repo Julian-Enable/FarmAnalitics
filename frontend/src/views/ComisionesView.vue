@@ -21,11 +21,11 @@
     <div class="filters-bar" style="margin-bottom:16px;">
       <div class="filter-group">
         <label>Fecha Inicio</label>
-        <input type="date" v-model="filters.fecha_ini" @change="applyFilters" />
+        <input type="date" v-model="filters.fecha_ini" min="2024-01-01" :max="todayIso" @change="applyFilters" />
       </div>
       <div class="filter-group">
         <label>Fecha Fin</label>
-        <input type="date" v-model="filters.fecha_fin" @change="applyFilters" />
+        <input type="date" v-model="filters.fecha_fin" min="2024-01-01" :max="todayIso" @change="applyFilters" />
       </div>
       <div class="filter-group">
         <label>Punto de Venta</label>
@@ -45,6 +45,10 @@
     </div>
 
     <template v-else-if="data">
+      <p v-if="data.periodo" style="margin:-4px 0 14px;color:var(--fg-muted);font-size:12px;">
+        Periodo aplicado: <strong>{{ formatDate(data.periodo.fecha_ini) }}</strong> a <strong>{{ formatDate(data.periodo.fecha_fin) }}</strong>
+        · {{ store.fmtN(data.kpis.dias_periodo) }} días con ventas comisionables
+      </p>
       <div class="kpi-grid kpi-grid-4" style="margin-bottom:16px;">
         <KpiCard :icon="BadgePercent" label="Productos en comisión HOY" :value="store.fmtN(data.kpis.productos_comision_hoy)" />
         <KpiCard :icon="DollarSign" label="Valor Comisionable (periodo)" :value="store.fmt(data.kpis.valor_total)" />
@@ -188,7 +192,9 @@ import { BadgePercent, DollarSign, Package, Users, ClipboardList, Download, Tren
 const store = useDashboardStore()
 const data = computed(() => store.data.comisiones)
 const loading = computed(() => store.loading.comisiones)
-const filters = ref({ fecha_ini: '', fecha_fin: '', sede: 'Todas' })
+const todayIso = new Date().toISOString().slice(0, 10)
+const yearStartIso = `${new Date().getFullYear()}-01-01`
+const filters = ref({ fecha_ini: yearStartIso, fecha_fin: todayIso, sede: 'Todas' })
 const metric = ref('valor')
 const paginaProductos = ref(1)
 const buscarCat = ref('')
@@ -206,6 +212,17 @@ const catalogoFiltrado = computed(() => {
 const catalogoPag = computed(() => catalogoFiltrado.value.slice((pageCat.value - 1) * 20, pageCat.value * 20))
 watch(buscarCat, () => { pageCat.value = 1 })
 
+function isValidDateFilter(value) {
+  if (!value) return true
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  return value >= '2024-01-01' && value <= todayIso
+}
+
+function formatDate(value) {
+  if (!value) return '—'
+  return new Date(`${value}T00:00:00`).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
 function exportCatalogo() {
   const base = [
     { key: 'Referencia', label: 'Referencia' },
@@ -219,9 +236,11 @@ function exportCatalogo() {
 }
 
 function applyFilters() {
+  if (!isValidDateFilter(filters.value.fecha_ini) || !isValidDateFilter(filters.value.fecha_fin)) return
   const params = {}
   if (filters.value.fecha_ini) params.fecha_ini = filters.value.fecha_ini
   if (filters.value.fecha_fin) params.fecha_fin = filters.value.fecha_fin
+  if (params.fecha_ini && params.fecha_fin && params.fecha_ini > params.fecha_fin) return
   if (filters.value.sede && filters.value.sede !== 'Todas') params.sede = filters.value.sede
   store.fetchComisiones(params)
 }
