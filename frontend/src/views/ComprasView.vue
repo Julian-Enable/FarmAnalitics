@@ -24,6 +24,7 @@
     <div v-else-if="data" class="kpi-grid kpi-grid-4">
       <KpiCard :icon="ShoppingCart" label="Comprado ($)" :value="store.fmt(data.kpis.valor_comprado)" />
       <KpiCard :icon="DollarSign" label="Vendido ($)" :value="store.fmt(data.kpis.valor_vendido)" />
+      <KpiCard :icon="Scale" label="Compras / Ventas" :value="fmtPct(data.kpis.compra_sobre_venta_pct)" />
       <KpiCard :icon="ShoppingCart" label="Total Comprado (Uds)" :value="store.fmtN(data.kpis.total_comprado)" />
       <KpiCard :icon="Package" label="Total Vendido (Uds)" :value="store.fmtN(data.kpis.total_vendido)" />
     </div>
@@ -168,6 +169,7 @@
                 <th>% Compras</th>
                 <th>Vendido ($)</th>
                 <th>% Ventas</th>
+                <th>Compra/Venta</th>
                 <th>Diferencia (V-C)</th>
                 <th>Venta/Compra</th>
               </tr>
@@ -179,6 +181,11 @@
                 <td>{{ s.part_compra_pct?.toFixed(1) }}%</td>
                 <td>{{ store.fmt(s.valor_vendido) }}</td>
                 <td>{{ s.part_venta_pct?.toFixed(1) }}%</td>
+                <td>
+                  <span class="badge" :class="compraVentaClass(s.compra_sobre_venta_pct)">
+                    {{ fmtPct(s.compra_sobre_venta_pct) }}
+                  </span>
+                </td>
                 <td :style="{ color: s.diferencia >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }">{{ store.fmt(s.diferencia) }}</td>
                 <td>
                   <span class="badge" :class="s.ratio_venta_compra >= 1 ? 'badge-green' : (s.valor_vendido === 0 ? '' : 'badge-amber')">
@@ -276,6 +283,18 @@ function isPerecedero(row) {
     'algodon', 'jeringa', 'aguja', 'guante', 'tapaboca', 'mascarilla', 'bata', 'gorro', 'polaina'
   ]
   return !noPerecederos.some(kw => textToCheck.includes(kw))
+}
+
+function fmtPct(value) {
+  const n = Number(value || 0)
+  return `${n.toFixed(1)}%`
+}
+
+function compraVentaClass(value) {
+  const n = Number(value || 0)
+  if (n >= 100) return 'badge-red'
+  if (n >= 75) return 'badge-amber'
+  return 'badge-green'
 }
 
 const topProvCat = computed(() => data.value?.top_proveedores?.map(d => d.proveedor) || [])

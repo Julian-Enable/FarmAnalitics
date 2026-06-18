@@ -1266,16 +1266,20 @@ def compras(
         ps["margen_pct"] = np.where(ps["valor_vendido"] > 0, ps["diferencia"] / ps["valor_vendido"] * 100, 0)
         ps["part_compra_pct"] = ps["valor_comprado"] / total_compra * 100
         ps["part_venta_pct"] = ps["valor_vendido"] / total_venta * 100
+        ps["compra_sobre_venta_pct"] = np.where(ps["valor_vendido"] > 0, ps["valor_comprado"] / ps["valor_vendido"] * 100, 0)
         ps["ratio_venta_compra"] = np.where(ps["valor_comprado"] > 0, ps["valor_vendido"] / ps["valor_comprado"], 0)
         ps = ps.sort_values("valor_vendido", ascending=False)
         por_sede = json.loads(ps.to_json(orient="records"))
 
+    valor_comprado_total = float(comp["valor_comprado"].sum())
+    valor_vendido_total = float(comp["valor_vendido"].sum())
     return {
         "kpis": {
             "total_comprado": int(comp["uds_compradas"].sum()),
             "total_vendido": int(comp["uds_vendidas"].sum()),
-            "valor_comprado": round(float(comp["valor_comprado"].sum()), 0),
-            "valor_vendido": round(float(comp["valor_vendido"].sum()), 0),
+            "valor_comprado": round(valor_comprado_total, 0),
+            "valor_vendido": round(valor_vendido_total, 0),
+            "compra_sobre_venta_pct": round(valor_comprado_total / valor_vendido_total * 100, 1) if valor_vendido_total > 0 else 0,
             "n_sobre_compra": int(len(comp[comp["estado"] == "sobre_compra"])),
             "n_desabastecimiento": int(len(comp[comp["estado"] == "desabastecimiento"])),
             "dias_periodo": int(dias_periodo),
