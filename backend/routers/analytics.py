@@ -2190,7 +2190,6 @@ def domicilios(
     dom["ValorConIva"] = dom["Total"]
     dom["ValorSinIva"] = dom["Total"]
     dom["Estado"] = dom.get("Estado", "").astype(str)
-    estado_norm = dom["Estado"].str.strip().str.lower()
     dom["Mensajero"] = dom.get("Mensajero", "").astype(str).str.strip().replace({"": "Sin mensajero", "nan": "Sin mensajero"})
 
     df_v = get_df(x_session_id, "ventas", fecha_ini=fecha_ini, fecha_fin=fecha_fin)
@@ -2209,8 +2208,21 @@ def domicilios(
             dom["ValorConIva"] = pd.to_numeric(dom["valor_con_iva_ventas"], errors="coerce").fillna(dom["ValorConIva"])
             dom = dom.drop(columns=[c for c in ["_fact_key", "valor_sin_iva", "valor_con_iva_ventas"] if c in dom.columns])
 
+    estado_norm = dom["Estado"].astype(str).str.strip().str.lower()
+    entregado_mask = estado_norm.isin({
+        "entregado",
+        "entregada",
+        "entregados",
+        "entregadas",
+        "finalizado",
+        "finalizada",
+        "completado",
+        "completada",
+        "entrega exitosa",
+    })
+
     n_dom = int(len(dom))
-    n_entregados = int((estado_norm == "entregado").sum())
+    n_entregados = int(entregado_mask.sum())
     valor_movido = float(dom["ValorConIva"].sum())
     valor_movido_sin_iva = float(dom["ValorSinIva"].sum())
     ticket_prom = round(valor_movido / n_dom, 0) if n_dom else 0
@@ -2228,7 +2240,7 @@ def domicilios(
             n_servicios = int(serv["Cant"].sum())
 
     # Por mensajero (cantidad, valor, % entregados)
-    g = dom.assign(_entregado=(estado_norm == "entregado").astype(int))
+    g = dom.assign(_entregado=entregado_mask.astype(int).to_numpy())
     por_mensajero_df = (g.groupby("Mensajero", as_index=False)
                         .agg(domicilios=("ID", "count") if "ID" in g.columns else ("Total", "count"),
                              valor=("ValorConIva", "sum"),
