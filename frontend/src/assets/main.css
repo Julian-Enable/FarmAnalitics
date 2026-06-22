@@ -956,6 +956,18 @@ select, input[type="date"], input[type="number"], input[type="text"] {
   min-width: 140px;
 }
 
+input[type="date"] {
+  color-scheme: light;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+
+body:not(.light-theme) input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.8);
+  opacity: 0.95;
+}
 select:focus, input[type="date"]:focus, input[type="number"]:focus, input[type="text"]:focus {
   border-color: var(--accent);
   box-shadow: var(--glow-accent);
